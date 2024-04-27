@@ -47,7 +47,7 @@
     whoami
     sudo whoami
     
-#接下来安装xfce4
+# 接下来安装xfce4
 *本体
 
     sudo apt install xfce4 -y
@@ -67,7 +67,7 @@
     
 *也可以后期输入proot-distro login debian进入用户再安装
 
-#退出用户下载启动文件
+# 退出用户下载启动文件
 
     exit
     exit
@@ -89,7 +89,7 @@
     proot-distro login debian
     apt install dbus-x11
     
-#安装中文环境(不要退出用户)
+# 安装中文环境(不要退出用户)
 
     sudo apt update
     sudo apt install locales
@@ -103,7 +103,7 @@
 
     pkg install pulseaudio -y
     
-#接下来建立一个启动文件放在home或者usr/bin
+# 接下来建立一个启动文件放在home或者usr/bin
 文本是
 
     #!/data/data/com.termux/files/usr/bin/bash
