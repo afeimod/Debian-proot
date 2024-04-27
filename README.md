@@ -27,6 +27,7 @@
     
 # 进入debian，创建用户
 *升级并安装nano
+
     proot-distro login debian
     apt update -y
     apt install nano adduser -y
