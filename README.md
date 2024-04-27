@@ -8,6 +8,12 @@
 
 下载 [**exa-x11**](https://github.com/afeimod/Debian-proot/releases/download/termux/Exa.x11_.apk) 
 
+# 换源(选装)选清华或者北大或者china
+    
+    pkg update -y
+    termux-change-repo
+    
+
 # 安装debian
 *给termux存储权限输入下面代码回车:
 
@@ -51,6 +57,10 @@
 *本体
 
     sudo apt install xfce4 -y
+    
+    27
+    18
+    1
     
 *接下来是一些软件和东西可以选择不装，建议装
 
