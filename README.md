@@ -36,4 +36,96 @@
 *创建用户
 
     adduser droidmaster
+    nano /etc/sudoers
+
+*输入用户权限
+
+    droidmaster ALL=(ALL:ALL) ALL
+    ctrl+o 
+    ctrl+x
+    su - droidmaster
+    whoami
+    sudo whoami
     
+#接下来安装xfce4
+*本体
+
+    sudo apt install xfce4 -y
+    
+*接下来是一些软件和东西可以选择不装，建议装
+
+    sudo apt install cinnamon -y
+    sudo apt install dbus-x11 nano gnome gnome-shell gnome-terminal gnome-tweaks gnome-software nautilus gnome-shell-extension-manager gedit tigervnc-tools gnupg2 -y
+    
+*安装360浏览器(选装)
+    curl http://$(curl https://browser.360.cn/se/linux/ | grep "arm" | head -n 1 | cut -d "'" -f 2) -O
+
+    sudo apt install ./browser360-cn-stable_10.6.1000.37-1_arm64.deb
+    
+*如果报错就卸载
+    sudo apt remove browser360-cn-stable
+    
+*也可以后期输入proot-distro login debian进入用户再安装
+
+#退出用户下载启动文件
+
+    exit
+    exit
+    
+*下载启动文件(后面也可以自定义)
+
+    wget https://raw.githubusercontent.com/LinuxDroidMaster/Termux-Desktops/main/scripts/proot_debian/startxfce4_debian.sh
+
+    ls
+    chmod +x startxfce4_debian.sh
+    ls
+    
+*启动一次
+
+   ./startxfce4_debian.sh
+ 
+*黑屏，运行
+
+    proot-distro login debian
+    apt install dbus-x11
+    
+#安装中文环境(不要退出用户)
+
+    sudo apt update
+    sudo apt install locales
+    sudo dpkg-reconfigure locales
+    314
+    3
+    sudo apt install fonts-wqy-microhei fonts-wqy-zenhei xfonts-wqy
+    exit
+
+*安装声音(退出用户)
+
+    pkg install pulseaudio -y
+    
+#接下来建立一个启动文件放在home或者usr/bin
+文本是
+
+    #!/data/data/com.termux/files/usr/bin/bash
+    pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
+
+    export XDG_RUNTIME_DIR=${TMPDIR}
+    termux-x11 :0 >/dev/null &
+
+    sleep 2
+
+
+    am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity > /dev/null 2>&1
+    sleep 1
+
+    proot-distro login debian --shared-tmp -- /bin/bash -c  'export PULSE_SERVER=127.0.0.1 && export XDG_RUNTIME_DIR=${TMPDIR} && su - droidmaster -c "env DISPLAY=:0 startxfce4"'
+
+    exit 0
+
+*然后给权限
+
+    chmod +x 位置加名字
+
+*位置加名字 为启动命令最好放在usr/bin，方便直接名字启动
+
+
