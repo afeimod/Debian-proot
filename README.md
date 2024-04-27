@@ -58,11 +58,13 @@
     sudo apt install dbus-x11 nano gnome gnome-shell gnome-terminal gnome-tweaks gnome-software nautilus gnome-shell-extension-manager gedit tigervnc-tools gnupg2 -y
     
 *安装360浏览器(选装)
+   
     curl http://$(curl https://browser.360.cn/se/linux/ | grep "arm" | head -n 1 | cut -d "'" -f 2) -O
 
     sudo apt install ./browser360-cn-stable_10.6.1000.37-1_arm64.deb
     
 *如果报错就卸载
+   
     sudo apt remove browser360-cn-stable
     
 *也可以后期输入proot-distro login debian进入用户再安装
