@@ -130,4 +130,20 @@
 
 *位置加名字 为启动命令最好放在usr/bin，方便直接名字启动
 
+# 想使用exa-x11就新建下面代码的启动文件
 
+        #!/data/data/com.termux/files/usr/bin/bash
+    mv /data/data/com.termux/files/usr/tmp /data/data/com.termux/files/usr/tmp2
+ln -s /data/user/0/com.exa.x11/files/image/tmp /data/data/com.termux/files/usr/tmp
+    pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
+
+    export XDG_RUNTIME_DIR=${TMPDIR}
+    termux-x11 :1 >/dev/null &
+
+    sleep 2
+
+    proot-distro login debian --shared-tmp -- /bin/bash -c  'export PULSE_SERVER=127.0.0.1 && export XDG_RUNTIME_DIR=${TMPDIR} && su - droidmaster -c "env DISPLAY=:0 startxfce4"'
+
+    exit 0
+    
+# 下面是boxwine安装
