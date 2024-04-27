@@ -132,9 +132,9 @@
 
 # 想使用exa-x11就新建下面代码的启动文件
 
-        #!/data/data/com.termux/files/usr/bin/bash
+    #!/data/data/com.termux/files/usr/bin/bash
     mv /data/data/com.termux/files/usr/tmp /data/data/com.termux/files/usr/tmp2
-ln -s /data/user/0/com.exa.x11/files/image/tmp /data/data/com.termux/files/usr/tmp
+    ln -s /data/user/0/com.exa.x11/files/image/tmp /data/data/com.termux/files/usr/tmp
     pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
 
     export XDG_RUNTIME_DIR=${TMPDIR}
