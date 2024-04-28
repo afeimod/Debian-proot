@@ -62,19 +62,29 @@ function install_box_from_android() {
             wget https://ryanfortner.github.io/box86-debs/box86.list -O /etc/apt/sources.list.d/box86.list
             wget -qO- https://ryanfortner.github.io/box86-debs/KEY.gpg | gpg --dearmor -o /etc/apt/trusted.gpg.d/box86-debs-archive-keyring.gpg
             dpkg --add-architecture armhf
-            apt-get update
-            apt-get install box86-android:armhf
+            apt-get update -y
+            apt-get install box86-android:armhf -y
         } || err "无法安装box86！"
         #Install box64
         tips "正在安装box64..."
         {
             wget https://ryanfortner.github.io/box64-debs/box64.list -O /etc/apt/sources.list.d/box64.list
             wget -qO- https://ryanfortner.github.io/box64-debs/KEY.gpg | gpg --dearmor -o /etc/apt/trusted.gpg.d/box64-debs-archive-keyring.gpg
-            apt update && apt install box64-android -y
+            apt update -y && apt install box64-android -y
         } || err "无法安装box64！"
     else
         tips "文件 /usr/lib/i386-linux-gnu/libstdc++.so.6 已存在，跳过安装 box86-android 软件包。"
     fi
+}
+
+function check_additional_dependences() {
+  DEPLIST=("nano" "cabextract" "libfreetype6" "libfreetype6:armhf" "libfontconfig" "libfontconfig:armhf" "libxext6" "libxext6:armhf" "libxinerama-dev" "libxinerama-dev:armhf" "libxxf86vm1" "libxxf86vm1:armhf" "libxrender1" "libxrender1:armhf" "libxcomposite1" "libxcomposite1:armhf" "libxrandr2" "libxrandr2:armhf" "libxi6" "libxi6:armhf" "libxcursor1" "libxcursor1:armhf" "libvulkan-dev" "libvulkan-dev:armhf" "zenity")
+  tips "正在更新系统软件索引中..."
+  apt update || err "这一步失败了！"
+  tips "正在安装额外的依赖软件包..."
+  for pkgname in ${DEPLIST[@]};do
+    apt install -y $pkgname || err "安装软件包 $pkgname 失败！"
+  done
 }
 
 function install_wine() {
@@ -125,6 +135,7 @@ function main() {
     detect_chroot_01
     is_root_and_check_distro
     check_dependences
+    check_additional_dependences  # 调用新的函数
     install_box_from_android
     install_wine
     show_versions
@@ -133,5 +144,3 @@ function main() {
     final_words
     exit 0
 }
-main
-    
