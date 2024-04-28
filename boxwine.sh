@@ -13,12 +13,16 @@ function err() {
 }
 
 function detect_chroot_00() {
-  INITROOTINODE="`stat -c %i /proc/1/root`"
-  PPROOTINODE="`stat -c %i /proc/$PPID/root`"
-  if [ $INITROOTINODE -ne $PPROOTINODE ];then
-    return 0
+  if [ -d /proc/1/root ]; then
+    INITROOTINODE=$(stat -c %i /proc/1/root)
+    PPROOTINODE=$(stat -c %i /proc/$PPID/root)
+    if [ $INITROOTINODE -ne $PPROOTINODE ]; then
+      return 0
+    else
+      return 1
+    fi
   else
-    return 1
+    return 0
   fi
 }
 function detect_chroot_01() {
@@ -50,22 +54,27 @@ function check_dependences() {
 }
 
 function install_box_from_android() {
-    #Install box86
-    tips "正在安装box86..."
-    {
-        wget https://ryanfortner.github.io/box86-debs/box86.list -O /etc/apt/sources.list.d/box86.list
-        wget -qO- https://ryanfortner.github.io/box86-debs/KEY.gpg | gpg --dearmor -o /etc/apt/trusted.gpg.d/box86-debs-archive-keyring.gpg
-        dpkg --add-architecture armhf
-        apt-get update
-        apt-get install box86-android:armhf
-    } || err "无法安装box86！"
-    #Install box64
-    tips "正在安装box64..."
-    {
-        wget https://ryanfortner.github.io/box64-debs/box64.list -O /etc/apt/sources.list.d/box64.list
-        wget -qO- https://ryanfortner.github.io/box64-debs/KEY.gpg | gpg --dearmor -o /etc/apt/trusted.gpg.d/box64-debs-archive-keyring.gpg
-        apt update && apt install box64-android -y
-    } || err "无法安装box64！"
+    # Check if the file already exists
+    if [ ! -f "/usr/lib/i386-linux-gnu/libstdc++.so.6" ]; then
+        #Install box86
+        tips "正在安装box86..."
+        {
+            wget https://ryanfortner.github.io/box86-debs/box86.list -O /etc/apt/sources.list.d/box86.list
+            wget -qO- https://ryanfortner.github.io/box86-debs/KEY.gpg | gpg --dearmor -o /etc/apt/trusted.gpg.d/box86-debs-archive-keyring.gpg
+            dpkg --add-architecture armhf
+            apt-get update
+            apt-get install box86-android:armhf
+        } || err "无法安装box86！"
+        #Install box64
+        tips "正在安装box64..."
+        {
+            wget https://ryanfortner.github.io/box64-debs/box64.list -O /etc/apt/sources.list.d/box64.list
+            wget -qO- https://ryanfortner.github.io/box64-debs/KEY.gpg | gpg --dearmor -o /etc/apt/trusted.gpg.d/box64-debs-archive-keyring.gpg
+            apt update && apt install box64-android -y
+        } || err "无法安装box64！"
+    else
+        tips "文件 /usr/lib/i386-linux-gnu/libstdc++.so.6 已存在，跳过安装 box86-android 软件包。"
+    fi
 }
 
 function install_wine() {
@@ -75,12 +84,12 @@ function install_wine() {
         wget https://github.com/Kron4ek/Wine-Builds/releases/download/9.7/wine-9.7-staging-amd64.tar.xz
         tar -Jpxf wine-9.7-staging-amd64.tar.xz -C /opt/
         tips "正在设置环境变量..."
-        cat >> /etc/profile <<-'EOF'
-        export BOX86_PATH=/opt/wine-9.7-staging-amd64/bin
-        export BOX86_LD_LIBRARY_PATH=/opt/wine-9.7-staging-amd64/lib/wine/i386-unix
-        export BOX64_PATH=/opt/wine-9.7-staging-amd64/bin
-        export BOX64_LD_LIBRARY_PATH=/opt/wine-9.7-staging-amd64/lib/wine/x86_64-unix
-        EOF
+      cat >> /etc/profile <<EOF
+export BOX86_PATH=/opt/wine-9.7-staging-amd64/bin
+export BOX86_LD_LIBRARY_PATH=/opt/wine-9.7-staging-amd64/lib/wine/i386-unix
+export BOX64_PATH=/opt/wine-9.7-staging-amd64/bin
+export BOX64_LD_LIBRARY_PATH=/opt/wine-9.7-staging-amd64/lib/wine/x86_64-unix
+EOF
         source /etc/profile
     } || err "无法安装wine！"
 }
@@ -105,12 +114,11 @@ function guide_to_start() {
     tips "box64 wine64 taskmgr 启动任务管理器"
     tips "box64 wine64 explorer 启动资源管理器"
     tips "box64 wine64 uninstaller 启动软件管理器"
-    tips "box64 wine64 <cmdline> 运行指mdline
+    tips "box64 wine64 <cmdline> 运行指定的命令行"
 }
-
 function final_words() {
-  tips "尽情享受boxwine吧！"
-  tips "感谢使用此脚本，祝你生活愉快！"
+  tips "尽情享受boxwine吧!"
+  tips "感谢使用此脚本，祝你生活愉快!"
 }
 
 function main() {

@@ -8,7 +8,6 @@
 
 下载 [**exa-x11**](https://github.com/afeimod/Debian-proot/releases/download/termux/Exa.x11_.apk) 
 
-
 # 安装debian
 *给termux存储权限输入下面代码回车:
 
@@ -110,7 +109,7 @@
 
     pkg install pulseaudio -y
     
-# 接下来建立一个启动文件放在home或者usr/bin
+# 接下来建立一个启动文件比如startx11放在home或者usr/bin
 文本是
 
     #!/data/data/com.termux/files/usr/bin/bash
@@ -135,7 +134,7 @@
 
 *位置加名字 为启动命令最好放在usr/bin，方便直接名字启动
 
-# 想使用exa-x11就新建下面代码的启动文件
+# 想使用exa-x11就新建下面代码的启动文件比如startexa
 
     #!/data/data/com.termux/files/usr/bin/bash
     mv /data/data/com.termux/files/usr/tmp /data/data/com.termux/files/usr/tmp2
@@ -152,3 +151,15 @@
     exit 0
     
 # 下面是boxwine安装
+
+*进入容器，比如startx11，打开终端。
+
+    sudo su
+
+    wget https://github.com/afeimod/Debian-proot/raw/main/boxwine.sh
+    
+    chmod +x boxwine.sh
+    
+    bash boxwine.sh
+    
+    
