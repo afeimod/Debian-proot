@@ -6,7 +6,7 @@
 
 下载 [**termux-x11**](https://github.com/afeimod/Debian-proot/releases/download/termux/Termux_X11_1.03.00.apk) 
 
-下载 [**exa-x11**](https://github.com/afeimod/Debian-proot/releases/download/termux/Exa.x11_.apk) 
+下载 [**exa-x11**](https://github.com/afeimod/Debian-proot/releases/download/termux/Exa_x11_v0.012.apk) 
 
 # 安装debian
 *给termux存储权限输入下面代码回车:
