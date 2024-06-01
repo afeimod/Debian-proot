@@ -33,20 +33,6 @@
     apt install nano adduser -y
     apt install sudo -y
     
-*创建用户
-
-    adduser droidmaster
-    nano /etc/sudoers
-
-*输入用户权限
-
-    droidmaster ALL=(ALL:ALL) ALL
-    ctrl+o 
-    ctrl+x
-    su - droidmaster
-    whoami
-    sudo whoami
-    
 # 接下来安装xfce4
 *本体
 
@@ -73,26 +59,8 @@
     
 *也可以后期输入proot-distro login debian进入用户再安装
 
-# 退出用户下载启动文件
+*解决黑屏
 
-    exit
-    exit
-    
-*下载启动文件(后面也可以自定义)
-
-    wget https://raw.githubusercontent.com/LinuxDroidMaster/Termux-Desktops/main/scripts/proot_debian/startxfce4_debian.sh
-
-    ls
-    chmod +x startxfce4_debian.sh
-    ls
-    
-*启动一次
-
-   ./startxfce4_debian.sh
- 
-*黑屏，运行
-
-    proot-distro login debian
     apt install dbus-x11
     
 # 安装中文环境(不要退出用户)
@@ -124,7 +92,7 @@
     am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity > /dev/null 2>&1
     sleep 1
 
-    proot-distro login debian --shared-tmp -- /bin/bash -c  'export PULSE_SERVER=127.0.0.1 && export XDG_RUNTIME_DIR=${TMPDIR} && su - droidmaster -c "env DISPLAY=:0 startxfce4"'
+    proot-distro login debian --shared-tmp -- /bin/bash -c  'export PULSE_SERVER=127.0.0.1 && export XDG_RUNTIME_DIR=${TMPDIR} && su - root -c "env DISPLAY=:0 startxfce4"'
 
     exit 0
 
@@ -146,7 +114,7 @@
 
     sleep 2
 
-    proot-distro login debian --shared-tmp -- /bin/bash -c  'export PULSE_SERVER=127.0.0.1 && export XDG_RUNTIME_DIR=${TMPDIR} && su - droidmaster -c "env DISPLAY=:0 startxfce4"'
+    proot-distro login debian --shared-tmp -- /bin/bash -c  'export PULSE_SERVER=127.0.0.1 && export XDG_RUNTIME_DIR=${TMPDIR} && su - root -c "env DISPLAY=:0 startxfce4"'
 
     exit 0
     
@@ -154,12 +122,6 @@
 
 *进入容器，比如startx11，打开终端。
 
-    sudo su
 
-    wget https://github.com/afeimod/Debian-proot/raw/main/boxwine.sh
-    
-    chmod +x boxwine.sh
-    
-    bash boxwine.sh
     
     
