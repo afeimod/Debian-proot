@@ -3,6 +3,9 @@
 #时间：2024年4月26日
 #描述：帮助小白朋友们快速在容器里面配置box86/box64和wine这三种组件实现运行windows程序。
 
+set -euo pipefail
+shopt -s failglob
+
 function tips() {
     printf "\e[97m%s\n\e[0m" "$@"
     return 0
@@ -15,8 +18,8 @@ function err() {
 function detect_chroot_00() {
   if [ -d /proc/1/root ]; then
     INITROOTINODE=$(stat -c %i /proc/1/root)
-    PPROOTINODE=$(stat -c %i /proc/$PPID/root)
-    if [ $INITROOTINODE -ne $PPROOTINODE ]; then
+    PROOTROOTINODE=$(stat -c %i /proc/$PPID/root)
+    if [ $INITROOTINODE -ne $PROOTROOTINODE ]; then
       return 0
     else
       return 1
@@ -116,7 +119,7 @@ function show_versions() {
 }
 function boot_wine() {
     tips "正在创建wine容器，这需要一点时间..."
-    WINEDLLOVERRIDES="mscoree,mshtml=disabled" box64 wine64 wineboot || err "无法创建wiwineboot"
+    WINEDLLOVERRIDES="mscoree,mshtml=disabled" box64 wine64 wineboot || { err "无法创建wine容器" ; rm -rf ~/.wine ;}
 }
 
 function guide_to_start() {
@@ -144,3 +147,4 @@ function main() {
     final_words
     exit 0
 }
+main
