@@ -111,7 +111,7 @@ function parse_argument() {
 				tips "\t-wv/--wine 指定要安装的wine版本"
 				exit 1
 				;;
-			"") 
+			""|--) 
 				WINEVER="9.9"
 				tips "默认安装wine9.9，是否继续？[y/n]"
 				read -n1 opt
