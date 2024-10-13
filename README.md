@@ -8,7 +8,12 @@
 
 下载 [**exa-x11**](https://github.com/afeimod/Debian-proot/releases/download/termux/Exa_x11_v0.012.apk) 
 
-# 安装debian
+# 半自动安装debian(推荐)
+*给termux存储权限输入下面代码回车:
+
+    curl -sSLO https://github.com/afeimod/Debian-proot/blob/main/debianxfce.sh & chmod -x debianxfce.sh & bash debianxfce.sh
+
+# 手动安装debian
 *给termux存储权限输入下面代码回车:
 
     termux-setup-storage
