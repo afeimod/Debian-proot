@@ -35,6 +35,7 @@ echo -e " 创建启动文件debianx11..."
 
 cat <<'EOF' > $PREFIX/bin/debianx11
 #!/data/data/com.termux/files/usr/bin/bash
+rm -rf $TMPDIR/pulse-* &>/dev/null &
 pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
 
 export XDG_RUNTIME_DIR=${TMPDIR}
