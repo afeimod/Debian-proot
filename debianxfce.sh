@@ -77,7 +77,7 @@ sudo apt install xfce4 xfce4-goodies -y
 sudo apt install firefox-esr -y
 sudo apt install chromium chromium-l10n -y
 sudo apt install gnome-terminal -y
-read -p "接下来安装容器中文环境，注意语言选择，没有就选other，确定请回车"
+read -p "接下来安装容器中文环境，选择语言时请选择zh_CN，大概是323，3，注意输入密码，确定请回车"
 sudo apt install locales -y
 sudo dpkg-reconfigure locales
 sudo apt install fonts-wqy-microhei fonts-wqy-zenhei xfonts-wqy
@@ -99,5 +99,5 @@ chmod -R u+x $PREFIX/var/lib/proot-distro/installed-rootfs/debian/usr/bin/go
      
 echo -e " .."
 echo -e " .."
-read -p "请在下面出现的绿色用户后输入 go 回车，选择语言时请选择zh_CN，大概是323，3，注意输入密码，确定请回车"
+read -p "请在下面出现的绿色用户后输入 go 回车，注意语言选择，没有就选other，确定请回车"
 proot-distro login debian --shared-tmp -- /bin/bash -c "su - afei"
