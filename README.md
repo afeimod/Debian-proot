@@ -36,11 +36,12 @@
 # 接下来安装xfce4
 *本体
 
-    sudo apt install xfce4 -y
+    sudo apt install xfce4 xfce4-goodies -y
+
+    按要求选择chinese
+
     
-    27
-    18
-    1
+    
     
 *接下来是一些软件和东西可以选择不装，建议装
 
@@ -118,9 +119,9 @@
 
     exit 0
     
-# 下面是boxwine安装
+# 下面是半自动安装proot容器
 
-*进入容器，比如startx11，打开终端。
+    
 
 
     
