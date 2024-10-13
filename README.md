@@ -11,7 +11,7 @@
 # 半自动安装debian(推荐)
 *给termux存储权限输入下面代码回车:
 
-    wget -O 1.sh https://raw.githubusercontent.com/afeimod/Debian-proot/refs/heads/main/debianxfce.sh && chmod +x ./1.sh && ./1.sh
+    pkg install wget && wget -O 1.sh https://raw.githubusercontent.com/afeimod/Debian-proot/refs/heads/main/debianxfce.sh && chmod +x ./1.sh && ./1.sh
     
 # 手动安装debian
 *给termux存储权限输入下面代码回车:
