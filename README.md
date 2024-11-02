@@ -8,6 +8,8 @@
 
 下载 [**exa-x11**](https://github.com/afeimod/Debian-proot/releases/download/termux/Exa_x11_v0.012.apk) 
 
+下载 [**IB可竖屏Mod**](https://github.com/afeimod/Debian-proot/releases/download/termux/IB0.1.9.9.mod.apk) 
+
 # 半自动安装debian(推荐)抽风的时候需要挂V
 *给termux存储权限输入下面代码回车:
 
