@@ -31,8 +31,8 @@ jobs:
     - name: 构建 Mesa
       run: |
         cd mesa
-        sudo mkdir -p /data/data/com.termux/files/usr/glibc
-        sudo chmod 777 -R /data
+        sudo mkdir -p /opt
+        sudo chmod 777 -R /opt
 
         mkdir -p builddir
         meson setup builddir \
