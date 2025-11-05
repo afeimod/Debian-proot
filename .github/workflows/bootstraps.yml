@@ -1,27 +1,99 @@
-name: Bootstraps CI
+name: Create Bootstraps
 
 on:
-  schedule:
-    - cron:  0 0 1 */2 *
   workflow_dispatch:
+  schedule:
+    - cron: '0 0 1 * *'  # 每月运行一次
 
 jobs:
-  build:
+  create-bootstraps:
     runs-on: ubuntu-22.04
-
+    
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Create bootstraps
+      - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install debootstrap perl
-          chmod +x create_ubuntu_bootstraps.sh
-          sudo ./create_ubuntu_bootstraps.sh
+          sudo apt install -y debootstrap schroot wget xz-utils
+      
+      - name: Create directories
+        run: |
+          sudo mkdir -p /opt/chroots
+          sudo chmod 755 /opt/chroots
+      
+      - name: Create 64-bit bootstrap
+        run: |
+          sudo debootstrap --arch=amd64 bionic /opt/chroots/bionic64_chroot http://archive.ubuntu.com/ubuntu/
+          
+          # Set up basic configuration
+          sudo chroot /opt/chroots/bionic64_chroot /bin/bash << 'EOL'
+          apt update
+          apt install -y build-essential autoconf flex bison libx11-dev libfreetype6-dev \
+            libfontconfig1-dev gettext libasound2-dev libpulse-dev libdbus-1-dev \
+            libudev-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libvulkan-dev libsdl2-dev libgnutls28-dev libldap2-dev libjpeg-dev \
+            libpng-dev libtiff5-dev libmpg123-dev libopenal-dev libcapi20-dev \
+            libcups2-dev libosmesa6-dev libpcap-dev libusb-1.0-0-dev libsane-dev \
+            libv4l-dev libgphoto2-dev liblcms2-dev libpcsclite-dev libacl1-dev
+          EOL
+      
+      - name: Create 32-bit bootstrap
+        run: |
+          sudo debootstrap --arch=i386 bionic /opt/chroots/bionic32_chroot http://archive.ubuntu.com/ubuntu/
+          
+          # Set up basic configuration
+          sudo chroot /opt/chroots/bionic32_chroot /bin/bash << 'EOL'
+          apt update
+          apt install -y build-essential autoconf flex bison libx11-dev libfreetype6-dev \
+            libfontconfig1-dev gettext libasound2-dev libpulse-dev libdbus-1-dev \
+            libudev-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libvulkan-dev libsdl2-dev libgnutls28-dev libldap2-dev libjpeg-dev \
+            libpng-dev libtiff5-dev libmpg123-dev libopenal-dev libcapi20-dev \
+            libcups2-dev libosmesa6-dev libpcap-dev libusb-1.0-0-dev libsane-dev \
+            libv4l-dev libgphoto2-dev liblcms2-dev libpcsclite-dev libacl1-dev
+          EOL
+      
+      - name: Install cross-compilers in bootstraps
+        run: |
+          # For 64-bit chroot
+          sudo chroot /opt/chroots/bionic64_chroot /bin/bash << 'EOL'
+          apt update
+          apt install -y gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
+          update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+          update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+          EOL
+          
+          # For 32-bit chroot
+          sudo chroot /opt/chroots/bionic32_chroot /bin/bash << 'EOL'
+          apt update
+          apt install -y gcc-mingw-w64-i686 g++-mingw-w64-i686
+          update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
+          update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
+          EOL
+      
+      - name: Create symbolic links for cross-compilers
+        run: |
+          sudo mkdir -p /opt/mingw/x86_64/bin
+          sudo mkdir -p /opt/mingw/i686/bin
+          
+          sudo ln -sf /usr/bin/x86_64-w64-mingw32-gcc /opt/mingw/x86_64/bin/
+          sudo ln -sf /usr/bin/x86_64-w64-mingw32-g++ /opt/mingw/x86_64/bin/
+          sudo ln -sf /usr/bin/i686-w64-mingw32-gcc /opt/mingw/i686/bin/
+          sudo ln -sf /usr/bin/i686-w64-mingw32-g++ /opt/mingw/i686/bin/
+      
+      - name: Clean up bootstraps
+        run: |
+          sudo chroot /opt/chroots/bionic64_chroot /bin/bash -c "apt clean"
+          sudo chroot /opt/chroots/bionic32_chroot /bin/bash -c "apt clean"
+      
+      - name: Compress bootstraps
+        run: |
           cd /opt
-          sudo tar -I "xz -T0 -9" -cpf bootstraps.tar.xz chroots
-          sha256sum *.tar.xz
-      - uses: actions/upload-artifact@v4
+          sudo tar -cJpf bootstraps.tar.xz chroots/
+          sudo chmod 644 bootstraps.tar.xz
+      
+      - name: Upload bootstraps artifact
+        uses: actions/upload-artifact@v4
         with:
           name: Bootstraps
           path: /opt/bootstraps.tar.xz
+          retention-days: 30
