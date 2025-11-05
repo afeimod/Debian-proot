@@ -1,0 +1,296 @@
+name: Wine Builds (WoW64 only)
+
+on:
+  schedule:
+    - cron: '0 2 5,20 * *'
+  workflow_dispatch:
+    inputs:
+      wine_branch:
+        description: 'Wine branch to build'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - vanilla
+        - staging
+        - staging-tkg
+        - staging-tkg-fsync
+      wine_version:
+        description: 'Wine version (latest, git, or specific version like 9.0)'
+        required: true
+        default: 'latest'
+        type: string
+
+env:
+  USE_CCACHE: true
+  EXPERIMENTAL_WOW64: true
+  BUILD_DIR: /tmp/build_wine_wow64
+
+jobs:
+  build-wine-wow64:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        include:
+          - wine_branch: vanilla
+            wine_version: latest
+          - wine_branch: staging
+            wine_version: latest
+          - wine_branch: staging-tkg
+            wine_version: latest
+          - wine_branch: staging-tkg-fsync
+            wine_version: latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download bootstraps
+        id: download-artifact
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: bootstraps.yml
+          workflow_conclusion: success
+          path: /opt
+      
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y debootstrap perl git wget xz-utils bubblewrap autoconf \
+            ccache gcc-11 g++-11 i686-w64-mingw32-gcc x86_64-w64-mingw32-gcc \
+            make flex bison gettext libfreetype6-dev libfontconfig1-dev
+      
+      - name: Extract bootstraps
+        run: |
+          sudo tar -C /opt -xpf /opt/Bootstraps/bootstraps.tar.xz
+          sudo chmod +x /opt/chroots/*
+      
+      - name: Setup build environment
+        run: |
+          export WINE_BRANCH="${{ matrix.wine_branch }}"
+          export WINE_VERSION="${{ matrix.wine_version }}"
+          export BOOTSTRAP_X64=/opt/chroots/bionic64_chroot
+          export BOOTSTRAP_X32=/opt/chroots/bionic32_chroot
+          
+          # Set compiler and flags
+          export CC="gcc-11"
+          export CXX="g++-11"
+          export CROSSCC_X32="i686-w64-mingw32-gcc"
+          export CROSSCXX_X32="i686-w64-mingw32-g++"
+          export CROSSCC_X64="x86_64-w64-mingw32-gcc"
+          export CROSSCXX_X64="x86_64-w64-mingw32-g++"
+          
+          export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O2 -ftree-vectorize"
+          export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O2 -ftree-vectorize"
+          export LDFLAGS="-Wl,-O1,--sort-common,--as-needed"
+          
+          export CROSSCFLAGS_X32="${CFLAGS_X32}"
+          export CROSSCFLAGS_X64="${CFLAGS_X64}"
+          export CROSSLDFLAGS="${LDFLAGS}"
+          
+          # Enable ccache if requested
+          if [ "$USE_CCACHE" = "true" ]; then
+            export CC="ccache ${CC}"
+            export CXX="ccache ${CXX}"
+            export i386_CC="ccache ${CROSSCC_X32}"
+            export x86_64_CC="ccache ${CROSSCC_X64}"
+            export CROSSCC_X32="ccache ${CROSSCC_X32}"
+            export CROSSCXX_X32="ccache ${CROSSCXX_X32}"
+            export CROSSCC_X64="ccache ${CROSSCC_X64}"
+            export CROSSCXX_X64="ccache ${CROSSCXX_X64}"
+          fi
+          
+          # Save environment for build steps
+          echo "WINE_BRANCH=$WINE_BRANCH" >> $GITHUB_ENV
+          echo "WINE_VERSION=$WINE_VERSION" >> $GITHUB_ENV
+          echo "BOOTSTRAP_X64=$BOOTSTRAP_X64" >> $GITHUB_ENV
+          echo "BOOTSTRAP_X32=$BOOTSTRAP_X32" >> $GITHUB_ENV
+          echo "CC=$CC" >> $GITHUB_ENV
+          echo "CXX=$CXX" >> $GITHUB_ENV
+          echo "CROSSCC_X32=$CROSSCC_X32" >> $GITHUB_ENV
+          echo "CROSSCXX_X32=$CROSSCXX_X32" >> $GITHUB_ENV
+          echo "CROSSCC_X64=$CROSSCC_X64" >> $GITHUB_ENV
+          echo "CROSSCXX_X64=$CROSSCXX_X64" >> $GITHUB_ENV
+          echo "CFLAGS_X32=$CFLAGS_X32" >> $GITHUB_ENV
+          echo "CFLAGS_X64=$CFLAGS_X64" >> $GITHUB_ENV
+          echo "LDFLAGS=$LDFLAGS" >> $GITHUB_ENV
+          echo "CROSSCFLAGS_X32=$CROSSCFLAGS_X32" >> $GITHUB_ENV
+          echo "CROSSCFLAGS_X64=$CROSSCFLAGS_X64" >> $GITHUB_ENV
+          echo "CROSSLDFLAGS=$CROSSLDFLAGS" >> $GITHUB_ENV
+      
+      - name: Build Wine WoW64
+        run: |
+          set -e
+          
+          # Create build directory
+          rm -rf "$BUILD_DIR"
+          mkdir -p "$BUILD_DIR"
+          cd "$BUILD_DIR"
+          
+          # Bubblewrap function
+          build_with_bwrap() {
+            if [ "${1}" = "32" ]; then
+              BOOTSTRAP_PATH="$BOOTSTRAP_X32"
+            else
+              BOOTSTRAP_PATH="$BOOTSTRAP_X64"
+            fi
+          
+            if [ "${1}" = "32" ] || [ "${1}" = "64" ]; then
+              shift
+            fi
+          
+            bwrap --ro-bind "${BOOTSTRAP_PATH}" / --dev /dev --ro-bind /sys /sys \
+              --proc /proc --tmpfs /tmp --tmpfs /home --tmpfs /run --tmpfs /var \
+              --tmpfs /mnt --tmpfs /media --bind "${BUILD_DIR}" "${BUILD_DIR}" \
+              --bind-try "${HOME}"/.ccache "${HOME}"/.ccache \
+              --setenv PATH "/opt/mingw/x86_64/bin:/opt/mingw/i686/bin:/usr/local/bin:/bin:/sbin:/usr/bin:/usr/sbin" \
+              "$@"
+          }
+          
+          export -f build_with_bwrap
+          BWRAP64="build_with_bwrap 64"
+          BWRAP32="build_with_bwrap 32"
+          
+          echo "Downloading Wine source code..."
+          
+          # Determine Wine source based on branch
+          if [ "$WINE_BRANCH" = "staging-tkg" ] || [ "$WINE_BRANCH" = "staging-tkg-fsync" ]; then
+            if [ "$WINE_BRANCH" = "staging-tkg" ]; then
+              git clone https://github.com/Kron4ek/wine-tkg wine
+            else
+              git clone https://github.com/Kron4ek/wine-tkg wine -b fsync
+            fi
+            WINE_VERSION="$(cat wine/VERSION | tail -c +14)"
+            BUILD_NAME="${WINE_VERSION}-${WINE_BRANCH}"
+          elif [ "${WINE_VERSION}" = "git" ]; then
+            git clone https://gitlab.winehq.org/wine/wine.git wine
+            BUILD_NAME="${WINE_VERSION}-$(git -C wine rev-parse --short HEAD)"
+          else
+            # Replace "latest" with actual version
+            if [ "${WINE_VERSION}" = "latest" ] || [ -z "${WINE_VERSION}" ]; then
+              WINE_VERSION="$(wget -q -O - "https://raw.githubusercontent.com/wine-mirror/wine/master/VERSION" | tail -c +14)"
+            fi
+            
+            # Determine URL version
+            if [ "$(echo "$WINE_VERSION" | cut -d "." -f2 | cut -c1)" = "0" ]; then
+              WINE_URL_VERSION=$(echo "$WINE_VERSION" | cut -d "." -f 1).0
+            else
+              WINE_URL_VERSION=$(echo "$WINE_VERSION" | cut --d "." -f 1).x
+            fi
+            
+            BUILD_NAME="${WINE_VERSION}"
+            
+            wget -q --show-progress "https://dl.winehq.org/wine/source/${WINE_URL_VERSION}/wine-${WINE_VERSION}.tar.xz"
+            tar xf "wine-${WINE_VERSION}.tar.xz"
+            mv "wine-${WINE_VERSION}" wine
+            
+            # Apply Staging patches if needed
+            if [ "${WINE_BRANCH}" = "staging" ]; then
+              if [ -n "${STAGING_VERSION}" ]; then
+                WINE_VERSION="${STAGING_VERSION}"
+              fi
+              
+              BUILD_NAME="${WINE_VERSION}"-staging
+              
+              wget -q --show-progress "https://github.com/wine-staging/wine-staging/archive/v${WINE_VERSION}.tar.gz" || \
+                git clone https://github.com/wine-staging/wine-staging wine-staging-"${WINE_VERSION}"
+              
+              if [ -f v"${WINE_VERSION}".tar.gz ]; then
+                tar xf v"${WINE_VERSION}".tar.gz
+              fi
+              
+              cd wine
+              if [ -f ../wine-staging-"${WINE_VERSION}"/patches/patchinstall.sh ]; then
+                ../wine-staging-"${WINE_VERSION}"/patches/patchinstall.sh --all
+              elif [ -f ../wine-staging-"${WINE_VERSION}"/staging/patchinstall.py ]; then
+                ../wine-staging-"${WINE_VERSION}"/staging/patchinstall.py --all
+              fi
+              cd ..
+            fi
+          fi
+          
+          echo "Preparing Wine source..."
+          cd wine
+          dlls/winevulkan/make_vulkan
+          tools/make_requests
+          tools/make_specfiles
+          autoreconf -f
+          cd ..
+          
+          # Build 64-bit
+          echo "Building 64-bit Wine..."
+          export CROSSCC="${CROSSCC_X64}"
+          export CROSSCXX="${CROSSCXX_X64}"
+          export CFLAGS="${CFLAGS_X64}"
+          export CXXFLAGS="${CFLAGS_X64}"
+          export CROSSCFLAGS="${CROSSCFLAGS_X64}"
+          export CROSSCXXFLAGS="${CROSSCFLAGS_X64}"
+          
+          mkdir build64
+          cd build64
+          $BWRAP64 ../wine/configure --enable-win64 --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          $BWRAP64 make -j$(nproc) install
+          cd ..
+          
+          # Build 32-bit tools
+          echo "Building 32-bit tools..."
+          export CROSSCC="${CROSSCC_X32}"
+          export CROSSCXX="${CROSSCXX_X32}"
+          export CFLAGS="${CFLAGS_X32}"
+          export CXXFLAGS="${CFLAGS_X32}"
+          export CROSSCFLAGS="${CROSSCFLAGS_X32}"
+          export CROSSCXXFLAGS="${CROSSCFLAGS_X32}"
+          
+          mkdir build32-tools
+          cd build32-tools
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig $BWRAP32 ../wine/configure --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
+          $BWRAP32 make -j$(nproc) install
+          cd ..
+          
+          # Build 32-bit Wine
+          echo "Building 32-bit Wine..."
+          export CFLAGS="${CFLAGS_X64}"
+          export CXXFLAGS="${CFLAGS_X64}"
+          export CROSSCFLAGS="${CROSSCFLAGS_X64}"
+          export CROSSCXXFLAGS="${CROSSCFLAGS_X64}"
+          
+          mkdir build32
+          cd build32
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig $BWRAP32 ../wine/configure --with-wine64="${BUILD_DIR}/build64" --with-wine-tools="${BUILD_DIR}/build32-tools" --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          $BWRAP32 make -j$(nproc) install
+          cd ..
+          
+          echo "Creating WoW64 archive..."
+          export XZ_OPT="-9 -T 0"
+          
+          # Create WoW64 build
+          if [ -d "wine-${BUILD_NAME}-amd64" ]; then
+            cp -r "wine-${BUILD_NAME}-amd64" "wine-${BUILD_NAME}-WoW64"
+            
+            # Convert to WoW64
+            if [ -f "wine-${BUILD_NAME}-WoW64/bin/wine64" ]; then
+              rm -f "wine-${BUILD_NAME}-WoW64/bin/wine" "wine-${BUILD_NAME}-WoW64/bin/wine-preloader"
+              cp "wine-${BUILD_NAME}-WoW64/bin/wine64" "wine-${BUILD_NAME}-WoW64/bin/wine"
+            fi
+            
+            rm -rf "wine-${BUILD_NAME}-WoW64/lib/wine/i386-unix"
+            
+            tar -Jcf "wine-${BUILD_NAME}-WoW64.tar.xz" "wine-${BUILD_NAME}-WoW64"
+            mv "wine-${BUILD_NAME}-WoW64.tar.xz" "$GITHUB_WORKSPACE"
+          fi
+          
+          echo "WoW64 build complete!"
+      
+      - name: Generate checksums
+        run: |
+          cd $GITHUB_WORKSPACE
+          sha256sum *.tar.xz > checksums.txt
+          cat checksums.txt
+      
+      - name: Upload Wine WoW64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wine-${{ matrix.wine_branch }}-${{ matrix.wine_version }}-WoW64
+          path: |
+            ${{ github.workspace }}/*.tar.xz
+            ${{ github.workspace }}/checksums.txt
+          retention-days: 30

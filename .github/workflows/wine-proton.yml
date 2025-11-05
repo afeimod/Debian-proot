@@ -63,10 +63,13 @@ jobs:
       
       - name: Install dependencies
         run: |
-          sudo apt update
-          sudo apt install -y debootstrap perl git wget xz-utils bubblewrap autoconf \
-            ccache gcc-11 g++-11 i686-w64-mingw32-gcc x86_64-w64-mingw32-gcc \
-            make flex bison gettext libfreetype6-dev libfontconfig1-dev
+            sudo apt update
+            sudo apt install -y debootstrap perl git wget xz-utils bubblewrap autoconf \
+              ccache gcc-11 g++-11 i686-w64-mingw32-gcc x86_64-w64-mingw32-gcc \
+              make flex bison gettext libfreetype6-dev libfontconfig1-dev \
+              automake libtool pkg-config nasm yasm cmake ninja-build \
+              libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
+              libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libsdl2-dev
       
       - name: Extract bootstraps
         run: |
