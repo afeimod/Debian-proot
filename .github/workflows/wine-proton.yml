@@ -1,0 +1,253 @@
+name: Proton Builds
+
+on:
+  schedule:
+    - cron: '0 0 1,15 * *'
+  workflow_dispatch:
+    inputs:
+      proton_branch:
+        description: 'Proton branch to build'
+        required: true
+        default: 'proton_10.0'
+        type: choice
+        options:
+        - proton_3.7
+        - proton_3.16
+        - proton_4.2
+        - proton_4.11
+        - proton_5.0
+        - proton_5.13
+        - experimental_5.13
+        - proton_6.3
+        - experimental_6.3
+        - proton_7.0
+        - experimental_7.0
+        - proton_8.0
+        - experimental_8.0
+        - proton_9.0
+        - experimental_9.0
+        - proton_10.0
+        - experimental_10.0
+        - bleeding-edge
+
+env:
+  WINE_BRANCH: proton
+  USE_CCACHE: true
+  BUILD_DIR: /tmp/build_proton
+
+jobs:
+  build-proton:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        proton_branch: 
+          - proton_10.0
+          - experimental_10.0
+          - bleeding-edge
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download bootstraps
+        id: download-artifact
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: bootstraps.yml
+          workflow_conclusion: success
+          path: /opt
+      
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y debootstrap perl git wget xz-utils bubblewrap autoconf \
+            ccache gcc-11 g++-11 i686-w64-mingw32-gcc x86_64-w64-mingw32-gcc \
+            make flex bison gettext libfreetype6-dev libfontconfig1-dev
+      
+      - name: Extract bootstraps
+        run: |
+          sudo tar -C /opt -xpf /opt/Bootstraps/bootstraps.tar.xz
+          sudo chmod +x /opt/chroots/*
+      
+      - name: Setup build environment
+        run: |
+          export PROTON_BRANCH="${{ matrix.proton_branch }}"
+          export BOOTSTRAP_X64=/opt/chroots/bionic64_chroot
+          export BOOTSTRAP_X32=/opt/chroots/bionic32_chroot
+          
+          # Set compiler and flags
+          export CC="gcc-11"
+          export CXX="g++-11"
+          export CROSSCC_X32="i686-w64-mingw32-gcc"
+          export CROSSCXX_X32="i686-w64-mingw32-g++"
+          export CROSSCC_X64="x86_64-w64-mingw32-gcc"
+          export CROSSCXX_X64="x86_64-w64-mingw32-g++"
+          
+          export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O2 -ftree-vectorize"
+          export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O2 -ftree-vectorize"
+          export LDFLAGS="-Wl,-O1,--sort-common,--as-needed"
+          
+          export CROSSCFLAGS_X32="${CFLAGS_X32}"
+          export CROSSCFLAGS_X64="${CFLAGS_X64}"
+          export CROSSLDFLAGS="${LDFLAGS}"
+          
+          # Enable ccache if requested
+          if [ "$USE_CCACHE" = "true" ]; then
+            export CC="ccache ${CC}"
+            export CXX="ccache ${CXX}"
+            export i386_CC="ccache ${CROSSCC_X32}"
+            export x86_64_CC="ccache ${CROSSCC_X64}"
+            export CROSSCC_X32="ccache ${CROSSCC_X32}"
+            export CROSSCXX_X32="ccache ${CROSSCXX_X32}"
+            export CROSSCC_X64="ccache ${CROSSCC_X64}"
+            export CROSSCXX_X64="ccache ${CROSSCXX_X64}"
+          fi
+          
+          # Save environment for build steps
+          echo "PROTON_BRANCH=$PROTON_BRANCH" >> $GITHUB_ENV
+          echo "BOOTSTRAP_X64=$BOOTSTRAP_X64" >> $GITHUB_ENV
+          echo "BOOTSTRAP_X32=$BOOTSTRAP_X32" >> $GITHUB_ENV
+          echo "CC=$CC" >> $GITHUB_ENV
+          echo "CXX=$CXX" >> $GITHUB_ENV
+          echo "CROSSCC_X32=$CROSSCC_X32" >> $GITHUB_ENV
+          echo "CROSSCXX_X32=$CROSSCXX_X32" >> $GITHUB_ENV
+          echo "CROSSCC_X64=$CROSSCC_X64" >> $GITHUB_ENV
+          echo "CROSSCXX_X64=$CROSSCXX_X64" >> $GITHUB_ENV
+          echo "CFLAGS_X32=$CFLAGS_X32" >> $GITHUB_ENV
+          echo "CFLAGS_X64=$CFLAGS_X64" >> $GITHUB_ENV
+          echo "LDFLAGS=$LDFLAGS" >> $GITHUB_ENV
+          echo "CROSSCFLAGS_X32=$CROSSCFLAGS_X32" >> $GITHUB_ENV
+          echo "CROSSCFLAGS_X64=$CROSSCFLAGS_X64" >> $GITHUB_ENV
+          echo "CROSSLDFLAGS=$CROSSLDFLAGS" >> $GITHUB_ENV
+      
+      - name: Build Proton
+        run: |
+          set -e
+          
+          # Create build directory
+          rm -rf "$BUILD_DIR"
+          mkdir -p "$BUILD_DIR"
+          cd "$BUILD_DIR"
+          
+          # Bubblewrap function
+          build_with_bwrap() {
+            if [ "${1}" = "32" ]; then
+              BOOTSTRAP_PATH="$BOOTSTRAP_X32"
+            else
+              BOOTSTRAP_PATH="$BOOTSTRAP_X64"
+            fi
+          
+            if [ "${1}" = "32" ] || [ "${1}" = "64" ]; then
+              shift
+            fi
+          
+            bwrap --ro-bind "${BOOTSTRAP_PATH}" / --dev /dev --ro-bind /sys /sys \
+              --proc /proc --tmpfs /tmp --tmpfs /home --tmpfs /run --tmpfs /var \
+              --tmpfs /mnt --tmpfs /media --bind "${BUILD_DIR}" "${BUILD_DIR}" \
+              --bind-try "${HOME}"/.ccache "${HOME}"/.ccache \
+              --setenv PATH "/opt/mingw/x86_64/bin:/opt/mingw/i686/bin:/usr/local/bin:/bin:/sbin:/usr/bin:/usr/sbin" \
+              "$@"
+          }
+          
+          export -f build_with_bwrap
+          BWRAP64="build_with_bwrap 64"
+          BWRAP32="build_with_bwrap 32"
+          
+          echo "Downloading Proton source code..."
+          
+          # Clone Proton source
+          if [ -z "${PROTON_BRANCH}" ]; then
+            git clone https://github.com/ValveSoftware/wine
+          else
+            git clone https://github.com/ValveSoftware/wine -b "${PROTON_BRANCH}"
+          fi
+          
+          # Apply Proton patches if needed
+          if [ -f proton-opencl.patch ]; then
+            patch -d wine -Np1 < proton-opencl.patch
+          fi
+          
+          WINE_VERSION="$(cat wine/VERSION | tail -c +14)-$(git -C wine rev-parse --short HEAD)"
+          if [[ "${PROTON_BRANCH}" == "experimental_"* ]] || [ "${PROTON_BRANCH}" = "bleeding-edge" ]; then
+            BUILD_NAME=proton-exp-"${WINE_VERSION}"
+          else
+            BUILD_NAME=proton-"${WINE_VERSION}"
+          fi
+          
+          echo "Preparing Wine source..."
+          cd wine
+          dlls/winevulkan/make_vulkan
+          tools/make_requests
+          tools/make_specfiles
+          autoreconf -f
+          cd ..
+          
+          # Build 64-bit
+          echo "Building 64-bit Wine..."
+          export CROSSCC="${CROSSCC_X64}"
+          export CROSSCXX="${CROSSCXX_X64}"
+          export CFLAGS="${CFLAGS_X64}"
+          export CXXFLAGS="${CFLAGS_X64}"
+          export CROSSCFLAGS="${CROSSCFLAGS_X64}"
+          export CROSSCXXFLAGS="${CROSSCFLAGS_X64}"
+          
+          mkdir build64
+          cd build64
+          $BWRAP64 ../wine/configure --enable-win64 --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          $BWRAP64 make -j$(nproc) install
+          cd ..
+          
+          # Build 32-bit tools
+          echo "Building 32-bit tools..."
+          export CROSSCC="${CROSSCC_X32}"
+          export CROSSCXX="${CROSSCXX_X32}"
+          export CFLAGS="${CFLAGS_X32}"
+          export CXXFLAGS="${CFLAGS_X32}"
+          export CROSSCFLAGS="${CROSSCFLAGS_X32}"
+          export CROSSCXXFLAGS="${CROSSCFLAGS_X32}"
+          
+          mkdir build32-tools
+          cd build32-tools
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig $BWRAP32 ../wine/configure --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
+          $BWRAP32 make -j$(nproc) install
+          cd ..
+          
+          # Build 32-bit Wine
+          echo "Building 32-bit Wine..."
+          export CFLAGS="${CFLAGS_X64}"
+          export CXXFLAGS="${CFLAGS_X64}"
+          export CROSSCFLAGS="${CROSSCFLAGS_X64}"
+          export CROSSCXXFLAGS="${CROSSCFLAGS_X64}"
+          
+          mkdir build32
+          cd build32
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig $BWRAP32 ../wine/configure --with-wine64="${BUILD_DIR}/build64" --with-wine-tools="${BUILD_DIR}/build32-tools" --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          $BWRAP32 make -j$(nproc) install
+          cd ..
+          
+          echo "Creating archives..."
+          export XZ_OPT="-9 -T 0"
+          
+          # Create both x86 and amd64 archives
+          for build in "wine-${BUILD_NAME}-x86" "wine-${BUILD_NAME}-amd64"; do
+            if [ -d "${build}" ]; then
+              tar -Jcf "${build}.tar.xz" "${build}"
+              mv "${build}.tar.xz" "$GITHUB_WORKSPACE"
+            fi
+          done
+          
+          echo "Build complete!"
+      
+      - name: Generate checksums
+        run: |
+          cd $GITHUB_WORKSPACE
+          sha256sum *.tar.xz > checksums.txt
+          cat checksums.txt
+      
+      - name: Upload Proton artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Proton-${{ matrix.proton_branch }}
+          path: |
+            ${{ github.workspace }}/*.tar.xz
+            ${{ github.workspace }}/checksums.txt
+          retention-days: 30
