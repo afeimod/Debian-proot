@@ -62,7 +62,8 @@ jobs:
             make flex bison gettext libfreetype6-dev libfontconfig1-dev \
             automake libtool pkg-config nasm yasm cmake ninja-build \
             libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
-            libsdl2-dev gcc-mingw-w64 g++-mingw-w64
+            libsdl2-dev gcc-mingw-w64 g++-mingw-w64 \
+            libvulkan-dev vulkan-utils libwayland-dev libxrandr-dev
       
       - name: Build Proton
         run: |
