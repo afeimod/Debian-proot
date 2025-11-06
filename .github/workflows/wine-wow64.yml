@@ -109,10 +109,12 @@ jobs:
           apt install -y gcc-9 g++-9 gcc-10 g++-10 || echo "更新的 GCC 版本不可用，安装默认版本"
           apt install -y gcc g++
           
-          # 安装交叉编译器
-          apt install -y gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
+          # 安装交叉编译器 - 使用 Ubuntu 18.04 中的正确包名
+          apt install -y gcc-mingw-w64 g++-mingw-w64
           update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
           update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+          update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
+          update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
           EOL
       
       - name: Create 32-bit bootstrap
@@ -163,8 +165,10 @@ jobs:
           apt install -y gcc-9 g++-9 gcc-10 g++-10 || echo "更新的 GCC 版本不可用，安装默认版本"
           apt install -y gcc g++
           
-          # 安装交叉编译器
-          apt install -y gcc-mingw-w64-i686 g++-mingw-w64-i686
+          # 安装交叉编译器 - 使用 Ubuntu 18.04 中的正确包名
+          apt install -y gcc-mingw-w64 g++-mingw-w64
+          update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+          update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
           update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
           update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
           EOL
@@ -178,13 +182,23 @@ jobs:
           if [ -f "/usr/bin/x86_64-w64-mingw32-gcc" ]; then
             sudo ln -sf /usr/bin/x86_64-w64-mingw32-gcc /opt/mingw/x86_64/bin/
             sudo ln -sf /usr/bin/x86_64-w64-mingw32-g++ /opt/mingw/x86_64/bin/
+          else
+            echo "警告: 未找到 x86_64-w64-mingw32-gcc"
           fi
           
           # 为 32 位交叉编译器创建符号链接
           if [ -f "/usr/bin/i686-w64-mingw32-gcc" ]; then
             sudo ln -sf /usr/bin/i686-w64-mingw32-gcc /opt/mingw/i686/bin/
             sudo ln -sf /usr/bin/i686-w64-mingw32-g++ /opt/mingw/i686/bin/
+          else
+            echo "警告: 未找到 i686-w64-mingw32-gcc"
           fi
+      
+      - name: Verify cross-compilers in bootstraps
+        run: |
+          echo "验证引导环境中的交叉编译器..."
+          sudo chroot /opt/chroots/bionic64_chroot /bin/bash -c "which x86_64-w64-mingw32-gcc && x86_64-w64-mingw32-gcc --version | head -1" || echo "64位交叉编译器未找到"
+          sudo chroot /opt/chroots/bionic32_chroot /bin/bash -c "which i686-w64-mingw32-gcc && i686-w64-mingw32-gcc --version | head -1" || echo "32位交叉编译器未找到"
       
       - name: Clean up bootstraps
         run: |
@@ -209,11 +223,12 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y debootstrap perl git wget xz-utils bubblewrap autoconf \
-            ccache gcc-11 g++-11 i686-w64-mingw32-gcc x86_64-w64-mingw32-gcc \
+            ccache gcc-11 g++-11 \
             make flex bison gettext libfreetype6-dev libfontconfig1-dev \
             automake libtool pkg-config nasm yasm cmake ninja-build \
             libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
-            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libsdl2-dev
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libsdl2-dev \
+            gcc-mingw-w64 g++-mingw-w64  # Ubuntu 22.04 中的正确包名
       
       - name: Build Proton
         run: |
@@ -228,6 +243,9 @@ jobs:
           # 设置编译器和标志
           export CC="gcc-11"
           export CXX="g++-11"
+          
+          # 在 Ubuntu 22.04 中，mingw 交叉编译器的路径可能与 18.04 不同
+          # 我们使用引导环境中的编译器，但设置备用路径
           export CROSSCC_X32="i686-w64-mingw32-gcc"
           export CROSSCXX_X32="i686-w64-mingw32-g++"
           export CROSSCC_X64="x86_64-w64-mingw32-gcc"
@@ -384,11 +402,12 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y debootstrap perl git wget xz-utils bubblewrap autoconf \
-            ccache gcc-11 g++-11 i686-w64-mingw32-gcc x86_64-w64-mingw32-gcc \
+            ccache gcc-11 g++-11 \
             make flex bison gettext libfreetype6-dev libfontconfig1-dev \
             automake libtool pkg-config nasm yasm cmake ninja-build \
             libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
-            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libsdl2-dev
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libsdl2-dev \
+            gcc-mingw-w64 g++-mingw-w64  # Ubuntu 22.04 中的正确包名
       
       - name: Build Wine WoW64
         run: |
@@ -405,6 +424,8 @@ jobs:
           # 设置编译器和标志
           export CC="gcc-11"
           export CXX="g++-11"
+          
+          # 在 Ubuntu 22.04 中，mingw 交叉编译器的路径可能与 18.04 不同
           export CROSSCC_X32="i686-w64-mingw32-gcc"
           export CROSSCXX_X32="i686-w64-mingw32-g++"
           export CROSSCC_X64="x86_64-w64-mingw32-gcc"
