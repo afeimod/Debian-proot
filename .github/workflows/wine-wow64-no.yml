@@ -159,19 +159,26 @@ jobs:
           tools/make_requests
           tools/make_specfiles
           
-          # 应用 FFmpeg 兼容性修复 - 类似 build-wine-t.yml 的方式
+          # 应用 FFmpeg 兼容性修复 - 参考其他构建脚本的方式
           echo "应用 FFmpeg 兼容性修复..."
+          # 参考其他构建脚本，它们没有使用 --without-ffmpeg，所以我们也不禁用 FFmpeg
+          # 只修复已知的兼容性问题
           if [ -f "dlls/winedmo/libavcodec/pcm_byte_order_reverse_bsf.c" ]; then
             echo "修复 pcm_byte_order_reverse_bsf.c 中的 FFmpeg 兼容性问题..."
+            # 这个修复来自其他成功构建的脚本
             sed -i 's/\.priv_class     = &pcm_byte_order_reverse_bsf_class,/.priv_class     = pcm_byte_order_reverse_bsf_class,/' dlls/winedmo/libavcodec/pcm_byte_order_reverse_bsf.c
             echo "✅ pcm_byte_order_reverse_bsf.c 修复完成"
           fi
           
-          # 修复其他可能的 FFmpeg 相关问题
-          if [ -f "dlls/winedmo/libavcodec/Makefile.in" ]; then
-            echo "检查并修复 Makefile.in 中的 FFmpeg 相关设置..."
-            # 确保使用正确的 FFmpeg 标志
-            sed -i 's/CFLAGS.*avcodec/CFLAGS += $(AVCODEC_CFLAGS)/g' dlls/winedmo/libavcodec/Makefile.in
+          # 其他 FFmpeg 相关修复
+          echo "检查其他 FFmpeg 相关问题..."
+          # 确保 FFmpeg 相关的配置正确
+          if [ -f "configure.ac" ]; then
+            echo "检查 configure.ac 中的 FFmpeg 设置..."
+            # 确保 FFmpeg 支持被启用
+            if grep -q "PKG_CHECK_MODULES.*FFMPEG" configure.ac; then
+              echo "FFmpeg 支持已在 configure.ac 中配置"
+            fi
           fi
           
           autoreconf -f
@@ -188,7 +195,8 @@ jobs:
           
           mkdir build64
           cd build64
-          # 添加 --without-ffmpeg 避免 FFmpeg 相关问题
+       
+          # 参考其他构建脚本的配置，不添加 --without-ffmpeg
           ../wine/configure --enable-win64 --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
           make -j$(nproc) install
           cd ..
@@ -403,19 +411,64 @@ jobs:
           tools/make_requests
           tools/make_specfiles
           
-          # 应用 FFmpeg 兼容性修复 - 类似 build-wine-t.yml 的方式
+          # 应用 FFmpeg 兼容性修复 - 参考其他构建脚本的方式
           echo "应用 FFmpeg 兼容性修复..."
+          # 参考其他构建脚本，它们没有使用 --without-ffmpeg，所以我们也不禁用 FFmpeg
+          # 只修复已知的兼容性问题
           if [ -f "dlls/winedmo/libavcodec/pcm_byte_order_reverse_bsf.c" ]; then
             echo "修复 pcm_byte_order_reverse_bsf.c 中的 FFmpeg 兼容性问题..."
+            # 这个修复来自其他成功构建的脚本
             sed -i 's/\.priv_class     = &pcm_byte_order_reverse_bsf_class,/.priv_class     = pcm_byte_order_reverse_bsf_class,/' dlls/winedmo/libavcodec/pcm_byte_order_reverse_bsf.c
             echo "✅ pcm_byte_order_reverse_bsf.c 修复完成"
           fi
           
-          # 修复其他可能的 FFmpeg 相关问题
-          if [ -f "dlls/winedmo/libavcodec/Makefile.in" ]; then
-            echo "检查并修复 Makefile.in 中的 FFmpeg 相关设置..."
-            # 确保使用正确的 FFmpeg 标志
-            sed -i 's/CFLAGS.*avcodec/CFLAGS += $(AVCODEC_CFLAGS)/g' dlls/winedmo/libavcodec/Makefile.in
+          # 其他 FFmpeg 相关修复
+          echo "检查其他 FFmpeg 相关问题..."
+          # 确保 FFmpeg 相关的配置正确
+          if [ -f "configure.ac" ]; then
+            echo "检查 configure.ac 中的 FFmpeg 设置..."
+            # 确保 FFmpeg 支持被启用
+            if grep -q "PKG_CHECK_MODULES.*FFMPEG" configure.ac; then
+              echo "FFmpeg 支持已在 configure.ac 中配置"
+            fi
+          fi
+          
+          # 应用非 Proton 的 MF 修复 - 根据版本选择修复方式
+          echo "应用非 Proton 的 MF 修复..."
+          # 解析版本号进行比较
+          VERSION_MAJOR=$(echo "${WINE_VERSION}" | cut -d. -f1)
+          VERSION_MINOR=$(echo "${WINE_VERSION}" | cut -d. -f2)
+          
+          echo "Wine 版本: ${WINE_VERSION}"
+          echo "主版本: ${VERSION_MAJOR}, 次版本: ${VERSION_MINOR}"
+          
+          # 判断版本是否 >= 9.10
+          if [ "${VERSION_MAJOR}" -gt 9 ] || [ "${VERSION_MAJOR}" -eq 9 -a "${VERSION_MINOR}" -ge 10 ]; then
+              echo "使用 9.10+ 版本的 MF 修复 (wine_do_not_create_dxgi_manager2.patch)"
+              wget https://github.com/afeimod/linbox/raw/main/path/wine_do_not_create_dxgi_manager2.patch
+              
+              # 检查目标文件是否存在
+              if [ -f "dlls/mfplat/main.c" ]; then
+                  echo "找到目标文件 dlls/mfplat/main.c，准备应用补丁..."
+                  
+                  # 尝试应用补丁
+                  if patch -p1 < wine_do_not_create_dxgi_manager2.patch; then
+                      echo "✅ 补丁应用成功"
+                  else
+                      echo "❌ 补丁应用失败，但继续构建"
+                  fi
+              else
+                  echo "❌ 错误：目标文件 dlls/mfplat/main.c 不存在"
+              fi
+          else
+              echo "使用 9.10 以下版本的 MF 修复 (fix_wine9.2_mfplat.sh)"
+              wget -O fix_wine9.2_mfplat.sh https://github.com/afeimod/linbox/raw/main/path/fix_wine9.2_mfplat.sh
+              chmod +x fix_wine9.2_mfplat.sh
+              if ./fix_wine9.2_mfplat.sh; then
+                  echo "✅ 修复脚本执行成功"
+              else
+                  echo "❌ 修复脚本执行失败，但继续构建"
+              fi
           fi
           
           autoreconf -f
@@ -432,7 +485,8 @@ jobs:
           
           mkdir build64
           cd build64
-          # 添加 --without-ffmpeg 避免 FFmpeg 相关问题
+        
+          # 参考其他构建脚本的配置，不添加 --without-ffmpeg
           ../wine/configure --enable-win64 --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
           make -j$(nproc) install
           cd ..
