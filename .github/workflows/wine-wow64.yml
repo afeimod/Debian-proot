@@ -82,12 +82,11 @@ jobs:
           apt install -y build-essential autoconf automake flex bison libtool \
             pkg-config gettext nasm yasm cmake meson ninja-build
           
-          # 安装开发库 (使用 bionic 中可用的软件包)
+          # 安装开发库 - 简化版本，避免依赖问题
           apt install -y libx11-dev libfreetype6-dev libfontconfig1-dev \
             libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
-            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libsdl2-dev libgnutls28-dev libldap2-dev libjpeg-dev \
-            libpng-dev libtiff5-dev libmpg123-dev libopenal-dev \
+            libpng-dev libtiff5-dev libmpg123-dev \
             libcups2-dev libosmesa6-dev libpcap-dev libusb-1.0-0-dev \
             libsane-dev libv4l-dev libgphoto2-dev liblcms2-dev \
             libpcsclite-dev libacl1-dev libxml2-dev libxslt1-dev \
@@ -97,6 +96,9 @@ jobs:
             libgles2-mesa-dev libglu1-mesa-dev libxi-dev libxrandr-dev \
             libxfixes-dev libxcursor-dev libxinerama-dev libxcomposite-dev \
             libxdamage-dev libxxf86vm-dev libxt-dev libxmu-dev libxtst-dev
+          
+          # 可选安装 GStreamer - 如果可用
+          apt install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev || echo "GStreamer 开发包不可用，跳过"
           
           # 安装 Vulkan 开发包 (如果可用)
           apt install -y vulkan-utils || echo "Vulkan 不可用，继续..."
@@ -138,12 +140,11 @@ jobs:
           apt install -y build-essential autoconf automake flex bison libtool \
             pkg-config gettext nasm yasm cmake meson ninja-build
           
-          # 安装开发库 (使用 bionic 中可用的软件包)
+          # 安装开发库 - 简化版本，避免依赖问题
           apt install -y libx11-dev libfreetype6-dev libfontconfig1-dev \
             libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
-            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libsdl2-dev libgnutls28-dev libldap2-dev libjpeg-dev \
-            libpng-dev libtiff5-dev libmpg123-dev libopenal-dev \
+            libpng-dev libtiff5-dev libmpg123-dev \
             libcups2-dev libosmesa6-dev libpcap-dev libusb-1.0-0-dev \
             libsane-dev libv4l-dev libgphoto2-dev liblcms2-dev \
             libpcsclite-dev libacl1-dev libxml2-dev libxslt1-dev \
@@ -153,6 +154,9 @@ jobs:
             libgles2-mesa-dev libglu1-mesa-dev libxi-dev libxrandr-dev \
             libxfixes-dev libxcursor-dev libxinerama-dev libxcomposite-dev \
             libxdamage-dev libxxf86vm-dev libxt-dev libxmu-dev libxtst-dev
+          
+          # 可选安装 GStreamer - 如果可用
+          apt install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev || echo "GStreamer 开发包不可用，跳过"
           
           # 安装 Vulkan 开发包 (如果可用)
           apt install -y vulkan-utils || echo "Vulkan 不可用，继续..."
@@ -222,13 +226,20 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
+          # 修复损坏的包
+          sudo apt --fix-broken install -y
+          # 安装 libunwind-dev 以解决 GStreamer 依赖问题
+          sudo apt install -y libunwind-dev
+          # 安装其他依赖
           sudo apt install -y debootstrap perl git wget xz-utils bubblewrap autoconf \
             ccache gcc-11 g++-11 \
             make flex bison gettext libfreetype6-dev libfontconfig1-dev \
             automake libtool pkg-config nasm yasm cmake ninja-build \
             libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
-            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libsdl2-dev \
-            gcc-mingw-w64 g++-mingw-w64  # Ubuntu 22.04 中的正确包名
+            libsdl2-dev \
+            gcc-mingw-w64 g++-mingw-w64
+          # 可选安装 GStreamer
+          sudo apt install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev || echo "GStreamer 开发包安装失败，跳过"
       
       - name: Build Proton
         run: |
@@ -401,13 +412,20 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
+          # 修复损坏的包
+          sudo apt --fix-broken install -y
+          # 安装 libunwind-dev 以解决 GStreamer 依赖问题
+          sudo apt install -y libunwind-dev
+          # 安装其他依赖
           sudo apt install -y debootstrap perl git wget xz-utils bubblewrap autoconf \
             ccache gcc-11 g++-11 \
             make flex bison gettext libfreetype6-dev libfontconfig1-dev \
             automake libtool pkg-config nasm yasm cmake ninja-build \
             libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
-            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libsdl2-dev \
-            gcc-mingw-w64 g++-mingw-w64  # Ubuntu 22.04 中的正确包名
+            libsdl2-dev \
+            gcc-mingw-w64 g++-mingw-w64
+          # 可选安装 GStreamer
+          sudo apt install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev || echo "GStreamer 开发包安装失败，跳过"
       
       - name: Build Wine WoW64
         run: |
