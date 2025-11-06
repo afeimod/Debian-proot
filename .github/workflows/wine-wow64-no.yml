@@ -106,7 +106,7 @@ jobs:
           export PROTON_BRANCH="${{ github.event.inputs.proton_branch || 'proton_10.0' }}"
           export BUILD_DIR="/tmp/build_proton_${PROTON_BRANCH}"
           
-          # 设置编译器和标志
+          # 设置编译器和标志 - 参考其他成功构建的配置
           export CC="gcc-11"
           export CXX="g++-11"
           export CROSSCC_X32="i686-w64-mingw32-gcc"
@@ -114,8 +114,9 @@ jobs:
           export CROSSCC_X64="x86_64-w64-mingw32-gcc"
           export CROSSCXX_X64="x86_64-w64-mingw32-g++"
           
-          export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O2 -ftree-vectorize"
-          export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O2 -ftree-vectorize"
+          # 使用与其他成功构建相同的优化标志
+          export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O3 -ftree-vectorize -pipe"
+          export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O3 -ftree-vectorize -pipe"
           export LDFLAGS="-Wl,-O1,--sort-common,--as-needed"
           
           export CROSSCFLAGS_X32="${CFLAGS_X32}"
@@ -159,18 +160,18 @@ jobs:
           tools/make_requests
           tools/make_specfiles
           
-          # 应用 FFmpeg 兼容性修复 - 参考其他构建脚本的方式
+          # 关键修复：应用正确的 FFmpeg 修复
           echo "应用 FFmpeg 兼容性修复..."
-          # 参考其他构建脚本，它们没有使用 --without-ffmpeg，所以我们也不禁用 FFmpeg
-          # 只修复已知的兼容性问题
           if [ -f "dlls/winedmo/libavcodec/pcm_byte_order_reverse_bsf.c" ]; then
             echo "修复 pcm_byte_order_reverse_bsf.c 中的 FFmpeg 兼容性问题..."
-            # 这个修复来自其他成功构建的脚本
+            # 使用与其他成功构建相同的修复方法
             sed -i 's/\.priv_class     = &pcm_byte_order_reverse_bsf_class,/.priv_class     = pcm_byte_order_reverse_bsf_class,/' dlls/winedmo/libavcodec/pcm_byte_order_reverse_bsf.c
+            # 额外修复：确保函数签名正确
+            sed -i 's/\.init = init,/.init = (int(*)(AVBSFContext*))init,/' dlls/winedmo/libavcodec/pcm_byte_order_reverse_bsf.c
             echo "✅ pcm_byte_order_reverse_bsf.c 修复完成"
           fi
           
-          # 其他 FFmpeg 相关修复
+          # 修复其他可能的 FFmpeg 相关问题
           echo "检查其他 FFmpeg 相关问题..."
           # 确保 FFmpeg 相关的配置正确
           if [ -f "configure.ac" ]; then
@@ -184,7 +185,7 @@ jobs:
           autoreconf -f
           cd ..
           
-          # 构建 64 位
+          # 构建 64 位 - 使用与其他成功构建相同的配置参数
           echo "构建 64 位 Wine..."
           export CROSSCC="${CROSSCC_X64}"
           export CROSSCXX="${CROSSCXX_X64}"
@@ -196,8 +197,39 @@ jobs:
           mkdir build64
           cd build64
        
-          # 参考其他构建脚本的配置，不添加 --without-ffmpeg
-          ../wine/configure --enable-win64 --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          # 关键：使用与其他成功构建相同的配置参数
+          ../wine/configure \
+            --enable-win64 \
+            --enable-archs=i386,x86_64 \
+            --prefix="${BUILD_DIR}/wine-${BUILD_NAME}-amd64" \
+            --with-x \
+            --with-vulkan \
+            --with-alsa \
+            --with-pulse \
+            --with-freetype \
+            --with-fontconfig \
+            --with-gstreamer \
+            --with-gettext \
+            --enable-nls \
+            --without-oss \
+            --disable-winemenubuilder \
+            --disable-win16 \
+            --disable-tests \
+            --without-dbus \
+            --without-sane \
+            --without-pcap \
+            --without-pcsclite \
+            --without-cups \
+            --without-capi \
+            --without-coreaudio \
+            --without-gphoto \
+            --without-osmesa \
+            --without-udev \
+            --without-unwind \
+            --without-usb \
+            --without-v4l2 \
+            --without-wayland
+          
           make -j$(nproc) install
           cd ..
           
@@ -212,7 +244,11 @@ jobs:
           
           mkdir build32-tools
           cd build32-tools
-          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ../wine/configure --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ../wine/configure \
+            --without-oss \
+            --disable-winemenubuilder \
+            --disable-tests \
+            --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
           make -j$(nproc) install
           cd ..
           
@@ -225,7 +261,13 @@ jobs:
           
           mkdir build32
           cd build32
-          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ../wine/configure --with-wine64="${BUILD_DIR}/build64" --with-wine-tools="${BUILD_DIR}/build32-tools" --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ../wine/configure \
+            --with-wine64="${BUILD_DIR}/build64" \
+            --with-wine-tools="${BUILD_DIR}/build32-tools" \
+            --without-oss \
+            --disable-winemenubuilder \
+            --disable-tests \
+            --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
           make -j$(nproc) install
           cd ..
           
@@ -319,7 +361,7 @@ jobs:
           export EXPERIMENTAL_WOW64="true"
           export BUILD_DIR="/tmp/build_wine_${WINE_BRANCH}_${WINE_VERSION}"
           
-          # 设置编译器和标志
+          # 设置编译器和标志 - 参考其他成功构建的配置
           export CC="gcc-11"
           export CXX="g++-11"
           export CROSSCC_X32="i686-w64-mingw32-gcc"
@@ -327,8 +369,9 @@ jobs:
           export CROSSCC_X64="x86_64-w64-mingw32-gcc"
           export CROSSCXX_X64="x86_64-w64-mingw32-g++"
           
-          export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O2 -ftree-vectorize"
-          export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O2 -ftree-vectorize"
+          # 使用与其他成功构建相同的优化标志
+          export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O3 -ftree-vectorize -pipe"
+          export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O3 -ftree-vectorize -pipe"
           export LDFLAGS="-Wl,-O1,--sort-common,--as-needed"
           
           export CROSSCFLAGS_X32="${CFLAGS_X32}"
@@ -411,18 +454,18 @@ jobs:
           tools/make_requests
           tools/make_specfiles
           
-          # 应用 FFmpeg 兼容性修复 - 参考其他构建脚本的方式
+          # 关键修复：应用正确的 FFmpeg 修复
           echo "应用 FFmpeg 兼容性修复..."
-          # 参考其他构建脚本，它们没有使用 --without-ffmpeg，所以我们也不禁用 FFmpeg
-          # 只修复已知的兼容性问题
           if [ -f "dlls/winedmo/libavcodec/pcm_byte_order_reverse_bsf.c" ]; then
             echo "修复 pcm_byte_order_reverse_bsf.c 中的 FFmpeg 兼容性问题..."
-            # 这个修复来自其他成功构建的脚本
+            # 使用与其他成功构建相同的修复方法
             sed -i 's/\.priv_class     = &pcm_byte_order_reverse_bsf_class,/.priv_class     = pcm_byte_order_reverse_bsf_class,/' dlls/winedmo/libavcodec/pcm_byte_order_reverse_bsf.c
+            # 额外修复：确保函数签名正确
+            sed -i 's/\.init = init,/.init = (int(*)(AVBSFContext*))init,/' dlls/winedmo/libavcodec/pcm_byte_order_reverse_bsf.c
             echo "✅ pcm_byte_order_reverse_bsf.c 修复完成"
           fi
           
-          # 其他 FFmpeg 相关修复
+          # 修复其他可能的 FFmpeg 相关问题
           echo "检查其他 FFmpeg 相关问题..."
           # 确保 FFmpeg 相关的配置正确
           if [ -f "configure.ac" ]; then
@@ -474,7 +517,7 @@ jobs:
           autoreconf -f
           cd ..
           
-          # 构建 64 位
+          # 构建 64 位 - 使用与其他成功构建相同的配置参数
           echo "构建 64 位 Wine..."
           export CROSSCC="${CROSSCC_X64}"
           export CROSSCXX="${CROSSCXX_X64}"
@@ -486,8 +529,39 @@ jobs:
           mkdir build64
           cd build64
         
-          # 参考其他构建脚本的配置，不添加 --without-ffmpeg
-          ../wine/configure --enable-win64 --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          # 关键：使用与其他成功构建相同的配置参数
+          ../wine/configure \
+            --enable-win64 \
+            --enable-archs=i386,x86_64 \
+            --prefix="${BUILD_DIR}/wine-${BUILD_NAME}-amd64" \
+            --with-x \
+            --with-vulkan \
+            --with-alsa \
+            --with-pulse \
+            --with-freetype \
+            --with-fontconfig \
+            --with-gstreamer \
+            --with-gettext \
+            --enable-nls \
+            --without-oss \
+            --disable-winemenubuilder \
+            --disable-win16 \
+            --disable-tests \
+            --without-dbus \
+            --without-sane \
+            --without-pcap \
+            --without-pcsclite \
+            --without-cups \
+            --without-capi \
+            --without-coreaudio \
+            --without-gphoto \
+            --without-osmesa \
+            --without-udev \
+            --without-unwind \
+            --without-usb \
+            --without-v4l2 \
+            --without-wayland
+          
           make -j$(nproc) install
           cd ..
           
@@ -502,7 +576,11 @@ jobs:
           
           mkdir build32-tools
           cd build32-tools
-          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ../wine/configure --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ../wine/configure \
+            --without-oss \
+            --disable-winemenubuilder \
+            --disable-tests \
+            --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
           make -j$(nproc) install
           cd ..
           
@@ -515,7 +593,13 @@ jobs:
           
           mkdir build32
           cd build32
-          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ../wine/configure --with-wine64="${BUILD_DIR}/build64" --with-wine-tools="${BUILD_DIR}/build32-tools" --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ../wine/configure \
+            --with-wine64="${BUILD_DIR}/build64" \
+            --with-wine-tools="${BUILD_DIR}/build32-tools" \
+            --without-oss \
+            --disable-winemenubuilder \
+            --disable-tests \
+            --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
           make -j$(nproc) install
           cd ..
           
