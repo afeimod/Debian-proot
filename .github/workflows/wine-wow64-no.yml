@@ -70,6 +70,7 @@ jobs:
             
       - name: 安装多媒体和音频依赖
         run: |
+          sudo apt update
           # 先安装 libunwind-dev 解决依赖问题
           sudo apt install -y libunwind-dev
           # 然后安装多媒体相关包
@@ -159,7 +160,7 @@ jobs:
           
           mkdir build64
           cd build64
-          ../wine/configure --enable-win64 --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          ../wine/configure --enable-win64 --without-oss --with-gstreamer --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
           make -j$(nproc) install
           cd ..
           
@@ -174,7 +175,7 @@ jobs:
           
           mkdir build32-tools
           cd build32-tools
-          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ../wine/configure --with-gstreamer --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ../wine/configure --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
           make -j$(nproc) install
           cd ..
           

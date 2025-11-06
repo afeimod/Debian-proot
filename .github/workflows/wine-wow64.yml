@@ -46,158 +46,83 @@ env:
   BUILD_DIR: /tmp/build_wine
 
 jobs:
-  create-bootstraps:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 60
-    
-    steps:
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y debootstrap schroot wget xz-utils qemu-user-static binfmt-support curl
-      
-      - name: Create directories
-        run: |
-          sudo mkdir -p /opt/chroots
-          sudo chmod 755 /opt/chroots
-      
-      - name: Download setup script
-        run: |
-          wget -O /tmp/setup_chroot.sh https://github.com/afeimod/linbox/raw/main/path/setup_chroot.sh
-          chmod +x /tmp/setup_chroot.sh
-      
-      - name: Create 64-bit bootstrap
-        run: |
-          echo "创建 64 位引导环境..."
-          
-          # 检查是否已存在
-          if [ -d "/opt/chroots/bionic64_chroot" ]; then
-            echo "64位引导环境已存在，跳过创建"
-            exit 0
-          fi
-          
-          sudo debootstrap --arch=amd64 bionic /opt/chroots/bionic64_chroot http://archive.ubuntu.com/ubuntu/ || {
-            echo "debootstrap 失败，尝试备用镜像..."
-            sudo debootstrap --arch=amd64 bionic /opt/chroots/bionic64_chroot http://old-releases.ubuntu.com/ubuntu/
-          }
-          
-          # 复制并执行设置脚本
-          sudo cp /tmp/setup_chroot.sh /opt/chroots/bionic64_chroot/tmp/
-          sudo chroot /opt/chroots/bionic64_chroot /bin/bash /tmp/setup_chroot.sh
-          sudo rm -f /opt/chroots/bionic64_chroot/tmp/setup_chroot.sh
-      
-      - name: Create 32-bit bootstrap
-        run: |
-          echo "创建 32 位引导环境..."
-          
-          # 检查是否已存在
-          if [ -d "/opt/chroots/bionic32_chroot" ]; then
-            echo "32位引导环境已存在，跳过创建"
-            exit 0
-          fi
-          
-          sudo debootstrap --arch=i386 bionic /opt/chroots/bionic32_chroot http://archive.ubuntu.com/ubuntu/ || {
-            echo "debootstrap 失败，尝试备用镜像..."
-            sudo debootstrap --arch=i386 bionic /opt/chroots/bionic32_chroot http://old-releases.ubuntu.com/ubuntu/
-          }
-          
-          # 复制并执行设置脚本
-          sudo cp /tmp/setup_chroot.sh /opt/chroots/bionic32_chroot/tmp/
-          sudo chroot /opt/chroots/bionic32_chroot /bin/bash /tmp/setup_chroot.sh
-          sudo rm -f /opt/chroots/bionic32_chroot/tmp/setup_chroot.sh
-      
-      - name: Verify bootstraps
-        run: |
-          echo "验证引导环境..."
-          
-          # 检查引导环境是否存在
-          if [ -d "/opt/chroots/bionic64_chroot" ]; then
-            echo "✓ 64位引导环境存在"
-            # 检查基本命令是否可用
-            sudo chroot /opt/chroots/bionic64_chroot /bin/bash -c "which gcc && gcc --version | head -1" || echo "✗ GCC 未找到"
-            sudo chroot /opt/chroots/bionic64_chroot /bin/bash -c "which x86_64-w64-mingw32-gcc && x86_64-w64-mingw32-gcc --version | head -1" || echo "✗ 64位交叉编译器未找到"
-          else
-            echo "✗ 64位引导环境不存在"
-            exit 1
-          fi
-          
-          if [ -d "/opt/chroots/bionic32_chroot" ]; then
-            echo "✓ 32位引导环境存在"
-            # 检查基本命令是否可用
-            sudo chroot /opt/chroots/bionic32_chroot /bin/bash -c "which gcc && gcc --version | head -1" || echo "✗ GCC 未找到"
-            sudo chroot /opt/chroots/bionic32_chroot /bin/bash -c "which i686-w64-mingw32-gcc && i686-w64-mingw32-gcc --version | head -1" || echo "✗ 32位交叉编译器未找到"
-          else
-            echo "✗ 32位引导环境不存在"
-            exit 1
-          fi
-      
-      - name: Cache bootstraps
-        uses: actions/cache/save@v3
-        with:
-          path: /opt/chroots
-          key: bootstraps-${{ github.run_id }}
-          restore-keys: |
-            bootstraps-
-
   build-proton:
     runs-on: ubuntu-22.04
-    needs: create-bootstraps
     if: github.event.inputs.build_type == 'proton' || (github.event_name == 'schedule' && github.event.schedule == '0 0 1,15 * *')
-    timeout-minutes: 120
+    timeout-minutes: 180
     
     steps:
       - uses: actions/checkout@v4
       
-      - name: Restore bootstraps from cache
-        uses: actions/cache/restore@v3
-        with:
-          path: /opt/chroots
-          key: bootstraps-${{ github.run_id }}
-          restore-keys: |
-            bootstraps-
-      
-      - name: Verify bootstraps exist
-        run: |
-          echo "验证引导环境是否存在..."
-          if [ ! -d "/opt/chroots/bionic64_chroot" ] || [ ! -d "/opt/chroots/bionic32_chroot" ]; then
-            echo "错误: 引导环境不存在，需要重新运行 create-bootstraps 作业"
-            exit 1
-          else
-            echo "✓ 引导环境验证成功"
-          fi
-      
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y debootstrap perl git wget xz-utils bubblewrap autoconf \
-            ccache gcc-11 g++-11 \
+          sudo apt install -y debootstrap schroot wget xz-utils qemu-user-static binfmt-support curl \
+            perl git bubblewrap autoconf ccache gcc-11 g++-11 \
             make flex bison gettext libfreetype6-dev libfontconfig1-dev \
             automake libtool pkg-config nasm yasm cmake ninja-build \
             libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
-            libsdl2-dev \
-            gcc-mingw-w64 g++-mingw-w64 \
-            libvulkan-dev \
-            vulkan-tools \
-            libvulkan1 \
-            mesa-vulkan-drivers
+            libsdl2-dev gcc-mingw-w64 g++-mingw-w64 \
+            libvulkan-dev vulkan-tools libvulkan1 mesa-vulkan-drivers
       
       - name: 安装多媒体和音频依赖
         run: |
-          sudo apt update
-          # 先安装 libunwind-dev 解决依赖问题
           sudo apt install -y libunwind-dev
-          # 然后安装多媒体相关包
           sudo apt install -y \
-              libgstreamer1.0-dev \
-              libgstreamer-plugins-base1.0-dev \
-              libgstreamer-plugins-good1.0-dev \
-              libgstreamer-plugins-bad1.0-dev \
-              gstreamer1.0-plugins-base \
-              gstreamer1.0-plugins-good \
-              gstreamer1.0-plugins-bad \
-              gstreamer1.0-libav \
-              libmpg123-dev \
-              libopenal-dev
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libmpg123-dev \
+            libopenal-dev
+      
+      - name: Create bootstrap environments
+        run: |
+          set -e
+          echo "创建引导环境..."
+          
+          # 创建目录
+          sudo mkdir -p /opt/chroots
+          sudo chmod 755 /opt/chroots
+          
+          # 下载设置脚本
+          wget -O /tmp/setup_chroot.sh https://raw.githubusercontent.com/afeimod/linbox/main/path/setup_chroot.sh
+          chmod +x /tmp/setup_chroot.sh
+          
+          # 创建64位引导环境
+          if [ ! -d "/opt/chroots/bionic64_chroot" ]; then
+            echo "创建64位引导环境..."
+            sudo debootstrap --arch=amd64 bionic /opt/chroots/bionic64_chroot http://archive.ubuntu.com/ubuntu/ || {
+              echo "主镜像失败，尝试备用镜像..."
+              sudo debootstrap --arch=amd64 bionic /opt/chroots/bionic64_chroot http://old-releases.ubuntu.com/ubuntu/
+            }
+            sudo cp /tmp/setup_chroot.sh /opt/chroots/bionic64_chroot/tmp/
+            sudo chroot /opt/chroots/bionic64_chroot /bin/bash /tmp/setup_chroot.sh
+            sudo rm -f /opt/chroots/bionic64_chroot/tmp/setup_chroot.sh
+          else
+            echo "64位引导环境已存在"
+          fi
+          
+          # 创建32位引导环境
+          if [ ! -d "/opt/chroots/bionic32_chroot" ]; then
+            echo "创建32位引导环境..."
+            sudo debootstrap --arch=i386 bionic /opt/chroots/bionic32_chroot http://archive.ubuntu.com/ubuntu/ || {
+              echo "主镜像失败，尝试备用镜像..."
+              sudo debootstrap --arch=i386 bionic /opt/chroots/bionic32_chroot http://old-releases.ubuntu.com/ubuntu/
+            }
+            sudo cp /tmp/setup_chroot.sh /opt/chroots/bionic32_chroot/tmp/
+            sudo chroot /opt/chroots/bionic32_chroot /bin/bash /tmp/setup_chroot.sh
+            sudo rm -f /opt/chroots/bionic32_chroot/tmp/setup_chroot.sh
+          else
+            echo "32位引导环境已存在"
+          fi
+          
+          # 验证引导环境
+          echo "验证引导环境..."
+          if [ -d "/opt/chroots/bionic64_chroot" ] && [ -d "/opt/chroots/bionic32_chroot" ]; then
+            echo "✓ 引导环境创建成功"
+          else
+            echo "✗ 引导环境创建失败"
+            exit 1
+          fi
       
       - name: Build Proton
         run: |
@@ -307,7 +232,7 @@ jobs:
           
           mkdir build64
           cd build64
-          build_with_bwrap 64 ../wine/configure --enable-win64 --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          build_with_bwrap 64 ../wine/configure --enable-win64 --without-oss --with-gstreamer --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
           build_with_bwrap 64 make -j$(nproc) install
           cd ..
           
@@ -322,7 +247,7 @@ jobs:
           
           mkdir build32-tools
           cd build32-tools
-          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig build_with_bwrap 32 ../wine/configure --without-oss --with-gstreamer --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig build_with_bwrap 32 ../wine/configure --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
           build_with_bwrap 32 make -j$(nproc) install
           cd ..
           
@@ -369,41 +294,71 @@ jobs:
 
   build-wine-wow64:
     runs-on: ubuntu-22.04
-    needs: create-bootstraps
     if: github.event.inputs.build_type == 'wine-wow64' || (github.event_name == 'schedule' && github.event.schedule == '0 2 5,20 * *')
-    timeout-minutes: 120
+    timeout-minutes: 180
     
     steps:
       - uses: actions/checkout@v4
       
-      - name: Restore bootstraps from cache
-        uses: actions/cache/restore@v3
-        with:
-          path: /opt/chroots
-          key: bootstraps-${{ github.run_id }}
-          restore-keys: |
-            bootstraps-
-      
-      - name: Verify bootstraps exist
-        run: |
-          echo "验证引导环境是否存在..."
-          if [ ! -d "/opt/chroots/bionic64_chroot" ] || [ ! -d "/opt/chroots/bionic32_chroot" ]; then
-            echo "错误: 引导环境不存在，需要重新运行 create-bootstraps 作业"
-            exit 1
-          else
-            echo "✓ 引导环境验证成功"
-          fi
-      
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y debootstrap perl git wget xz-utils bubblewrap autoconf \
-            ccache gcc-11 g++-11 \
+          sudo apt install -y debootstrap schroot wget xz-utils qemu-user-static binfmt-support curl \
+            perl git bubblewrap autoconf ccache gcc-11 g++-11 \
             make flex bison gettext libfreetype6-dev libfontconfig1-dev \
             automake libtool pkg-config nasm yasm cmake ninja-build \
             libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
-            libsdl2-dev \
-            gcc-mingw-w64 g++-mingw-w64
+            libsdl2-dev gcc-mingw-w64 g++-mingw-w64
+      
+      - name: Create bootstrap environments
+        run: |
+          set -e
+          echo "创建引导环境..."
+          
+          # 创建目录
+          sudo mkdir -p /opt/chroots
+          sudo chmod 755 /opt/chroots
+          
+          # 下载设置脚本
+          wget -O /tmp/setup_chroot.sh https://raw.githubusercontent.com/afeimod/linbox/main/path/setup_chroot.sh
+          chmod +x /tmp/setup_chroot.sh
+          
+          # 创建64位引导环境
+          if [ ! -d "/opt/chroots/bionic64_chroot" ]; then
+            echo "创建64位引导环境..."
+            sudo debootstrap --arch=amd64 bionic /opt/chroots/bionic64_chroot http://archive.ubuntu.com/ubuntu/ || {
+              echo "主镜像失败，尝试备用镜像..."
+              sudo debootstrap --arch=amd64 bionic /opt/chroots/bionic64_chroot http://old-releases.ubuntu.com/ubuntu/
+            }
+            sudo cp /tmp/setup_chroot.sh /opt/chroots/bionic64_chroot/tmp/
+            sudo chroot /opt/chroots/bionic64_chroot /bin/bash /tmp/setup_chroot.sh
+            sudo rm -f /opt/chroots/bionic64_chroot/tmp/setup_chroot.sh
+          else
+            echo "64位引导环境已存在"
+          fi
+          
+          # 创建32位引导环境
+          if [ ! -d "/opt/chroots/bionic32_chroot" ]; then
+            echo "创建32位引导环境..."
+            sudo debootstrap --arch=i386 bionic /opt/chroots/bionic32_chroot http://archive.ubuntu.com/ubuntu/ || {
+              echo "主镜像失败，尝试备用镜像..."
+              sudo debootstrap --arch=i386 bionic /opt/chroots/bionic32_chroot http://old-releases.ubuntu.com/ubuntu/
+            }
+            sudo cp /tmp/setup_chroot.sh /opt/chroots/bionic32_chroot/tmp/
+            sudo chroot /opt/chroots/bionic32_chroot /bin/bash /tmp/setup_chroot.sh
+            sudo rm -f /opt/chroots/bionic32_chroot/tmp/setup_chroot.sh
+          else
+            echo "32位引导环境已存在"
+          fi
+          
+          # 验证引导环境
+          echo "验证引导环境..."
+          if [ -d "/opt/chroots/bionic64_chroot" ] && [ -d "/opt/chroots/bionic32_chroot" ]; then
+            echo "✓ 引导环境创建成功"
+          else
+            echo "✗ 引导环境创建失败"
+            exit 1
+          fi
       
       - name: Build Wine WoW64
         run: |
