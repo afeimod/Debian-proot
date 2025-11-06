@@ -49,6 +49,9 @@ jobs:
   create-bootstraps:
     runs-on: ubuntu-22.04
     timeout-minutes: 60
+    outputs:
+      bootstrap_x64: ${{ steps.set-outputs.outputs.bootstrap_x64 }}
+      bootstrap_x32: ${{ steps.set-outputs.outputs.bootstrap_x32 }}
     
     steps:
       - name: Install dependencies
@@ -180,10 +183,11 @@ jobs:
             exit 1
           fi
       
-      - name: Save bootstrap paths
+      - name: Set bootstrap paths as outputs
+        id: set-outputs
         run: |
-          echo "BOOTSTRAP_X64=/opt/chroots/bionic64_chroot" >> $GITHUB_ENV
-          echo "BOOTSTRAP_X32=/opt/chroots/bionic32_chroot" >> $GITHUB_ENV
+          echo "bootstrap_x64=/opt/chroots/bionic64_chroot" >> $GITHUB_OUTPUT
+          echo "bootstrap_x32=/opt/chroots/bionic32_chroot" >> $GITHUB_OUTPUT
 
   build-proton:
     runs-on: ubuntu-22.04
@@ -211,16 +215,17 @@ jobs:
           
           # 设置环境变量
           export PROTON_BRANCH="${{ github.event.inputs.proton_branch || 'proton_10.0' }}"
-          export BOOTSTRAP_X64="/opt/chroots/bionic64_chroot"
-          export BOOTSTRAP_X32="/opt/chroots/bionic32_chroot"
+          export BOOTSTRAP_X64="${{ needs.create-bootstraps.outputs.bootstrap_x64 }}"
+          export BOOTSTRAP_X32="${{ needs.create-bootstraps.outputs.bootstrap_x32 }}"
           export BUILD_DIR="/tmp/build_proton_${PROTON_BRANCH}"
           
           # 验证引导环境路径
           echo "验证引导环境..."
+          echo "BOOTSTRAP_X64: $BOOTSTRAP_X64"
+          echo "BOOTSTRAP_X32: $BOOTSTRAP_X32"
+          
           if [ ! -d "$BOOTSTRAP_X64" ] || [ ! -d "$BOOTSTRAP_X32" ]; then
             echo "错误: 引导环境不存在!"
-            echo "BOOTSTRAP_X64: $BOOTSTRAP_X64"
-            echo "BOOTSTRAP_X32: $BOOTSTRAP_X32"
             ls -la /opt/chroots/ || echo "无法列出 /opt/chroots/"
             exit 1
           fi
@@ -400,16 +405,17 @@ jobs:
           export WINE_BRANCH="${{ github.event.inputs.wine_branch || 'staging' }}"
           export WINE_VERSION="${{ github.event.inputs.wine_version || 'latest' }}"
           export EXPERIMENTAL_WOW64="true"
-          export BOOTSTRAP_X64="/opt/chroots/bionic64_chroot"
-          export BOOTSTRAP_X32="/opt/chroots/bionic32_chroot"
+          export BOOTSTRAP_X64="${{ needs.create-bootstraps.outputs.bootstrap_x64 }}"
+          export BOOTSTRAP_X32="${{ needs.create-bootstraps.outputs.bootstrap_x32 }}"
           export BUILD_DIR="/tmp/build_wine_${WINE_BRANCH}_${WINE_VERSION}"
           
           # 验证引导环境路径
           echo "验证引导环境..."
+          echo "BOOTSTRAP_X64: $BOOTSTRAP_X64"
+          echo "BOOTSTRAP_X32: $BOOTSTRAP_X32"
+          
           if [ ! -d "$BOOTSTRAP_X64" ] || [ ! -d "$BOOTSTRAP_X32" ]; then
             echo "错误: 引导环境不存在!"
-            echo "BOOTSTRAP_X64: $BOOTSTRAP_X64"
-            echo "BOOTSTRAP_X32: $BOOTSTRAP_X32"
             ls -la /opt/chroots/ || echo "无法列出 /opt/chroots/"
             exit 1
           fi
