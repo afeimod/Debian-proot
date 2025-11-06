@@ -35,20 +35,15 @@ jobs:
           path: /tmp/check
           skip_unpack: true
         continue-on-error: true
-
-  create-bootstraps-if-needed:
-    runs-on: ubuntu-22.04
-    needs: check-bootstraps
-    if: needs.check-bootstraps.outputs.bootstraps-exist != 'true'
-    steps:
-      - name: Create bootstraps
-        uses: ./.github/workflows/bootstraps.yml
-        with:
-          wait-for-completion: true
+      
+      - name: Set output
+        run: echo "exists=${{ steps.check.outputs.exists == 'true' }}" >> $GITHUB_OUTPUT
+        if: steps.check.outputs.exists == 'true'
 
   build-proton:
     runs-on: ubuntu-22.04
-    needs: [check-bootstraps, create-bootstraps-if-needed]
+    needs: check-bootstraps
+    if: needs.check-bootstraps.outputs.bootstraps-exist == 'true'
     
     steps:
       - uses: actions/checkout@v4
@@ -63,13 +58,13 @@ jobs:
       
       - name: Install dependencies
         run: |
-            sudo apt update
-            sudo apt install -y debootstrap perl git wget xz-utils bubblewrap autoconf \
-              ccache gcc-11 g++-11 i686-w64-mingw32-gcc x86_64-w64-mingw32-gcc \
-              make flex bison gettext libfreetype6-dev libfontconfig1-dev \
-              automake libtool pkg-config nasm yasm cmake ninja-build \
-              libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
-              libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libsdl2-dev
+          sudo apt update
+          sudo apt install -y debootstrap perl git wget xz-utils bubblewrap autoconf \
+            ccache gcc-11 g++-11 i686-w64-mingw32-gcc x86_64-w64-mingw32-gcc \
+            make flex bison gettext libfreetype6-dev libfontconfig1-dev \
+            automake libtool pkg-config nasm yasm cmake ninja-build \
+            libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libsdl2-dev
       
       - name: Extract bootstraps
         run: |
@@ -188,7 +183,7 @@ jobs:
           mkdir build32-tools
           cd build32-tools
           PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig build_with_bwrap 32 ../wine/configure --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
-          build_with_brap 32 make -j$(nproc) install
+          build_with_bwrap 32 make -j$(nproc) install
           cd ..
           
           # 构建 32 位 Wine
@@ -231,3 +226,15 @@ jobs:
             ${{ github.workspace }}/*.tar.xz
             ${{ github.workspace }}/checksums.txt
           retention-days: 30
+
+  no-bootstraps:
+    runs-on: ubuntu-22.04
+    needs: check-bootstraps
+    if: needs.check-bootstraps.outputs.bootstraps-exist != 'true'
+    steps:
+      - name: Warn about missing bootstraps
+        run: |
+          echo "Bootstraps artifact not found!"
+          echo "Please run the bootstraps.yml workflow first to create the build environment."
+          echo "You can trigger it manually from the Actions tab in your repository."
+          exit 1
