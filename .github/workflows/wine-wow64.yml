@@ -54,25 +54,56 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install dependencies
+      - name: Install host dependencies
         run: |
           sudo apt update
           sudo apt install -y debootstrap schroot wget xz-utils qemu-user-static binfmt-support curl \
-            perl git bubblewrap autoconf ccache gcc-11 g++-11 \
+            perl git bubblewrap autoconf ccache gcc-11 g++-11 gcc-11-multilib g++-11-multilib \
             make flex bison gettext libfreetype6-dev libfontconfig1-dev \
             automake libtool pkg-config nasm yasm cmake ninja-build \
             libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
             libsdl2-dev gcc-mingw-w64 g++-mingw-w64 \
-            libvulkan-dev vulkan-tools libvulkan1 mesa-vulkan-drivers
-      
+            libvulkan-dev \
+            vulkan-tools \
+            libvulkan1 \
+            mesa-vulkan-drivers
+            
       - name: 安装多媒体和音频依赖
         run: |
+          sudo apt update
+          # 先安装 libunwind-dev 解决依赖问题
           sudo apt install -y libunwind-dev
+          # 然后安装多媒体相关包
           sudo apt install -y \
-            libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev \
-            libmpg123-dev \
-            libopenal-dev
+              libgstreamer1.0-dev \
+              libgstreamer-plugins-base1.0-dev \
+              libgstreamer-plugins-good1.0-dev \
+              libgstreamer-plugins-bad1.0-dev \
+              gstreamer1.0-plugins-base \
+              gstreamer1.0-plugins-good \
+              gstreamer1.0-plugins-bad \
+              gstreamer1.0-libav \
+              libmpg123-dev \
+              libopenal-dev
+              
+      - name: Setup host compiler
+        run: |
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100
+          sudo update-alternatives --install /usr/bin/cc cc /usr/bin/gcc-11 100
+          sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++-11 100
+          
+          # 设置交叉编译器
+          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+          sudo update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
+          sudo update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
+          
+          echo "验证主机编译器..."
+          gcc --version
+          g++ --version
+          x86_64-w64-mingw32-gcc --version
+          i686-w64-mingw32-gcc --version
       
       - name: Create bootstrap environments
         run: |
@@ -119,6 +150,11 @@ jobs:
           echo "验证引导环境..."
           if [ -d "/opt/chroots/bionic64_chroot" ] && [ -d "/opt/chroots/bionic32_chroot" ]; then
             echo "✓ 引导环境创建成功"
+            # 测试chroot环境中的编译器
+            echo "测试64位环境编译器..."
+            sudo chroot /opt/chroots/bionic64_chroot /bin/bash -c "gcc --version && g++ --version"
+            echo "测试32位环境编译器..."
+            sudo chroot /opt/chroots/bionic32_chroot /bin/bash -c "gcc --version && g++ --version"
           else
             echo "✗ 引导环境创建失败"
             exit 1
@@ -146,13 +182,13 @@ jobs:
           fi
           echo "✓ 引导环境验证成功"
           
-          # 设置编译器和标志
-          export CC="gcc-11"
-          export CXX="g++-11"
-          export CROSSCC_X32="i686-w64-mingw32-gcc"
-          export CROSSCXX_X32="i686-w64-mingw32-g++"
-          export CROSSCC_X64="x86_64-w64-mingw32-gcc"
-          export CROSSCXX_X64="x86_64-w64-mingw32-g++"
+          # 设置编译器和标志 - 使用绝对路径避免问题
+          export CC="/usr/bin/gcc-11"
+          export CXX="/usr/bin/g++-11"
+          export CROSSCC_X32="/usr/bin/i686-w64-mingw32-gcc"
+          export CROSSCXX_X32="/usr/bin/i686-w64-mingw32-g++"
+          export CROSSCC_X64="/usr/bin/x86_64-w64-mingw32-gcc"
+          export CROSSCXX_X64="/usr/bin/x86_64-w64-mingw32-g++"
           
           export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O2 -ftree-vectorize"
           export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O2 -ftree-vectorize"
@@ -162,14 +198,21 @@ jobs:
           export CROSSCFLAGS_X64="${CFLAGS_X64}"
           export CROSSLDFLAGS="${LDFLAGS}"
           
+          # 验证编译器
+          echo "验证编译器..."
+          $CC --version || echo "CC 失败"
+          $CXX --version || echo "CXX 失败"
+          $CROSSCC_X32 --version || echo "CROSSCC_X32 失败"
+          $CROSSCC_X64 --version || echo "CROSSCC_X64 失败"
+          
           # 启用 ccache
           if [ "$USE_CCACHE" = "true" ]; then
-            export CC="ccache ${CC}"
-            export CXX="ccache ${CXX}"
-            export CROSSCC_X32="ccache ${CROSSCC_X32}"
-            export CROSSCXX_X32="ccache ${CROSSCXX_X32}"
-            export CROSSCC_X64="ccache ${CROSSCC_X64}"
-            export CROSSCXX_X64="ccache ${CROSSCXX_X64}"
+            export CC="ccache $CC"
+            export CXX="ccache $CXX"
+            export CROSSCC_X32="ccache $CROSSCC_X32"
+            export CROSSCXX_X32="ccache $CROSSCXX_X32"
+            export CROSSCC_X64="ccache $CROSSCC_X64"
+            export CROSSCXX_X64="ccache $CROSSCXX_X64"
           fi
           
           # 创建构建目录
@@ -193,7 +236,14 @@ jobs:
               --proc /proc --tmpfs /tmp --tmpfs /home --tmpfs /run --tmpfs /var \
               --tmpfs /mnt --tmpfs /media --bind "${BUILD_DIR}" "${BUILD_DIR}" \
               --bind-try "${HOME}"/.ccache "${HOME}"/.ccache \
-              --setenv PATH "/opt/mingw/x86_64/bin:/opt/mingw/i686/bin:/usr/local/bin:/bin:/sbin:/usr/bin:/usr/sbin" \
+              --setenv PATH "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin" \
+              --setenv CC "$CC" \
+              --setenv CXX "$CXX" \
+              --setenv CROSSCC "$CROSSCC" \
+              --setenv CROSSCXX "$CROSSCXX" \
+              --setenv CFLAGS "$CFLAGS" \
+              --setenv CXXFLAGS "$CXXFLAGS" \
+              --setenv LDFLAGS "$LDFLAGS" \
               "$@"
           }
           
@@ -201,9 +251,9 @@ jobs:
           
           # 克隆 Proton 源代码
           if [ -z "${PROTON_BRANCH}" ]; then
-            git clone https://github.com/ValveSoftware/wine
+            git clone --depth=1 https://github.com/ValveSoftware/wine
           else
-            git clone https://github.com/ValveSoftware/wine -b "${PROTON_BRANCH}"
+            git clone --depth=1 https://github.com/ValveSoftware/wine -b "${PROTON_BRANCH}"
           fi
           
           WINE_VERSION="$(cat wine/VERSION | tail -c +14)-$(git -C wine rev-parse --short HEAD)"
@@ -232,7 +282,7 @@ jobs:
           
           mkdir build64
           cd build64
-          build_with_bwrap 64 ../wine/configure --enable-win64 --without-oss --with-gstreamer --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          build_with_bwrap 64 ../wine/configure --enable-win64 --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
           build_with_bwrap 64 make -j$(nproc) install
           cd ..
           
@@ -300,15 +350,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install dependencies
+      - name: Install host dependencies
         run: |
           sudo apt update
           sudo apt install -y debootstrap schroot wget xz-utils qemu-user-static binfmt-support curl \
-            perl git bubblewrap autoconf ccache gcc-11 g++-11 \
+            perl git bubblewrap autoconf ccache gcc-11 g++-11 gcc-11-multilib g++-11-multilib \
             make flex bison gettext libfreetype6-dev libfontconfig1-dev \
             automake libtool pkg-config nasm yasm cmake ninja-build \
             libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
             libsdl2-dev gcc-mingw-w64 g++-mingw-w64
+      
+      - name: Setup host compiler
+        run: |
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100
+          sudo update-alternatives --install /usr/bin/cc cc /usr/bin/gcc-11 100
+          sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++-11 100
+          
+          # 设置交叉编译器
+          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+          sudo update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
+          sudo update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
+          
+          echo "验证主机编译器..."
+          gcc --version
+          g++ --version
+          x86_64-w64-mingw32-gcc --version
+          i686-w64-mingw32-gcc --version
       
       - name: Create bootstrap environments
         run: |
@@ -355,6 +424,11 @@ jobs:
           echo "验证引导环境..."
           if [ -d "/opt/chroots/bionic64_chroot" ] && [ -d "/opt/chroots/bionic32_chroot" ]; then
             echo "✓ 引导环境创建成功"
+            # 测试chroot环境中的编译器
+            echo "测试64位环境编译器..."
+            sudo chroot /opt/chroots/bionic64_chroot /bin/bash -c "gcc --version && g++ --version"
+            echo "测试32位环境编译器..."
+            sudo chroot /opt/chroots/bionic32_chroot /bin/bash -c "gcc --version && g++ --version"
           else
             echo "✗ 引导环境创建失败"
             exit 1
@@ -384,13 +458,13 @@ jobs:
           fi
           echo "✓ 引导环境验证成功"
           
-          # 设置编译器和标志
-          export CC="gcc-11"
-          export CXX="g++-11"
-          export CROSSCC_X32="i686-w64-mingw32-gcc"
-          export CROSSCXX_X32="i686-w64-mingw32-g++"
-          export CROSSCC_X64="x86_64-w64-mingw32-gcc"
-          export CROSSCXX_X64="x86_64-w64-mingw32-g++"
+          # 设置编译器和标志 - 使用绝对路径避免问题
+          export CC="/usr/bin/gcc-11"
+          export CXX="/usr/bin/g++-11"
+          export CROSSCC_X32="/usr/bin/i686-w64-mingw32-gcc"
+          export CROSSCXX_X32="/usr/bin/i686-w64-mingw32-g++"
+          export CROSSCC_X64="/usr/bin/x86_64-w64-mingw32-gcc"
+          export CROSSCXX_X64="/usr/bin/x86_64-w64-mingw32-g++"
           
           export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O2 -ftree-vectorize"
           export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O2 -ftree-vectorize"
@@ -400,14 +474,21 @@ jobs:
           export CROSSCFLAGS_X64="${CFLAGS_X64}"
           export CROSSLDFLAGS="${LDFLAGS}"
           
+          # 验证编译器
+          echo "验证编译器..."
+          $CC --version || echo "CC 失败"
+          $CXX --version || echo "CXX 失败"
+          $CROSSCC_X32 --version || echo "CROSSCC_X32 失败"
+          $CROSSCC_X64 --version || echo "CROSSCC_X64 失败"
+          
           # 启用 ccache
           if [ "$USE_CCACHE" = "true" ]; then
-            export CC="ccache ${CC}"
-            export CXX="ccache ${CXX}"
-            export CROSSCC_X32="ccache ${CROSSCC_X32}"
-            export CROSSCXX_X32="ccache ${CROSSCXX_X32}"
-            export CROSSCC_X64="ccache ${CROSSCC_X64}"
-            export CROSSCXX_X64="ccache ${CROSSCXX_X64}"
+            export CC="ccache $CC"
+            export CXX="ccache $CXX"
+            export CROSSCC_X32="ccache $CROSSCC_X32"
+            export CROSSCXX_X32="ccache $CROSSCXX_X32"
+            export CROSSCC_X64="ccache $CROSSCC_X64"
+            export CROSSCXX_X64="ccache $CROSSCXX_X64"
           fi
           
           # 创建构建目录
@@ -431,7 +512,14 @@ jobs:
               --proc /proc --tmpfs /tmp --tmpfs /home --tmpfs /run --tmpfs /var \
               --tmpfs /mnt --tmpfs /media --bind "${BUILD_DIR}" "${BUILD_DIR}" \
               --bind-try "${HOME}"/.ccache "${HOME}"/.ccache \
-              --setenv PATH "/opt/mingw/x86_64/bin:/opt/mingw/i686/bin:/usr/local/bin:/bin:/sbin:/usr/bin:/usr/sbin" \
+              --setenv PATH "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin" \
+              --setenv CC "$CC" \
+              --setenv CXX "$CXX" \
+              --setenv CROSSCC "$CROSSCC" \
+              --setenv CROSSCXX "$CROSSCXX" \
+              --setenv CFLAGS "$CFLAGS" \
+              --setenv CXXFLAGS "$CXXFLAGS" \
+              --setenv LDFLAGS "$LDFLAGS" \
               "$@"
           }
           
@@ -440,14 +528,14 @@ jobs:
           # 根据分支确定 Wine 源代码
           if [ "$WINE_BRANCH" = "staging-tkg" ] || [ "$WINE_BRANCH" = "staging-tkg-fsync" ]; then
             if [ "$WINE_BRANCH" = "staging-tkg" ]; then
-              git clone https://github.com/Kron4ek/wine-tkg wine
+              git clone --depth=1 https://github.com/Kron4ek/wine-tkg wine
             else
-              git clone https://github.com/Kron4ek/wine-tkg wine -b fsync
+              git clone --depth=1 https://github.com/Kron4ek/wine-tkg wine -b fsync
             fi
             WINE_VERSION="$(cat wine/VERSION | tail -c +14)"
             BUILD_NAME="${WINE_VERSION}-${WINE_BRANCH}"
           elif [ "${WINE_VERSION}" = "git" ]; then
-            git clone https://gitlab.winehq.org/wine/wine.git wine
+            git clone --depth=1 https://gitlab.winehq.org/wine/wine.git wine
             BUILD_NAME="${WINE_VERSION}-$(git -C wine rev-parse --short HEAD)"
           else
             # 将 "latest" 替换为实际版本
@@ -474,7 +562,7 @@ jobs:
               BUILD_NAME="${WINE_VERSION}"-staging
               
               wget -q --show-progress "https://github.com/wine-staging/wine-staging/archive/v${STAGING_VERSION}.tar.gz" || \
-                git clone https://github.com/wine-staging/wine-staging wine-staging-"${STAGING_VERSION}"
+                git clone --depth=1 https://github.com/wine-staging/wine-staging wine-staging-"${STAGING_VERSION}"
               
               if [ -f v"${STAGING_VERSION}".tar.gz ]; then
                 tar xf v"${STAGING_VERSION}".tar.gz
