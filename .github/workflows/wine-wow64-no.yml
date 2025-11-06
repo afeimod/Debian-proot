@@ -63,8 +63,22 @@ jobs:
             automake libtool pkg-config nasm yasm cmake ninja-build \
             libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
             libsdl2-dev gcc-mingw-w64 g++-mingw-w64 \
-            libvulkan-dev vulkan-utils libwayland-dev libxrandr-dev
-      
+            libvulkan-dev \
+            vulkan-tools \
+            libvulkan1 \
+            mesa-vulkan-drivers
+            
+      - name: 安装多媒体和音频依赖
+        run: |
+          # 先安装 libunwind-dev 解决依赖问题
+          sudo apt install -y libunwind-dev
+          # 然后安装多媒体相关包
+          sudo apt install -y \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libmpg123-dev \
+            libopenal-dev
+          
       - name: Build Proton
         run: |
           set -e
@@ -154,7 +168,7 @@ jobs:
           
           mkdir build32-tools
           cd build32-tools
-          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ../wine/configure --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ../wine/configure --with-gstreamer --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
           make -j$(nproc) install
           cd ..
           
