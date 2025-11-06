@@ -106,7 +106,7 @@ jobs:
           export PROTON_BRANCH="${{ github.event.inputs.proton_branch || 'proton_10.0' }}"
           export BUILD_DIR="/tmp/build_proton_${PROTON_BRANCH}"
           
-          # 设置编译器和标志 - 参考其他成功构建的配置
+          # 设置编译器和标志
           export CC="gcc-11"
           export CXX="g++-11"
           export CROSSCC_X32="i686-w64-mingw32-gcc"
@@ -114,7 +114,6 @@ jobs:
           export CROSSCC_X64="x86_64-w64-mingw32-gcc"
           export CROSSCXX_X64="x86_64-w64-mingw32-g++"
           
-          # 使用与其他成功构建相同的优化标志
           export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O3 -ftree-vectorize -pipe"
           export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O3 -ftree-vectorize -pipe"
           export LDFLAGS="-Wl,-O1,--sort-common,--as-needed"
@@ -160,25 +159,26 @@ jobs:
           tools/make_requests
           tools/make_specfiles
           
-          echo "彻底修复 Termux 路径问题..."
-        
-            # 修改所有硬编码的 /tmp 路径
-            find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.in" -o -name "*.spec" \) -exec grep -l "/tmp" {} \; | xargs sed -i 's|/tmp/|/data/data/com.termux/files/usr/tmp/|g'
-        
-            # 修改 server 目录中的特定路径
-            find server -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
-        
-            # 修改其他关键文件
-            find . -name "file.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
-            find . -name "loader.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
-            find . -name "server.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
-        
-            echo "路径修复完成"
+          # 应用 FFmpeg 修复补丁 - 通过外部链接下载
+          echo "应用 FFmpeg 修复补丁..."
+          wget https://github.com/afeimod/linbox/raw/main/path/ffmpeg_fix.patch
+          
+          if patch -p1 < ffmpeg_fix.patch; then
+            echo "✅ FFmpeg 补丁应用成功"
+          else
+            echo "❌ FFmpeg 补丁应用失败，尝试备用修复方案..."
+            # 备用方案：直接修复有问题的文件
+            if [ -f "dlls/winedmo/libavcodec/pcm_byte_order_reverse_bsf.c" ]; then
+              echo "应用备用 FFmpeg 修复..."
+              sed -i 's/\.priv_class = &pcm_byte_order_reverse_bsf_class,/.priv_class = NULL,/' dlls/winedmo/libavcodec/pcm_byte_order_reverse_bsf.c
+              echo "✅ 备用 FFmpeg 修复完成"
+            fi
+          fi
           
           autoreconf -f
           cd ..
           
-          # 构建 64 位 - 使用与其他成功构建相同的配置参数
+          # 构建 64 位
           echo "构建 64 位 Wine..."
           export CROSSCC="${CROSSCC_X64}"
           export CROSSCXX="${CROSSCXX_X64}"
@@ -190,7 +190,6 @@ jobs:
           mkdir build64
           cd build64
        
-          # 关键：使用与其他成功构建相同的配置参数
           ../wine/configure \
             --enable-win64 \
             --enable-archs=i386,x86_64 \
@@ -354,7 +353,7 @@ jobs:
           export EXPERIMENTAL_WOW64="true"
           export BUILD_DIR="/tmp/build_wine_${WINE_BRANCH}_${WINE_VERSION}"
           
-          # 设置编译器和标志 - 参考其他成功构建的配置
+          # 设置编译器和标志
           export CC="gcc-11"
           export CXX="g++-11"
           export CROSSCC_X32="i686-w64-mingw32-gcc"
@@ -362,7 +361,6 @@ jobs:
           export CROSSCC_X64="x86_64-w64-mingw32-gcc"
           export CROSSCXX_X64="x86_64-w64-mingw32-g++"
           
-          # 使用与其他成功构建相同的优化标志
           export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O3 -ftree-vectorize -pipe"
           export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O3 -ftree-vectorize -pipe"
           export LDFLAGS="-Wl,-O1,--sort-common,--as-needed"
@@ -447,20 +445,22 @@ jobs:
           tools/make_requests
           tools/make_specfiles
           
-          echo "彻底修复 Termux 路径问题..."
-            
-            # 修改所有硬编码的 /tmp 路径
-            find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.in" -o -name "*.spec" \) -exec grep -l "/tmp" {} \; | xargs sed -i 's|/tmp/|/data/data/com.termux/files/usr/tmp/|g'
-        
-            # 修改 server 目录中的特定路径
-            find server -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
-        
-            # 修改其他关键文件
-            find . -name "file.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
-            find . -name "loader.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
-            find . -name "server.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
-        
-            echo "路径修复完成"
+          # 应用 FFmpeg 修复补丁 - 通过外部链接下载
+          echo "应用 FFmpeg 修复补丁..."
+          wget https://github.com/afeimod/linbox/raw/main/path/ffmpeg_fix.patch
+          
+          if patch -p1 < ffmpeg_fix.patch; then
+            echo "✅ FFmpeg 补丁应用成功"
+          else
+            echo "❌ FFmpeg 补丁应用失败，尝试备用修复方案..."
+            # 备用方案：直接修复有问题的文件
+            if [ -f "dlls/winedmo/libavcodec/pcm_byte_order_reverse_bsf.c" ]; then
+              echo "应用备用 FFmpeg 修复..."
+              sed -i 's/\.priv_class = &pcm_byte_order_reverse_bsf_class,/.priv_class = NULL,/' dlls/winedmo/libavcodec/pcm_byte_order_reverse_bsf.c
+              echo "✅ 备用 FFmpeg 修复完成"
+            fi
+          fi
+          
           # 应用非 Proton 的 MF 修复 - 根据版本选择修复方式
           echo "应用非 Proton 的 MF 修复..."
           # 解析版本号进行比较
@@ -502,7 +502,7 @@ jobs:
           autoreconf -f
           cd ..
           
-          # 构建 64 位 - 使用与其他成功构建相同的配置参数
+          # 构建 64 位
           echo "构建 64 位 Wine..."
           export CROSSCC="${CROSSCC_X64}"
           export CROSSCXX="${CROSSCXX_X64}"
@@ -514,7 +514,6 @@ jobs:
           mkdir build64
           cd build64
         
-          # 关键：使用与其他成功构建相同的配置参数
           ../wine/configure \
             --enable-win64 \
             --enable-archs=i386,x86_64 \
