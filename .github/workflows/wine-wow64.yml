@@ -64,118 +64,128 @@ jobs:
       - name: Create 64-bit bootstrap
         run: |
           echo "创建 64 位引导环境..."
-          sudo debootstrap --arch=amd64 bionic /opt/chroots/bionic64_chroot http://archive.ubuntu.com/ubuntu/
-          
-          # 设置基本配置和软件源
-          sudo chroot /opt/chroots/bionic64_chroot /bin/bash << 'EOL'
-          # 添加 universe 和 multiverse 软件源
-          echo "deb http://archive.ubuntu.com/ubuntu/ bionic main universe multiverse" > /etc/apt/sources.list
-          echo "deb http://archive.ubuntu.com/ubuntu/ bionic-updates main universe multiverse" >> /etc/apt/sources.list
-          echo "deb http://archive.ubuntu.com/ubuntu/ bionic-security main universe multiverse" >> /etc/apt/sources.list
-          
-          apt update
-          apt install -y software-properties-common
-          add-apt-repository -y ppa:ubuntu-toolchain-r/test
-          
-          # 更新并安装基本构建工具
-          apt update
-          apt install -y build-essential autoconf automake flex bison libtool \
-            pkg-config gettext nasm yasm cmake meson ninja-build
-          
-          # 安装开发库 - 简化版本，避免依赖问题
-          apt install -y libx11-dev libfreetype6-dev libfontconfig1-dev \
-            libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
-            libsdl2-dev libgnutls28-dev libldap2-dev libjpeg-dev \
-            libpng-dev libtiff5-dev libmpg123-dev \
-            libcups2-dev libosmesa6-dev libpcap-dev libusb-1.0-0-dev \
-            libsane-dev libv4l-dev libgphoto2-dev liblcms2-dev \
-            libpcsclite-dev libacl1-dev libxml2-dev libxslt1-dev \
-            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
-            libvpx-dev libx264-dev libx265-dev libva-dev libdrm-dev \
-            libwayland-dev libxkbcommon-dev libegl1-mesa-dev libgl1-mesa-dev \
-            libgles2-mesa-dev libglu1-mesa-dev libxi-dev libxrandr-dev \
-            libxfixes-dev libxcursor-dev libxinerama-dev libxcomposite-dev \
-            libxdamage-dev libxxf86vm-dev libxt-dev libxmu-dev libxtst-dev
-          
-          # 可选安装 GStreamer - 如果可用
-          apt install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev || echo "GStreamer 开发包不可用，跳过"
-          
-          # 安装 Vulkan 开发包 (如果可用)
-          apt install -y vulkan-utils || echo "Vulkan 不可用，继续..."
-          apt install -y libvulkan1 || echo "libvulkan1 不可用，继续..."
-          
-          # 安装 CAPI 开发包 (如果可用)
-          apt install -y libcapi20-3 libcapi20-dev || echo "CAPI 包不可用，继续..."
-          
-          # 安装更新的 GCC (如果可用)
-          apt install -y gcc-9 g++-9 gcc-10 g++-10 || echo "更新的 GCC 版本不可用，安装默认版本"
-          apt install -y gcc g++
-          
-          # 安装交叉编译器 - 使用 Ubuntu 18.04 中的正确包名
-          apt install -y gcc-mingw-w64 g++-mingw-w64
-          update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
-          update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
-          update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
-          update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
-          EOL
+          # 检查是否已存在，避免重复创建
+          if [ ! -d "/opt/chroots/bionic64_chroot" ]; then
+            sudo debootstrap --arch=amd64 bionic /opt/chroots/bionic64_chroot http://archive.ubuntu.com/ubuntu/
+            
+            # 设置基本配置和软件源
+            sudo chroot /opt/chroots/bionic64_chroot /bin/bash << 'EOL'
+            # 添加 universe 和 multiverse 软件源
+            echo "deb http://archive.ubuntu.com/ubuntu/ bionic main universe multiverse" > /etc/apt/sources.list
+            echo "deb http://archive.ubuntu.com/ubuntu/ bionic-updates main universe multiverse" >> /etc/apt/sources.list
+            echo "deb http://archive.ubuntu.com/ubuntu/ bionic-security main universe multiverse" >> /etc/apt/sources.list
+            
+            apt update
+            apt install -y software-properties-common
+            add-apt-repository -y ppa:ubuntu-toolchain-r/test
+            
+            # 更新并安装基本构建工具
+            apt update
+            apt install -y build-essential autoconf automake flex bison libtool \
+              pkg-config gettext nasm yasm cmake meson ninja-build
+            
+            # 安装开发库 - 简化版本，避免依赖问题
+            apt install -y libx11-dev libfreetype6-dev libfontconfig1-dev \
+              libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
+              libsdl2-dev libgnutls28-dev libldap2-dev libjpeg-dev \
+              libpng-dev libtiff5-dev libmpg123-dev \
+              libcups2-dev libosmesa6-dev libpcap-dev libusb-1.0-0-dev \
+              libsane-dev libv4l-dev libgphoto2-dev liblcms2-dev \
+              libpcsclite-dev libacl1-dev libxml2-dev libxslt1-dev \
+              libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+              libvpx-dev libx264-dev libx265-dev libva-dev libdrm-dev \
+              libwayland-dev libxkbcommon-dev libegl1-mesa-dev libgl1-mesa-dev \
+              libgles2-mesa-dev libglu1-mesa-dev libxi-dev libxrandr-dev \
+              libxfixes-dev libxcursor-dev libxinerama-dev libxcomposite-dev \
+              libxdamage-dev libxxf86vm-dev libxt-dev libxmu-dev libxtst-dev
+            
+            # 可选安装 GStreamer - 如果可用
+            apt install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev || echo "GStreamer 开发包不可用，跳过"
+            
+            # 安装 Vulkan 开发包 (如果可用)
+            apt install -y vulkan-utils || echo "Vulkan 不可用，继续..."
+            apt install -y libvulkan1 || echo "libvulkan1 不可用，继续..."
+            
+            # 安装 CAPI 开发包 (如果可用)
+            apt install -y libcapi20-3 libcapi20-dev || echo "CAPI 包不可用，继续..."
+            
+            # 安装更新的 GCC (如果可用)
+            apt install -y gcc-9 g++-9 gcc-10 g++-10 || echo "更新的 GCC 版本不可用，安装默认版本"
+            apt install -y gcc g++
+            
+            # 安装交叉编译器 - 使用 Ubuntu 18.04 中的正确包名
+            apt install -y gcc-mingw-w64 g++-mingw-w64
+            update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+            update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+            update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
+            update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
+            EOL
+          else
+            echo "64位引导环境已存在，跳过创建"
+          fi
       
       - name: Create 32-bit bootstrap
         run: |
           echo "创建 32 位引导环境..."
-          sudo debootstrap --arch=i386 bionic /opt/chroots/bionic32_chroot http://archive.ubuntu.com/ubuntu/
-          
-          # 设置基本配置和软件源
-          sudo chroot /opt/chroots/bionic32_chroot /bin/bash << 'EOL'
-          # 添加 universe 和 multiverse 软件源
-          echo "deb http://archive.ubuntu.com/ubuntu/ bionic main universe multiverse" > /etc/apt/sources.list
-          echo "deb http://archive.ubuntu.com/ubuntu/ bionic-updates main universe multiverse" >> /etc/apt/sources.list
-          echo "deb http://archive.ubuntu.com/ubuntu/ bionic-security main universe multiverse" >> /etc/apt/sources.list
-          
-          apt update
-          apt install -y software-properties-common
-          add-apt-repository -y ppa:ubuntu-toolchain-r/test
-          
-          # 更新并安装基本构建工具
-          apt update
-          apt install -y build-essential autoconf automake flex bison libtool \
-            pkg-config gettext nasm yasm cmake meson ninja-build
-          
-          # 安装开发库 - 简化版本，避免依赖问题
-          apt install -y libx11-dev libfreetype6-dev libfontconfig1-dev \
-            libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
-            libsdl2-dev libgnutls28-dev libldap2-dev libjpeg-dev \
-            libpng-dev libtiff5-dev libmpg123-dev \
-            libcups2-dev libosmesa6-dev libpcap-dev libusb-1.0-0-dev \
-            libsane-dev libv4l-dev libgphoto2-dev liblcms2-dev \
-            libpcsclite-dev libacl1-dev libxml2-dev libxslt1-dev \
-            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
-            libvpx-dev libx264-dev libx265-dev libva-dev libdrm-dev \
-            libwayland-dev libxkbcommon-dev libegl1-mesa-dev libgl1-mesa-dev \
-            libgles2-mesa-dev libglu1-mesa-dev libxi-dev libxrandr-dev \
-            libxfixes-dev libxcursor-dev libxinerama-dev libxcomposite-dev \
-            libxdamage-dev libxxf86vm-dev libxt-dev libxmu-dev libxtst-dev
-          
-          # 可选安装 GStreamer - 如果可用
-          apt install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev || echo "GStreamer 开发包不可用，跳过"
-          
-          # 安装 Vulkan 开发包 (如果可用)
-          apt install -y vulkan-utils || echo "Vulkan 不可用，继续..."
-          apt install -y libvulkan1 || echo "libvulkan1 不可用，继续..."
-          
-          # 安装 CAPI 开发包 (如果可用)
-          apt install -y libcapi20-3 libcapi20-dev || echo "CAPI 包不可用，继续..."
-          
-          # 安装更新的 GCC (如果可用)
-          apt install -y gcc-9 g++-9 gcc-10 g++-10 || echo "更新的 GCC 版本不可用，安装默认版本"
-          apt install -y gcc g++
-          
-          # 安装交叉编译器 - 使用 Ubuntu 18.04 中的正确包名
-          apt install -y gcc-mingw-w64 g++-mingw-w64
-          update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
-          update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
-          update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
-          update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
-          EOL
+          # 检查是否已存在，避免重复创建
+          if [ ! -d "/opt/chroots/bionic32_chroot" ]; then
+            sudo debootstrap --arch=i386 bionic /opt/chroots/bionic32_chroot http://archive.ubuntu.com/ubuntu/
+            
+            # 设置基本配置和软件源
+            sudo chroot /opt/chroots/bionic32_chroot /bin/bash << 'EOL'
+            # 添加 universe 和 multiverse 软件源
+            echo "deb http://archive.ubuntu.com/ubuntu/ bionic main universe multiverse" > /etc/apt/sources.list
+            echo "deb http://archive.ubuntu.com/ubuntu/ bionic-updates main universe multiverse" >> /etc/apt/sources.list
+            echo "deb http://archive.ubuntu.com/ubuntu/ bionic-security main universe multiverse" >> /etc/apt/sources.list
+            
+            apt update
+            apt install -y software-properties-common
+            add-apt-repository -y ppa:ubuntu-toolchain-r/test
+            
+            # 更新并安装基本构建工具
+            apt update
+            apt install -y build-essential autoconf automake flex bison libtool \
+              pkg-config gettext nasm yasm cmake meson ninja-build
+            
+            # 安装开发库 - 简化版本，避免依赖问题
+            apt install -y libx11-dev libfreetype6-dev libfontconfig1-dev \
+              libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
+              libsdl2-dev libgnutls28-dev libldap2-dev libjpeg-dev \
+              libpng-dev libtiff5-dev libmpg123-dev \
+              libcups2-dev libosmesa6-dev libpcap-dev libusb-1.0-0-dev \
+              libsane-dev libv4l-dev libgphoto2-dev liblcms2-dev \
+              libpcsclite-dev libacl1-dev libxml2-dev libxslt1-dev \
+              libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+              libvpx-dev libx264-dev libx265-dev libva-dev libdrm-dev \
+              libwayland-dev libxkbcommon-dev libegl1-mesa-dev libgl1-mesa-dev \
+              libgles2-mesa-dev libglu1-mesa-dev libxi-dev libxrandr-dev \
+              libxfixes-dev libxcursor-dev libxinerama-dev libxcomposite-dev \
+              libxdamage-dev libxxf86vm-dev libxt-dev libxmu-dev libxtst-dev
+            
+            # 可选安装 GStreamer - 如果可用
+            apt install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev || echo "GStreamer 开发包不可用，跳过"
+            
+            # 安装 Vulkan 开发包 (如果可用)
+            apt install -y vulkan-utils || echo "Vulkan 不可用，继续..."
+            apt install -y libvulkan1 || echo "libvulkan1 不可用，继续..."
+            
+            # 安装 CAPI 开发包 (如果可用)
+            apt install -y libcapi20-3 libcapi20-dev || echo "CAPI 包不可用，继续..."
+            
+            # 安装更新的 GCC (如果可用)
+            apt install -y gcc-9 g++-9 gcc-10 g++-10 || echo "更新的 GCC 版本不可用，安装默认版本"
+            apt install -y gcc g++
+            
+            # 安装交叉编译器 - 使用 Ubuntu 18.04 中的正确包名
+            apt install -y gcc-mingw-w64 g++-mingw-w64
+            update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+            update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+            update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
+            update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
+            EOL
+          else
+            echo "32位引导环境已存在，跳过创建"
+          fi
       
       - name: Create symbolic links for cross-compilers
         run: |
@@ -198,16 +208,29 @@ jobs:
             echo "警告: 未找到 i686-w64-mingw32-gcc"
           fi
       
-      - name: Verify cross-compilers in bootstraps
+      - name: Verify bootstraps and cross-compilers
         run: |
-          echo "验证引导环境中的交叉编译器..."
-          sudo chroot /opt/chroots/bionic64_chroot /bin/bash -c "which x86_64-w64-mingw32-gcc && x86_64-w64-mingw32-gcc --version | head -1" || echo "64位交叉编译器未找到"
-          sudo chroot /opt/chroots/bionic32_chroot /bin/bash -c "which i686-w64-mingw32-gcc && i686-w64-mingw32-gcc --version | head -1" || echo "32位交叉编译器未找到"
+          echo "验证引导环境和交叉编译器..."
+          
+          # 检查引导环境是否存在
+          if [ -d "/opt/chroots/bionic64_chroot" ]; then
+            echo "✓ 64位引导环境存在"
+            sudo chroot /opt/chroots/bionic64_chroot /bin/bash -c "which x86_64-w64-mingw32-gcc && x86_64-w64-mingw32-gcc --version | head -1" || echo "✗ 64位交叉编译器未找到"
+          else
+            echo "✗ 64位引导环境不存在"
+          fi
+          
+          if [ -d "/opt/chroots/bionic32_chroot" ]; then
+            echo "✓ 32位引导环境存在"
+            sudo chroot /opt/chroots/bionic32_chroot /bin/bash -c "which i686-w64-mingw32-gcc && i686-w64-mingw32-gcc --version | head -1" || echo "✗ 32位交叉编译器未找到"
+          else
+            echo "✗ 32位引导环境不存在"
+          fi
       
       - name: Clean up bootstraps
         run: |
-          sudo chroot /opt/chroots/bionic64_chroot /bin/bash -c "apt clean && rm -rf /var/lib/apt/lists/*"
-          sudo chroot /opt/chroots/bionic32_chroot /bin/bash -c "apt clean && rm -rf /var/lib/apt/lists/*"
+          sudo chroot /opt/chroots/bionic64_chroot /bin/bash -c "apt clean && rm -rf /var/lib/apt/lists/*" 2>/dev/null || echo "无法清理64位引导环境"
+          sudo chroot /opt/chroots/bionic32_chroot /bin/bash -c "apt clean && rm -rf /var/lib/apt/lists/*" 2>/dev/null || echo "无法清理32位引导环境"
       
       - name: Save bootstrap paths
         run: |
@@ -241,15 +264,33 @@ jobs:
           # 可选安装 GStreamer
           sudo apt install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev || echo "GStreamer 开发包安装失败，跳过"
       
+      - name: Verify bootstraps before build
+        run: |
+          echo "构建前验证引导环境..."
+          if [ ! -d "/opt/chroots/bionic64_chroot" ]; then
+            echo "错误: 64位引导环境不存在!"
+            exit 1
+          fi
+          if [ ! -d "/opt/chroots/bionic32_chroot" ]; then
+            echo "错误: 32位引导环境不存在!"
+            exit 1
+          fi
+          echo "✓ 引导环境验证成功"
+      
       - name: Build Proton
         run: |
           set -e
           
           # 设置环境变量
           export PROTON_BRANCH="${{ github.event.inputs.proton_branch || 'proton_10.0' }}"
-          export BOOTSTRAP_X64=/opt/chroots/bionic64_chroot
-          export BOOTSTRAP_X32=/opt/chroots/bionic32_chroot
+          export BOOTSTRAP_X64="/opt/chroots/bionic64_chroot"
+          export BOOTSTRAP_X32="/opt/chroots/bionic32_chroot"
           export BUILD_DIR="/tmp/build_proton_${PROTON_BRANCH}"
+          
+          # 验证引导环境路径
+          echo "BOOTSTRAP_X64: $BOOTSTRAP_X64"
+          echo "BOOTSTRAP_X32: $BOOTSTRAP_X32"
+          ls -la /opt/chroots/ || echo "无法列出 /opt/chroots/"
           
           # 设置编译器和标志
           export CC="gcc-11"
@@ -427,6 +468,19 @@ jobs:
           # 可选安装 GStreamer
           sudo apt install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev || echo "GStreamer 开发包安装失败，跳过"
       
+      - name: Verify bootstraps before build
+        run: |
+          echo "构建前验证引导环境..."
+          if [ ! -d "/opt/chroots/bionic64_chroot" ]; then
+            echo "错误: 64位引导环境不存在!"
+            exit 1
+          fi
+          if [ ! -d "/opt/chroots/bionic32_chroot" ]; then
+            echo "错误: 32位引导环境不存在!"
+            exit 1
+          fi
+          echo "✓ 引导环境验证成功"
+      
       - name: Build Wine WoW64
         run: |
           set -e
@@ -435,9 +489,14 @@ jobs:
           export WINE_BRANCH="${{ github.event.inputs.wine_branch || 'staging' }}"
           export WINE_VERSION="${{ github.event.inputs.wine_version || 'latest' }}"
           export EXPERIMENTAL_WOW64="true"
-          export BOOTSTRAP_X64=/opt/chroots/bionic64_chroot
-          export BOOTSTRAP_X32=/opt/chroots/bionic32_chroot
+          export BOOTSTRAP_X64="/opt/chroots/bionic64_chroot"
+          export BOOTSTRAP_X32="/opt/chroots/bionic32_chroot"
           export BUILD_DIR="/tmp/build_wine_${WINE_BRANCH}_${WINE_VERSION}"
+          
+          # 验证引导环境路径
+          echo "BOOTSTRAP_X64: $BOOTSTRAP_X64"
+          echo "BOOTSTRAP_X32: $BOOTSTRAP_X32"
+          ls -la /opt/chroots/ || echo "无法列出 /opt/chroots/"
           
           # 设置编译器和标志
           export CC="gcc-11"
