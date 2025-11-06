@@ -56,22 +56,34 @@ jobs:
       
       - name: Install host dependencies
         run: |
-          sudo apt update
-          sudo apt install -y debootstrap schroot wget xz-utils qemu-user-static binfmt-support curl \
-            perl git bubblewrap autoconf ccache gcc-11 g++-11 gcc-11-multilib g++-11-multilib \
-            make flex bison gettext libfreetype6-dev libfontconfig1-dev \
-            automake libtool pkg-config nasm yasm cmake ninja-build \
-            libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
-            libsdl2-dev gcc-mingw-w64 g++-mingw-w64 \
-            libvulkan-dev \
-            vulkan-tools \
-            libvulkan1 \
-            mesa-vulkan-drivers
+            sudo apt update
+            # 启用多架构支持
+            sudo dpkg --add-architecture i386
+            sudo apt update
+    
+            sudo apt install -y debootstrap schroot wget xz-utils qemu-user-static binfmt-support curl \
+              perl git bubblewrap autoconf ccache gcc-11 g++-11 \
+              make flex bison gettext libfreetype6-dev libfontconfig1-dev \
+              automake libtool pkg-config nasm yasm cmake ninja-build \
+              libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
+              libsdl2-dev gcc-mingw-w64 g++-mingw-w64 \
+              libvulkan-dev \
+              vulkan-tools \
+              libvulkan1 \
+              mesa-vulkan-drivers \
+              libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+              libavfilter-dev libswscale-dev
+      
+            # 安装32位开发库
+            sudo apt install -y libc6-dev-i386-cross || sudo apt install -y libc6-dev-i386 || sudo apt install -y libc6-dev:i386
+            sudo apt install -y gcc-11-multilib g++-11-multilib
             
       - name: 安装多媒体和音频依赖
         run: |
           sudo apt update
           # 先安装 libunwind-dev 解决依赖问题
+          sudo dpkg --add-architecture i386
+          sudo apt update
           sudo apt install -y libunwind-dev
           # 然后安装多媒体相关包
           sudo apt install -y \
@@ -352,13 +364,47 @@ jobs:
       
       - name: Install host dependencies
         run: |
+            sudo apt update
+            # 启用多架构支持
+            sudo dpkg --add-architecture i386
+            sudo apt update
+    
+            sudo apt install -y debootstrap schroot wget xz-utils qemu-user-static binfmt-support curl \
+              perl git bubblewrap autoconf ccache gcc-11 g++-11 \
+              make flex bison gettext libfreetype6-dev libfontconfig1-dev \
+              automake libtool pkg-config nasm yasm cmake ninja-build \
+              libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
+              libsdl2-dev gcc-mingw-w64 g++-mingw-w64 \
+              libvulkan-dev \
+              vulkan-tools \
+              libvulkan1 \
+              mesa-vulkan-drivers \
+              libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+              libavfilter-dev libswscale-dev
+      
+            # 安装32位开发库
+            sudo apt install -y libc6-dev-i386-cross || sudo apt install -y libc6-dev-i386 || sudo apt install -y libc6-dev:i386
+            sudo apt install -y gcc-11-multilib g++-11-multilib
+      
+      - name: 安装多媒体和音频依赖
+        run: |
           sudo apt update
-          sudo apt install -y debootstrap schroot wget xz-utils qemu-user-static binfmt-support curl \
-            perl git bubblewrap autoconf ccache gcc-11 g++-11 gcc-11-multilib g++-11-multilib \
-            make flex bison gettext libfreetype6-dev libfontconfig1-dev \
-            automake libtool pkg-config nasm yasm cmake ninja-build \
-            libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
-            libsdl2-dev gcc-mingw-w64 g++-mingw-w64
+          # 先安装 libunwind-dev 解决依赖问题
+          sudo dpkg --add-architecture i386
+          sudo apt update
+          sudo apt install -y libunwind-dev
+          # 然后安装多媒体相关包
+          sudo apt install -y \
+              libgstreamer1.0-dev \
+              libgstreamer-plugins-base1.0-dev \
+              libgstreamer-plugins-good1.0-dev \
+              libgstreamer-plugins-bad1.0-dev \
+              gstreamer1.0-plugins-base \
+              gstreamer1.0-plugins-good \
+              gstreamer1.0-plugins-bad \
+              gstreamer1.0-libav \
+              libmpg123-dev \
+              libopenal-dev
       
       - name: Setup host compiler
         run: |
