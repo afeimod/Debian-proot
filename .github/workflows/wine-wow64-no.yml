@@ -74,10 +74,16 @@ jobs:
           sudo apt install -y libunwind-dev
           # 然后安装多媒体相关包
           sudo apt install -y \
-            libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev \
-            libmpg123-dev \
-            libopenal-dev
+              libgstreamer1.0-dev \
+              libgstreamer-plugins-base1.0-dev \
+              libgstreamer-plugins-good1.0-dev \
+              libgstreamer-plugins-bad1.0-dev \
+              gstreamer1.0-plugins-base \
+              gstreamer1.0-plugins-good \
+              gstreamer1.0-plugins-bad \
+              gstreamer1.0-libav \
+              libmpg123-dev \
+              libopenal-dev
           
       - name: Build Proton
         run: |
