@@ -61,89 +61,50 @@ jobs:
           sudo mkdir -p /opt/chroots
           sudo chmod 755 /opt/chroots
       
+      - name: Download setup script
+        run: |
+          wget -O /tmp/setup_chroot.sh https://github.com/afeimod/linbox/raw/main/path/setup_chroot.sh
+          chmod +x /tmp/setup_chroot.sh
+      
       - name: Create 64-bit bootstrap
         run: |
           echo "创建 64 位引导环境..."
-          sudo debootstrap --arch=amd64 bionic /opt/chroots/bionic64_chroot http://archive.ubuntu.com/ubuntu/
           
-          # 直接在 chroot 中执行命令，不使用外部脚本
-          sudo chroot /opt/chroots/bionic64_chroot /bin/bash -c "
-          # 添加 universe 和 multiverse 软件源
-          echo 'deb http://archive.ubuntu.com/ubuntu/ bionic main universe multiverse' > /etc/apt/sources.list
-          echo 'deb http://archive.ubuntu.com/ubuntu/ bionic-updates main universe multiverse' >> /etc/apt/sources.list
-          echo 'deb http://archive.ubuntu.com/ubuntu/ bionic-security main universe multiverse' >> /etc/apt/sources.list
+          # 检查是否已存在
+          if [ -d "/opt/chroots/bionic64_chroot" ]; then
+            echo "64位引导环境已存在，跳过创建"
+            exit 0
+          fi
           
-          apt update
-          apt install -y software-properties-common
-          add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo debootstrap --arch=amd64 bionic /opt/chroots/bionic64_chroot http://archive.ubuntu.com/ubuntu/ || {
+            echo "debootstrap 失败，尝试备用镜像..."
+            sudo debootstrap --arch=amd64 bionic /opt/chroots/bionic64_chroot http://old-releases.ubuntu.com/ubuntu/
+          }
           
-          # 更新并安装基本构建工具
-          apt update
-          apt install -y build-essential autoconf automake flex bison libtool \
-            pkg-config gettext nasm yasm cmake meson ninja-build
-          
-          # 安装开发库 - 简化版本，避免依赖问题
-          apt install -y libx11-dev libfreetype6-dev libfontconfig1-dev \
-            libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
-            libsdl2-dev libgnutls28-dev libldap2-dev libjpeg-dev \
-            libpng-dev libtiff5-dev libmpg123-dev \
-            libcups2-dev libosmesa6-dev libpcap-dev libusb-1.0-0-dev \
-            libsane-dev libv4l-dev libgphoto2-dev liblcms2-dev \
-            libpcsclite-dev libacl1-dev libxml2-dev libxslt1-dev
-          
-          # 安装交叉编译器
-          apt install -y gcc-mingw-w64 g++-mingw-w64
-          update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
-          update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
-          update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
-          update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
-          
-          # 清理
-          apt clean
-          rm -rf /var/lib/apt/lists/*
-          "
+          # 复制并执行设置脚本
+          sudo cp /tmp/setup_chroot.sh /opt/chroots/bionic64_chroot/tmp/
+          sudo chroot /opt/chroots/bionic64_chroot /bin/bash /tmp/setup_chroot.sh
+          sudo rm -f /opt/chroots/bionic64_chroot/tmp/setup_chroot.sh
       
       - name: Create 32-bit bootstrap
         run: |
           echo "创建 32 位引导环境..."
-          sudo debootstrap --arch=i386 bionic /opt/chroots/bionic32_chroot http://archive.ubuntu.com/ubuntu/
           
-          # 直接在 chroot 中执行命令，不使用外部脚本
-          sudo chroot /opt/chroots/bionic32_chroot /bin/bash -c "
-          # 添加 universe 和 multiverse 软件源
-          echo 'deb http://archive.ubuntu.com/ubuntu/ bionic main universe multiverse' > /etc/apt/sources.list
-          echo 'deb http://archive.ubuntu.com/ubuntu/ bionic-updates main universe multiverse' >> /etc/apt/sources.list
-          echo 'deb http://archive.ubuntu.com/ubuntu/ bionic-security main universe multiverse' >> /etc/apt/sources.list
+          # 检查是否已存在
+          if [ -d "/opt/chroots/bionic32_chroot" ]; then
+            echo "32位引导环境已存在，跳过创建"
+            exit 0
+          fi
           
-          apt update
-          apt install -y software-properties-common
-          add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo debootstrap --arch=i386 bionic /opt/chroots/bionic32_chroot http://archive.ubuntu.com/ubuntu/ || {
+            echo "debootstrap 失败，尝试备用镜像..."
+            sudo debootstrap --arch=i386 bionic /opt/chroots/bionic32_chroot http://old-releases.ubuntu.com/ubuntu/
+          }
           
-          # 更新并安装基本构建工具
-          apt update
-          apt install -y build-essential autoconf automake flex bison libtool \
-            pkg-config gettext nasm yasm cmake meson ninja-build
-          
-          # 安装开发库 - 简化版本，避免依赖问题
-          apt install -y libx11-dev libfreetype6-dev libfontconfig1-dev \
-            libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
-            libsdl2-dev libgnutls28-dev libldap2-dev libjpeg-dev \
-            libpng-dev libtiff5-dev libmpg123-dev \
-            libcups2-dev libosmesa6-dev libpcap-dev libusb-1.0-0-dev \
-            libsane-dev libv4l-dev libgphoto2-dev liblcms2-dev \
-            libpcsclite-dev libacl1-dev libxml2-dev libxslt1-dev
-          
-          # 安装交叉编译器
-          apt install -y gcc-mingw-w64 g++-mingw-w64
-          update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
-          update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
-          update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
-          update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
-          
-          # 清理
-          apt clean
-          rm -rf /var/lib/apt/lists/*
-          "
+          # 复制并执行设置脚本
+          sudo cp /tmp/setup_chroot.sh /opt/chroots/bionic32_chroot/tmp/
+          sudo chroot /opt/chroots/bionic32_chroot /bin/bash /tmp/setup_chroot.sh
+          sudo rm -f /opt/chroots/bionic32_chroot/tmp/setup_chroot.sh
       
       - name: Verify bootstraps
         run: |
@@ -175,6 +136,8 @@ jobs:
         with:
           path: /opt/chroots
           key: bootstraps-${{ github.run_id }}
+          restore-keys: |
+            bootstraps-
 
   build-proton:
     runs-on: ubuntu-22.04
@@ -190,6 +153,18 @@ jobs:
         with:
           path: /opt/chroots
           key: bootstraps-${{ github.run_id }}
+          restore-keys: |
+            bootstraps-
+      
+      - name: Verify bootstraps exist
+        run: |
+          echo "验证引导环境是否存在..."
+          if [ ! -d "/opt/chroots/bionic64_chroot" ] || [ ! -d "/opt/chroots/bionic32_chroot" ]; then
+            echo "错误: 引导环境不存在，需要重新运行 create-bootstraps 作业"
+            exit 1
+          else
+            echo "✓ 引导环境验证成功"
+          fi
       
       - name: Install dependencies
         run: |
@@ -208,14 +183,21 @@ jobs:
       
       - name: 安装多媒体和音频依赖
         run: |
+          sudo apt update
           # 先安装 libunwind-dev 解决依赖问题
           sudo apt install -y libunwind-dev
           # 然后安装多媒体相关包
           sudo apt install -y \
-            libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev \
-            libmpg123-dev \
-            libopenal-dev
+              libgstreamer1.0-dev \
+              libgstreamer-plugins-base1.0-dev \
+              libgstreamer-plugins-good1.0-dev \
+              libgstreamer-plugins-bad1.0-dev \
+              gstreamer1.0-plugins-base \
+              gstreamer1.0-plugins-good \
+              gstreamer1.0-plugins-bad \
+              gstreamer1.0-libav \
+              libmpg123-dev \
+              libopenal-dev
       
       - name: Build Proton
         run: |
@@ -399,6 +381,18 @@ jobs:
         with:
           path: /opt/chroots
           key: bootstraps-${{ github.run_id }}
+          restore-keys: |
+            bootstraps-
+      
+      - name: Verify bootstraps exist
+        run: |
+          echo "验证引导环境是否存在..."
+          if [ ! -d "/opt/chroots/bionic64_chroot" ] || [ ! -d "/opt/chroots/bionic32_chroot" ]; then
+            echo "错误: 引导环境不存在，需要重新运行 create-bootstraps 作业"
+            exit 1
+          else
+            echo "✓ 引导环境验证成功"
+          fi
       
       - name: Install dependencies
         run: |
