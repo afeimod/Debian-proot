@@ -75,7 +75,7 @@ jobs:
               libavfilter-dev libswscale-dev
       
             # 安装32位开发库
-            sudo apt install -y libc6-dev-i386-cross || sudo apt install -y libc6-dev-i386 || sudo apt install -y libc6-dev:i386
+            sudo apt install -y libc6-dev:i386
             sudo apt install -y gcc-11-multilib g++-11-multilib
             
       - name: 安装多媒体和音频依赖
@@ -383,7 +383,7 @@ jobs:
               libavfilter-dev libswscale-dev
       
             # 安装32位开发库
-            sudo apt install -y libc6-dev-i386-cross || sudo apt install -y libc6-dev-i386 || sudo apt install -y libc6-dev:i386
+            sudo apt install -y libc6-dev:i386
             sudo apt install -y gcc-11-multilib g++-11-multilib
       
       - name: 安装多媒体和音频依赖
