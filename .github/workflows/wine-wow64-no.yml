@@ -160,7 +160,7 @@ jobs:
           
           mkdir build64
           cd build64
-          ../wine/configure --enable-win64 --without-oss --with-gstreamer --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          ../wine/configure --enable-win64 --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
           make -j$(nproc) install
           cd ..
           
