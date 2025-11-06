@@ -1,9 +1,7 @@
-name: Create Bootstraps
+name: Manual Create Bootstraps
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 0 1 * *'
 
 jobs:
   create-bootstraps:
