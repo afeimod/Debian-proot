@@ -1,0 +1,404 @@
+name: Wine and Proton 无bootBuilder
+
+on:
+  schedule:
+    # Proton 构建 - 每月1号和15号
+    - cron: '0 0 1,15 * *'
+    # Wine 构建 - 每月5号和20号
+    - cron: '0 2 5,20 * *'
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: '选择构建类型'
+        required: true
+        default: 'proton'
+        type: choice
+        options:
+        - proton
+        - wine-wow64
+      proton_branch:
+        description: 'Proton 分支 (仅 Proton 构建)'
+        required: false
+        default: 'proton_10.0'
+        type: choice
+        options:
+        - proton_10.0
+        - experimental_10.0
+        - bleeding-edge
+      wine_branch:
+        description: 'Wine 分支 (仅 Wine 构建)'
+        required: false
+        default: 'staging'
+        type: choice
+        options:
+        - vanilla
+        - staging
+        - staging-tkg
+        - staging-tkg-fsync
+      wine_version:
+        description: 'Wine 版本 (仅 Wine 构建)'
+        required: false
+        default: 'latest'
+        type: string
+
+env:
+  USE_CCACHE: true
+  BUILD_DIR: /tmp/build_wine
+
+jobs:
+  build-proton:
+    runs-on: ubuntu-22.04
+    if: github.event.inputs.build_type == 'proton' || (github.event_name == 'schedule' && github.event.schedule == '0 0 1,15 * *')
+    timeout-minutes: 120
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y git wget xz-utils autoconf \
+            ccache gcc-11 g++-11 \
+            make flex bison gettext libfreetype6-dev libfontconfig1-dev \
+            automake libtool pkg-config nasm yasm cmake ninja-build \
+            libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
+            libsdl2-dev gcc-mingw-w64 g++-mingw-w64
+      
+      - name: Build Proton
+        run: |
+          set -e
+          
+          # 设置环境变量
+          export PROTON_BRANCH="${{ github.event.inputs.proton_branch || 'proton_10.0' }}"
+          export BUILD_DIR="/tmp/build_proton_${PROTON_BRANCH}"
+          
+          # 设置编译器和标志
+          export CC="gcc-11"
+          export CXX="g++-11"
+          export CROSSCC_X32="i686-w64-mingw32-gcc"
+          export CROSSCXX_X32="i686-w64-mingw32-g++"
+          export CROSSCC_X64="x86_64-w64-mingw32-gcc"
+          export CROSSCXX_X64="x86_64-w64-mingw32-g++"
+          
+          export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O2 -ftree-vectorize"
+          export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O2 -ftree-vectorize"
+          export LDFLAGS="-Wl,-O1,--sort-common,--as-needed"
+          
+          export CROSSCFLAGS_X32="${CFLAGS_X32}"
+          export CROSSCFLAGS_X64="${CFLAGS_X64}"
+          export CROSSLDFLAGS="${LDFLAGS}"
+          
+          # 启用 ccache
+          if [ "$USE_CCACHE" = "true" ]; then
+            export CC="ccache ${CC}"
+            export CXX="ccache ${CXX}"
+            export CROSSCC_X32="ccache ${CROSSCC_X32}"
+            export CROSSCXX_X32="ccache ${CROSSCXX_X32}"
+            export CROSSCC_X64="ccache ${CROSSCC_X64}"
+            export CROSSCXX_X64="ccache ${CROSSCXX_X64}"
+          fi
+          
+          # 创建构建目录
+          rm -rf "$BUILD_DIR"
+          mkdir -p "$BUILD_DIR"
+          cd "$BUILD_DIR"
+          
+          echo "下载 Proton 源代码..."
+          
+          # 克隆 Proton 源代码
+          if [ -z "${PROTON_BRANCH}" ]; then
+            git clone https://github.com/ValveSoftware/wine
+          else
+            git clone https://github.com/ValveSoftware/wine -b "${PROTON_BRANCH}"
+          fi
+          
+          WINE_VERSION="$(cat wine/VERSION | tail -c +14)-$(git -C wine rev-parse --short HEAD)"
+          if [[ "${PROTON_BRANCH}" == "experimental_"* ]] || [ "${PROTON_BRANCH}" = "bleeding-edge" ]; then
+            BUILD_NAME=proton-exp-"${WINE_VERSION}"
+          else
+            BUILD_NAME=proton-"${WINE_VERSION}"
+          fi
+          
+          echo "准备 Wine 源代码..."
+          cd wine
+          dlls/winevulkan/make_vulkan
+          tools/make_requests
+          tools/make_specfiles
+          autoreconf -f
+          cd ..
+          
+          # 构建 64 位
+          echo "构建 64 位 Wine..."
+          export CROSSCC="${CROSSCC_X64}"
+          export CROSSCXX="${CROSSCXX_X64}"
+          export CFLAGS="${CFLAGS_X64}"
+          export CXXFLAGS="${CFLAGS_X64}"
+          export CROSSCFLAGS="${CROSSCFLAGS_X64}"
+          export CROSSCXXFLAGS="${CROSSCFLAGS_X64}"
+          
+          mkdir build64
+          cd build64
+          ../wine/configure --enable-win64 --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          make -j$(nproc) install
+          cd ..
+          
+          # 构建 32 位工具
+          echo "构建 32 位工具..."
+          export CROSSCC="${CROSSCC_X32}"
+          export CROSSCXX="${CROSSCXX_X32}"
+          export CFLAGS="${CFLAGS_X32}"
+          export CXXFLAGS="${CFLAGS_X32}"
+          export CROSSCFLAGS="${CROSSCFLAGS_X32}"
+          export CROSSCXXFLAGS="${CROSSCFLAGS_X32}"
+          
+          mkdir build32-tools
+          cd build32-tools
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ../wine/configure --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
+          make -j$(nproc) install
+          cd ..
+          
+          # 构建 32 位 Wine
+          echo "构建 32 位 Wine..."
+          export CFLAGS="${CFLAGS_X64}"
+          export CXXFLAGS="${CFLAGS_X64}"
+          export CROSSCFLAGS="${CROSSCFLAGS_X64}"
+          export CROSSCXXFLAGS="${CROSSCFLAGS_X64}"
+          
+          mkdir build32
+          cd build32
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ../wine/configure --with-wine64="${BUILD_DIR}/build64" --with-wine-tools="${BUILD_DIR}/build32-tools" --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          make -j$(nproc) install
+          cd ..
+          
+          echo "创建归档文件..."
+          export XZ_OPT="-9 -T 0"
+          
+          # 创建 x86 和 amd64 归档
+          for build in "wine-${BUILD_NAME}-x86" "wine-${BUILD_NAME}-amd64"; do
+            if [ -d "${build}" ]; then
+              tar -Jcf "${build}.tar.xz" "${build}"
+              mv "${build}.tar.xz" "$GITHUB_WORKSPACE"
+            fi
+          done
+          
+          echo "Proton 构建完成!"
+      
+      - name: Generate checksums
+        run: |
+          cd $GITHUB_WORKSPACE
+          sha256sum *.tar.xz > checksums.txt
+          cat checksums.txt
+      
+      - name: Upload Proton artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}
+          path: |
+            ${{ github.workspace }}/*.tar.xz
+            ${{ github.workspace }}/checksums.txt
+          retention-days: 30
+
+  build-wine-wow64:
+    runs-on: ubuntu-22.04
+    if: github.event.inputs.build_type == 'wine-wow64' || (github.event_name == 'schedule' && github.event.schedule == '0 2 5,20 * *')
+    timeout-minutes: 120
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y git wget xz-utils autoconf \
+            ccache gcc-11 g++-11 \
+            make flex bison gettext libfreetype6-dev libfontconfig1-dev \
+            automake libtool pkg-config nasm yasm cmake ninja-build \
+            libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
+            libsdl2-dev gcc-mingw-w64 g++-mingw-w64
+      
+      - name: Build Wine WoW64
+        run: |
+          set -e
+          
+          # 设置环境变量
+          export WINE_BRANCH="${{ github.event.inputs.wine_branch || 'staging' }}"
+          export WINE_VERSION="${{ github.event.inputs.wine_version || 'latest' }}"
+          export EXPERIMENTAL_WOW64="true"
+          export BUILD_DIR="/tmp/build_wine_${WINE_BRANCH}_${WINE_VERSION}"
+          
+          # 设置编译器和标志
+          export CC="gcc-11"
+          export CXX="g++-11"
+          export CROSSCC_X32="i686-w64-mingw32-gcc"
+          export CROSSCXX_X32="i686-w64-mingw32-g++"
+          export CROSSCC_X64="x86_64-w64-mingw32-gcc"
+          export CROSSCXX_X64="x86_64-w64-mingw32-g++"
+          
+          export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O2 -ftree-vectorize"
+          export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O2 -ftree-vectorize"
+          export LDFLAGS="-Wl,-O1,--sort-common,--as-needed"
+          
+          export CROSSCFLAGS_X32="${CFLAGS_X32}"
+          export CROSSCFLAGS_X64="${CFLAGS_X64}"
+          export CROSSLDFLAGS="${LDFLAGS}"
+          
+          # 启用 ccache
+          if [ "$USE_CCACHE" = "true" ]; then
+            export CC="ccache ${CC}"
+            export CXX="ccache ${CXX}"
+            export CROSSCC_X32="ccache ${CROSSCC_X32}"
+            export CROSSCXX_X32="ccache ${CROSSCXX_X32}"
+            export CROSSCC_X64="ccache ${CROSSCC_X64}"
+            export CROSSCXX_X64="ccache ${CROSSCXX_X64}"
+          fi
+          
+          # 创建构建目录
+          rm -rf "$BUILD_DIR"
+          mkdir -p "$BUILD_DIR"
+          cd "$BUILD_DIR"
+          
+          echo "下载 Wine 源代码..."
+          
+          # 根据分支确定 Wine 源代码
+          if [ "$WINE_BRANCH" = "staging-tkg" ] || [ "$WINE_BRANCH" = "staging-tkg-fsync" ]; then
+            if [ "$WINE_BRANCH" = "staging-tkg" ]; then
+              git clone https://github.com/Kron4ek/wine-tkg wine
+            else
+              git clone https://github.com/Kron4ek/wine-tkg wine -b fsync
+            fi
+            WINE_VERSION="$(cat wine/VERSION | tail -c +14)"
+            BUILD_NAME="${WINE_VERSION}-${WINE_BRANCH}"
+          elif [ "${WINE_VERSION}" = "git" ]; then
+            git clone https://gitlab.winehq.org/wine/wine.git wine
+            BUILD_NAME="${WINE_VERSION}-$(git -C wine rev-parse --short HEAD)"
+          else
+            # 将 "latest" 替换为实际版本
+            if [ "${WINE_VERSION}" = "latest" ] || [ -z "${WINE_VERSION}" ]; then
+              WINE_VERSION="$(wget -q -O - "https://raw.githubusercontent.com/wine-mirror/wine/master/VERSION" | tail -c +14)"
+            fi
+            
+            # 确定 URL 版本
+            if [ "$(echo "$WINE_VERSION" | cut -d "." -f2 | cut -c1)" = "0" ]; then
+              WINE_URL_VERSION=$(echo "$WINE_VERSION" | cut -d "." -f 1).0
+            else
+              WINE_URL_VERSION=$(echo "$WINE_VERSION" | cut --d "." -f 1).x
+            fi
+            
+            BUILD_NAME="${WINE_VERSION}"
+            
+            wget -q --show-progress "https://dl.winehq.org/wine/source/${WINE_URL_VERSION}/wine-${WINE_VERSION}.tar.xz"
+            tar xf "wine-${WINE_VERSION}.tar.xz"
+            mv "wine-${WINE_VERSION}" wine
+            
+            # 如果需要，应用 Staging 补丁
+            if [ "${WINE_BRANCH}" = "staging" ]; then
+              STAGING_VERSION="${WINE_VERSION}"
+              BUILD_NAME="${WINE_VERSION}"-staging
+              
+              wget -q --show-progress "https://github.com/wine-staging/wine-staging/archive/v${STAGING_VERSION}.tar.gz" || \
+                git clone https://github.com/wine-staging/wine-staging wine-staging-"${STAGING_VERSION}"
+              
+              if [ -f v"${STAGING_VERSION}".tar.gz ]; then
+                tar xf v"${STAGING_VERSION}".tar.gz
+              fi
+              
+              cd wine
+              if [ -f ../wine-staging-"${STAGING_VERSION}"/patches/patchinstall.sh ]; then
+                ../wine-staging-"${STAGING_VERSION}"/patches/patchinstall.sh --all
+              elif [ -f ../wine-staging-"${STAGING_VERSION}"/staging/patchinstall.py ]; then
+                ../wine-staging-"${STAGING_VERSION}"/staging/patchinstall.py --all
+              fi
+              cd ..
+            fi
+          fi
+          
+          echo "准备 Wine 源代码..."
+          cd wine
+          dlls/winevulkan/make_vulkan
+          tools/make_requests
+          tools/make_specfiles
+          autoreconf -f
+          cd ..
+          
+          # 构建 64 位
+          echo "构建 64 位 Wine..."
+          export CROSSCC="${CROSSCC_X64}"
+          export CROSSCXX="${CROSSCXX_X64}"
+          export CFLAGS="${CFLAGS_X64}"
+          export CXXFLAGS="${CFLAGS_X64}"
+          export CROSSCFLAGS="${CROSSCFLAGS_X64}"
+          export CROSSCXXFLAGS="${CROSSCFLAGS_X64}"
+          
+          mkdir build64
+          cd build64
+          ../wine/configure --enable-win64 --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          make -j$(nproc) install
+          cd ..
+          
+          # 构建 32 位工具
+          echo "构建 32 位工具..."
+          export CROSSCC="${CROSSCC_X32}"
+          export CROSSCXX="${CROSSCXX_X32}"
+          export CFLAGS="${CFLAGS_X32}"
+          export CXXFLAGS="${CFLAGS_X32}"
+          export CROSSCFLAGS="${CROSSCFLAGS_X32}"
+          export CROSSCXXFLAGS="${CROSSCFLAGS_X32}"
+          
+          mkdir build32-tools
+          cd build32-tools
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ../wine/configure --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
+          make -j$(nproc) install
+          cd ..
+          
+          # 构建 32 位 Wine
+          echo "构建 32 位 Wine..."
+          export CFLAGS="${CFLAGS_X64}"
+          export CXXFLAGS="${CFLAGS_X64}"
+          export CROSSCFLAGS="${CROSSCFLAGS_X64}"
+          export CROSSCXXFLAGS="${CROSSCFLAGS_X64}"
+          
+          mkdir build32
+          cd build32
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig ../wine/configure --with-wine64="${BUILD_DIR}/build64" --with-wine-tools="${BUILD_DIR}/build32-tools" --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          make -j$(nproc) install
+          cd ..
+          
+          echo "创建 WoW64 归档..."
+          export XZ_OPT="-9 -T 0"
+          
+          # 创建 WoW64 构建
+          if [ -d "wine-${BUILD_NAME}-amd64" ]; then
+            cp -r "wine-${BUILD_NAME}-amd64" "wine-${BUILD_NAME}-WoW64"
+            
+            # 转换为 WoW64
+            if [ -f "wine-${BUILD_NAME}-WoW64/bin/wine64" ]; then
+              rm -f "wine-${BUILD_NAME}-WoW64/bin/wine" "wine-${BUILD_NAME}-WoW64/bin/wine-preloader"
+              cp "wine-${BUILD_NAME}-WoW64/bin/wine64" "wine-${BUILD_NAME}-WoW64/bin/wine"
+            fi
+            
+            rm -rf "wine-${BUILD_NAME}-WoW64/lib/wine/i386-unix"
+            
+            # 删除非 WoW64 构建
+            rm -rf "wine-${BUILD_NAME}-x86"
+            rm -rf "wine-${BUILD_NAME}-amd64"
+            
+            tar -Jcf "wine-${BUILD_NAME}-WoW64.tar.xz" "wine-${BUILD_NAME}-WoW64"
+            mv "wine-${BUILD_NAME}-WoW64.tar.xz" "$GITHUB_WORKSPACE"
+          fi
+          
+          echo "Wine WoW64 构建完成!"
+      
+      - name: Generate checksums
+        run: |
+          cd $GITHUB_WORKSPACE
+          sha256sum *.tar.xz > checksums.txt
+          cat checksums.txt
+      
+      - name: Upload Wine WoW64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wine-${{ github.event.inputs.wine_branch || 'staging' }}-${{ github.event.inputs.wine_version || 'latest' }}-WoW64
+          path: |
+            ${{ github.workspace }}/*.tar.xz
+            ${{ github.workspace }}/checksums.txt
+          retention-days: 30
