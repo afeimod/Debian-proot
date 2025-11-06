@@ -61,11 +61,6 @@ jobs:
           sudo mkdir -p /opt/chroots
           sudo chmod 755 /opt/chroots
       
-      - name: Download setup script
-        run: |
-          wget -O /tmp/setup_bootstrap.sh https://github.com/afeimod/linbox/raw/main/path/setup_bootstrap.sh
-          sudo chmod +x /tmp/setup_bootstrap.sh
-      
       - name: Create 64-bit bootstrap
         run: |
           echo "创建 64 位引导环境..."
@@ -73,9 +68,42 @@ jobs:
           if [ ! -d "/opt/chroots/bionic64_chroot" ]; then
             sudo debootstrap --arch=amd64 bionic /opt/chroots/bionic64_chroot http://archive.ubuntu.com/ubuntu/
             
-            # 复制设置脚本到引导环境并执行
-            sudo cp /tmp/setup_bootstrap.sh /opt/chroots/bionic64_chroot/tmp/
-            sudo chroot /opt/chroots/bionic64_chroot /bin/bash /tmp/setup_bootstrap.sh
+            # 直接在 chroot 中执行命令，不使用外部脚本
+            sudo chroot /opt/chroots/bionic64_chroot /bin/bash -c "
+            # 添加 universe 和 multiverse 软件源
+            echo 'deb http://archive.ubuntu.com/ubuntu/ bionic main universe multiverse' > /etc/apt/sources.list
+            echo 'deb http://archive.ubuntu.com/ubuntu/ bionic-updates main universe multiverse' >> /etc/apt/sources.list
+            echo 'deb http://archive.ubuntu.com/ubuntu/ bionic-security main universe multiverse' >> /etc/apt/sources.list
+            
+            apt update
+            apt install -y software-properties-common
+            add-apt-repository -y ppa:ubuntu-toolchain-r/test
+            
+            # 更新并安装基本构建工具
+            apt update
+            apt install -y build-essential autoconf automake flex bison libtool \
+              pkg-config gettext nasm yasm cmake meson ninja-build
+            
+            # 安装开发库 - 简化版本，避免依赖问题
+            apt install -y libx11-dev libfreetype6-dev libfontconfig1-dev \
+              libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
+              libsdl2-dev libgnutls28-dev libldap2-dev libjpeg-dev \
+              libpng-dev libtiff5-dev libmpg123-dev \
+              libcups2-dev libosmesa6-dev libpcap-dev libusb-1.0-0-dev \
+              libsane-dev libv4l-dev libgphoto2-dev liblcms2-dev \
+              libpcsclite-dev libacl1-dev libxml2-dev libxslt1-dev
+            
+            # 安装交叉编译器
+            apt install -y gcc-mingw-w64 g++-mingw-w64
+            update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+            update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+            update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
+            update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
+            
+            # 清理
+            apt clean
+            rm -rf /var/lib/apt/lists/*
+            "
           else
             echo "64位引导环境已存在，跳过创建"
           fi
@@ -87,58 +115,70 @@ jobs:
           if [ ! -d "/opt/chroots/bionic32_chroot" ]; then
             sudo debootstrap --arch=i386 bionic /opt/chroots/bionic32_chroot http://archive.ubuntu.com/ubuntu/
             
-            # 复制设置脚本到引导环境并执行
-            sudo cp /tmp/setup_bootstrap.sh /opt/chroots/bionic32_chroot/tmp/
-            sudo chroot /opt/chroots/bionic32_chroot /bin/bash /tmp/setup_bootstrap.sh
+            # 直接在 chroot 中执行命令，不使用外部脚本
+            sudo chroot /opt/chroots/bionic32_chroot /bin/bash -c "
+            # 添加 universe 和 multiverse 软件源
+            echo 'deb http://archive.ubuntu.com/ubuntu/ bionic main universe multiverse' > /etc/apt/sources.list
+            echo 'deb http://archive.ubuntu.com/ubuntu/ bionic-updates main universe multiverse' >> /etc/apt/sources.list
+            echo 'deb http://archive.ubuntu.com/ubuntu/ bionic-security main universe multiverse' >> /etc/apt/sources.list
+            
+            apt update
+            apt install -y software-properties-common
+            add-apt-repository -y ppa:ubuntu-toolchain-r/test
+            
+            # 更新并安装基本构建工具
+            apt update
+            apt install -y build-essential autoconf automake flex bison libtool \
+              pkg-config gettext nasm yasm cmake meson ninja-build
+            
+            # 安装开发库 - 简化版本，避免依赖问题
+            apt install -y libx11-dev libfreetype6-dev libfontconfig1-dev \
+              libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
+              libsdl2-dev libgnutls28-dev libldap2-dev libjpeg-dev \
+              libpng-dev libtiff5-dev libmpg123-dev \
+              libcups2-dev libosmesa6-dev libpcap-dev libusb-1.0-0-dev \
+              libsane-dev libv4l-dev libgphoto2-dev liblcms2-dev \
+              libpcsclite-dev libacl1-dev libxml2-dev libxslt1-dev
+            
+            # 安装交叉编译器
+            apt install -y gcc-mingw-w64 g++-mingw-w64
+            update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+            update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+            update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
+            update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
+            
+            # 清理
+            apt clean
+            rm -rf /var/lib/apt/lists/*
+            "
           else
             echo "32位引导环境已存在，跳过创建"
           fi
       
-      - name: Create symbolic links for cross-compilers
+      - name: Verify bootstraps
         run: |
-          sudo mkdir -p /opt/mingw/x86_64/bin
-          sudo mkdir -p /opt/mingw/i686/bin
-          
-          # 为 64 位交叉编译器创建符号链接
-          if [ -f "/usr/bin/x86_64-w64-mingw32-gcc" ]; then
-            sudo ln -sf /usr/bin/x86_64-w64-mingw32-gcc /opt/mingw/x86_64/bin/
-            sudo ln -sf /usr/bin/x86_64-w64-mingw32-g++ /opt/mingw/x86_64/bin/
-          else
-            echo "警告: 未找到 x86_64-w64-mingw32-gcc"
-          fi
-          
-          # 为 32 位交叉编译器创建符号链接
-          if [ -f "/usr/bin/i686-w64-mingw32-gcc" ]; then
-            sudo ln -sf /usr/bin/i686-w64-mingw32-gcc /opt/mingw/i686/bin/
-            sudo ln -sf /usr/bin/i686-w64-mingw32-g++ /opt/mingw/i686/bin/
-          else
-            echo "警告: 未找到 i686-w64-mingw32-gcc"
-          fi
-      
-      - name: Verify bootstraps and cross-compilers
-        run: |
-          echo "验证引导环境和交叉编译器..."
+          echo "验证引导环境..."
           
           # 检查引导环境是否存在
           if [ -d "/opt/chroots/bionic64_chroot" ]; then
             echo "✓ 64位引导环境存在"
+            # 检查基本命令是否可用
+            sudo chroot /opt/chroots/bionic64_chroot /bin/bash -c "which gcc && gcc --version | head -1" || echo "✗ GCC 未找到"
             sudo chroot /opt/chroots/bionic64_chroot /bin/bash -c "which x86_64-w64-mingw32-gcc && x86_64-w64-mingw32-gcc --version | head -1" || echo "✗ 64位交叉编译器未找到"
           else
             echo "✗ 64位引导环境不存在"
+            exit 1
           fi
           
           if [ -d "/opt/chroots/bionic32_chroot" ]; then
             echo "✓ 32位引导环境存在"
+            # 检查基本命令是否可用
+            sudo chroot /opt/chroots/bionic32_chroot /bin/bash -c "which gcc && gcc --version | head -1" || echo "✗ GCC 未找到"
             sudo chroot /opt/chroots/bionic32_chroot /bin/bash -c "which i686-w64-mingw32-gcc && i686-w64-mingw32-gcc --version | head -1" || echo "✗ 32位交叉编译器未找到"
           else
             echo "✗ 32位引导环境不存在"
+            exit 1
           fi
-      
-      - name: Clean up bootstraps
-        run: |
-          sudo chroot /opt/chroots/bionic64_chroot /bin/bash -c "apt clean && rm -rf /var/lib/apt/lists/*" 2>/dev/null || echo "无法清理64位引导环境"
-          sudo chroot /opt/chroots/bionic32_chroot /bin/bash -c "apt clean && rm -rf /var/lib/apt/lists/*" 2>/dev/null || echo "无法清理32位引导环境"
-          sudo rm -f /tmp/setup_bootstrap.sh
       
       - name: Save bootstrap paths
         run: |
@@ -157,11 +197,6 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          # 修复损坏的包
-          sudo apt --fix-broken install -y
-          # 安装 libunwind-dev 以解决 GStreamer 依赖问题
-          sudo apt install -y libunwind-dev
-          # 安装其他依赖
           sudo apt install -y debootstrap perl git wget xz-utils bubblewrap autoconf \
             ccache gcc-11 g++-11 \
             make flex bison gettext libfreetype6-dev libfontconfig1-dev \
@@ -169,21 +204,6 @@ jobs:
             libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
             libsdl2-dev \
             gcc-mingw-w64 g++-mingw-w64
-          # 可选安装 GStreamer
-          sudo apt install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev || echo "GStreamer 开发包安装失败，跳过"
-      
-      - name: Verify bootstraps before build
-        run: |
-          echo "构建前验证引导环境..."
-          if [ ! -d "/opt/chroots/bionic64_chroot" ]; then
-            echo "错误: 64位引导环境不存在!"
-            exit 1
-          fi
-          if [ ! -d "/opt/chroots/bionic32_chroot" ]; then
-            echo "错误: 32位引导环境不存在!"
-            exit 1
-          fi
-          echo "✓ 引导环境验证成功"
       
       - name: Build Proton
         run: |
@@ -196,16 +216,19 @@ jobs:
           export BUILD_DIR="/tmp/build_proton_${PROTON_BRANCH}"
           
           # 验证引导环境路径
-          echo "BOOTSTRAP_X64: $BOOTSTRAP_X64"
-          echo "BOOTSTRAP_X32: $BOOTSTRAP_X32"
-          ls -la /opt/chroots/ || echo "无法列出 /opt/chroots/"
+          echo "验证引导环境..."
+          if [ ! -d "$BOOTSTRAP_X64" ] || [ ! -d "$BOOTSTRAP_X32" ]; then
+            echo "错误: 引导环境不存在!"
+            echo "BOOTSTRAP_X64: $BOOTSTRAP_X64"
+            echo "BOOTSTRAP_X32: $BOOTSTRAP_X32"
+            ls -la /opt/chroots/ || echo "无法列出 /opt/chroots/"
+            exit 1
+          fi
+          echo "✓ 引导环境验证成功"
           
           # 设置编译器和标志
           export CC="gcc-11"
           export CXX="g++-11"
-          
-          # 在 Ubuntu 22.04 中，mingw 交叉编译器的路径可能与 18.04 不同
-          # 我们使用引导环境中的编译器，但设置备用路径
           export CROSSCC_X32="i686-w64-mingw32-gcc"
           export CROSSCXX_X32="i686-w64-mingw32-g++"
           export CROSSCC_X64="x86_64-w64-mingw32-gcc"
@@ -361,11 +384,6 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          # 修复损坏的包
-          sudo apt --fix-broken install -y
-          # 安装 libunwind-dev 以解决 GStreamer 依赖问题
-          sudo apt install -y libunwind-dev
-          # 安装其他依赖
           sudo apt install -y debootstrap perl git wget xz-utils bubblewrap autoconf \
             ccache gcc-11 g++-11 \
             make flex bison gettext libfreetype6-dev libfontconfig1-dev \
@@ -373,21 +391,6 @@ jobs:
             libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
             libsdl2-dev \
             gcc-mingw-w64 g++-mingw-w64
-          # 可选安装 GStreamer
-          sudo apt install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev || echo "GStreamer 开发包安装失败，跳过"
-      
-      - name: Verify bootstraps before build
-        run: |
-          echo "构建前验证引导环境..."
-          if [ ! -d "/opt/chroots/bionic64_chroot" ]; then
-            echo "错误: 64位引导环境不存在!"
-            exit 1
-          fi
-          if [ ! -d "/opt/chroots/bionic32_chroot" ]; then
-            echo "错误: 32位引导环境不存在!"
-            exit 1
-          fi
-          echo "✓ 引导环境验证成功"
       
       - name: Build Wine WoW64
         run: |
@@ -402,15 +405,19 @@ jobs:
           export BUILD_DIR="/tmp/build_wine_${WINE_BRANCH}_${WINE_VERSION}"
           
           # 验证引导环境路径
-          echo "BOOTSTRAP_X64: $BOOTSTRAP_X64"
-          echo "BOOTSTRAP_X32: $BOOTSTRAP_X32"
-          ls -la /opt/chroots/ || echo "无法列出 /opt/chroots/"
+          echo "验证引导环境..."
+          if [ ! -d "$BOOTSTRAP_X64" ] || [ ! -d "$BOOTSTRAP_X32" ]; then
+            echo "错误: 引导环境不存在!"
+            echo "BOOTSTRAP_X64: $BOOTSTRAP_X64"
+            echo "BOOTSTRAP_X32: $BOOTSTRAP_X32"
+            ls -la /opt/chroots/ || echo "无法列出 /opt/chroots/"
+            exit 1
+          fi
+          echo "✓ 引导环境验证成功"
           
           # 设置编译器和标志
           export CC="gcc-11"
           export CXX="g++-11"
-          
-          # 在 Ubuntu 22.04 中，mingw 交叉编译器的路径可能与 18.04 不同
           export CROSSCC_X32="i686-w64-mingw32-gcc"
           export CROSSCXX_X32="i686-w64-mingw32-g++"
           export CROSSCC_X64="x86_64-w64-mingw32-gcc"
