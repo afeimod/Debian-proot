@@ -49,9 +49,6 @@ jobs:
   create-bootstraps:
     runs-on: ubuntu-22.04
     timeout-minutes: 60
-    outputs:
-      bootstrap_x64: ${{ steps.set-outputs.outputs.bootstrap_x64 }}
-      bootstrap_x32: ${{ steps.set-outputs.outputs.bootstrap_x32 }}
     
     steps:
       - name: Install dependencies
@@ -67,96 +64,86 @@ jobs:
       - name: Create 64-bit bootstrap
         run: |
           echo "创建 64 位引导环境..."
-          # 检查是否已存在，避免重复创建
-          if [ ! -d "/opt/chroots/bionic64_chroot" ]; then
-            sudo debootstrap --arch=amd64 bionic /opt/chroots/bionic64_chroot http://archive.ubuntu.com/ubuntu/
-            
-            # 直接在 chroot 中执行命令，不使用外部脚本
-            sudo chroot /opt/chroots/bionic64_chroot /bin/bash -c "
-            # 添加 universe 和 multiverse 软件源
-            echo 'deb http://archive.ubuntu.com/ubuntu/ bionic main universe multiverse' > /etc/apt/sources.list
-            echo 'deb http://archive.ubuntu.com/ubuntu/ bionic-updates main universe multiverse' >> /etc/apt/sources.list
-            echo 'deb http://archive.ubuntu.com/ubuntu/ bionic-security main universe multiverse' >> /etc/apt/sources.list
-            
-            apt update
-            apt install -y software-properties-common
-            add-apt-repository -y ppa:ubuntu-toolchain-r/test
-            
-            # 更新并安装基本构建工具
-            apt update
-            apt install -y build-essential autoconf automake flex bison libtool \
-              pkg-config gettext nasm yasm cmake meson ninja-build
-            
-            # 安装开发库 - 简化版本，避免依赖问题
-            apt install -y libx11-dev libfreetype6-dev libfontconfig1-dev \
-              libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
-              libsdl2-dev libgnutls28-dev libldap2-dev libjpeg-dev \
-              libpng-dev libtiff5-dev libmpg123-dev \
-              libcups2-dev libosmesa6-dev libpcap-dev libusb-1.0-0-dev \
-              libsane-dev libv4l-dev libgphoto2-dev liblcms2-dev \
-              libpcsclite-dev libacl1-dev libxml2-dev libxslt1-dev
-            
-            # 安装交叉编译器
-            apt install -y gcc-mingw-w64 g++-mingw-w64
-            update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
-            update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
-            update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
-            update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
-            
-            # 清理
-            apt clean
-            rm -rf /var/lib/apt/lists/*
-            "
-          else
-            echo "64位引导环境已存在，跳过创建"
-          fi
+          sudo debootstrap --arch=amd64 bionic /opt/chroots/bionic64_chroot http://archive.ubuntu.com/ubuntu/
+          
+          # 直接在 chroot 中执行命令，不使用外部脚本
+          sudo chroot /opt/chroots/bionic64_chroot /bin/bash -c "
+          # 添加 universe 和 multiverse 软件源
+          echo 'deb http://archive.ubuntu.com/ubuntu/ bionic main universe multiverse' > /etc/apt/sources.list
+          echo 'deb http://archive.ubuntu.com/ubuntu/ bionic-updates main universe multiverse' >> /etc/apt/sources.list
+          echo 'deb http://archive.ubuntu.com/ubuntu/ bionic-security main universe multiverse' >> /etc/apt/sources.list
+          
+          apt update
+          apt install -y software-properties-common
+          add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          
+          # 更新并安装基本构建工具
+          apt update
+          apt install -y build-essential autoconf automake flex bison libtool \
+            pkg-config gettext nasm yasm cmake meson ninja-build
+          
+          # 安装开发库 - 简化版本，避免依赖问题
+          apt install -y libx11-dev libfreetype6-dev libfontconfig1-dev \
+            libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
+            libsdl2-dev libgnutls28-dev libldap2-dev libjpeg-dev \
+            libpng-dev libtiff5-dev libmpg123-dev \
+            libcups2-dev libosmesa6-dev libpcap-dev libusb-1.0-0-dev \
+            libsane-dev libv4l-dev libgphoto2-dev liblcms2-dev \
+            libpcsclite-dev libacl1-dev libxml2-dev libxslt1-dev
+          
+          # 安装交叉编译器
+          apt install -y gcc-mingw-w64 g++-mingw-w64
+          update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+          update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+          update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
+          update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
+          
+          # 清理
+          apt clean
+          rm -rf /var/lib/apt/lists/*
+          "
       
       - name: Create 32-bit bootstrap
         run: |
           echo "创建 32 位引导环境..."
-          # 检查是否已存在，避免重复创建
-          if [ ! -d "/opt/chroots/bionic32_chroot" ]; then
-            sudo debootstrap --arch=i386 bionic /opt/chroots/bionic32_chroot http://archive.ubuntu.com/ubuntu/
-            
-            # 直接在 chroot 中执行命令，不使用外部脚本
-            sudo chroot /opt/chroots/bionic32_chroot /bin/bash -c "
-            # 添加 universe 和 multiverse 软件源
-            echo 'deb http://archive.ubuntu.com/ubuntu/ bionic main universe multiverse' > /etc/apt/sources.list
-            echo 'deb http://archive.ubuntu.com/ubuntu/ bionic-updates main universe multiverse' >> /etc/apt/sources.list
-            echo 'deb http://archive.ubuntu.com/ubuntu/ bionic-security main universe multiverse' >> /etc/apt/sources.list
-            
-            apt update
-            apt install -y software-properties-common
-            add-apt-repository -y ppa:ubuntu-toolchain-r/test
-            
-            # 更新并安装基本构建工具
-            apt update
-            apt install -y build-essential autoconf automake flex bison libtool \
-              pkg-config gettext nasm yasm cmake meson ninja-build
-            
-            # 安装开发库 - 简化版本，避免依赖问题
-            apt install -y libx11-dev libfreetype6-dev libfontconfig1-dev \
-              libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
-              libsdl2-dev libgnutls28-dev libldap2-dev libjpeg-dev \
-              libpng-dev libtiff5-dev libmpg123-dev \
-              libcups2-dev libosmesa6-dev libpcap-dev libusb-1.0-0-dev \
-              libsane-dev libv4l-dev libgphoto2-dev liblcms2-dev \
-              libpcsclite-dev libacl1-dev libxml2-dev libxslt1-dev
-            
-            # 安装交叉编译器
-            apt install -y gcc-mingw-w64 g++-mingw-w64
-            update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
-            update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
-            update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
-            update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
-            
-            # 清理
-            apt clean
-            rm -rf /var/lib/apt/lists/*
-            "
-          else
-            echo "32位引导环境已存在，跳过创建"
-          fi
+          sudo debootstrap --arch=i386 bionic /opt/chroots/bionic32_chroot http://archive.ubuntu.com/ubuntu/
+          
+          # 直接在 chroot 中执行命令，不使用外部脚本
+          sudo chroot /opt/chroots/bionic32_chroot /bin/bash -c "
+          # 添加 universe 和 multiverse 软件源
+          echo 'deb http://archive.ubuntu.com/ubuntu/ bionic main universe multiverse' > /etc/apt/sources.list
+          echo 'deb http://archive.ubuntu.com/ubuntu/ bionic-updates main universe multiverse' >> /etc/apt/sources.list
+          echo 'deb http://archive.ubuntu.com/ubuntu/ bionic-security main universe multiverse' >> /etc/apt/sources.list
+          
+          apt update
+          apt install -y software-properties-common
+          add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          
+          # 更新并安装基本构建工具
+          apt update
+          apt install -y build-essential autoconf automake flex bison libtool \
+            pkg-config gettext nasm yasm cmake meson ninja-build
+          
+          # 安装开发库 - 简化版本，避免依赖问题
+          apt install -y libx11-dev libfreetype6-dev libfontconfig1-dev \
+            libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
+            libsdl2-dev libgnutls28-dev libldap2-dev libjpeg-dev \
+            libpng-dev libtiff5-dev libmpg123-dev \
+            libcups2-dev libosmesa6-dev libpcap-dev libusb-1.0-0-dev \
+            libsane-dev libv4l-dev libgphoto2-dev liblcms2-dev \
+            libpcsclite-dev libacl1-dev libxml2-dev libxslt1-dev
+          
+          # 安装交叉编译器
+          apt install -y gcc-mingw-w64 g++-mingw-w64
+          update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+          update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+          update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
+          update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
+          
+          # 清理
+          apt clean
+          rm -rf /var/lib/apt/lists/*
+          "
       
       - name: Verify bootstraps
         run: |
@@ -183,11 +170,11 @@ jobs:
             exit 1
           fi
       
-      - name: Set bootstrap paths as outputs
-        id: set-outputs
-        run: |
-          echo "bootstrap_x64=/opt/chroots/bionic64_chroot" >> $GITHUB_OUTPUT
-          echo "bootstrap_x32=/opt/chroots/bionic32_chroot" >> $GITHUB_OUTPUT
+      - name: Cache bootstraps
+        uses: actions/cache/save@v3
+        with:
+          path: /opt/chroots
+          key: bootstraps-${{ github.run_id }}
 
   build-proton:
     runs-on: ubuntu-22.04
@@ -197,6 +184,12 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
+      
+      - name: Restore bootstraps from cache
+        uses: actions/cache/restore@v3
+        with:
+          path: /opt/chroots
+          key: bootstraps-${{ github.run_id }}
       
       - name: Install dependencies
         run: |
@@ -215,8 +208,8 @@ jobs:
           
           # 设置环境变量
           export PROTON_BRANCH="${{ github.event.inputs.proton_branch || 'proton_10.0' }}"
-          export BOOTSTRAP_X64="${{ needs.create-bootstraps.outputs.bootstrap_x64 }}"
-          export BOOTSTRAP_X32="${{ needs.create-bootstraps.outputs.bootstrap_x32 }}"
+          export BOOTSTRAP_X64="/opt/chroots/bionic64_chroot"
+          export BOOTSTRAP_X32="/opt/chroots/bionic32_chroot"
           export BUILD_DIR="/tmp/build_proton_${PROTON_BRANCH}"
           
           # 验证引导环境路径
@@ -386,6 +379,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Restore bootstraps from cache
+        uses: actions/cache/restore@v3
+        with:
+          path: /opt/chroots
+          key: bootstraps-${{ github.run_id }}
+      
       - name: Install dependencies
         run: |
           sudo apt update
@@ -405,8 +404,8 @@ jobs:
           export WINE_BRANCH="${{ github.event.inputs.wine_branch || 'staging' }}"
           export WINE_VERSION="${{ github.event.inputs.wine_version || 'latest' }}"
           export EXPERIMENTAL_WOW64="true"
-          export BOOTSTRAP_X64="${{ needs.create-bootstraps.outputs.bootstrap_x64 }}"
-          export BOOTSTRAP_X32="${{ needs.create-bootstraps.outputs.bootstrap_x32 }}"
+          export BOOTSTRAP_X64="/opt/chroots/bionic64_chroot"
+          export BOOTSTRAP_X32="/opt/chroots/bionic32_chroot"
           export BUILD_DIR="/tmp/build_wine_${WINE_BRANCH}_${WINE_VERSION}"
           
           # 验证引导环境路径
