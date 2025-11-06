@@ -154,7 +154,7 @@ jobs:
             apt install -y build-essential autoconf automake flex bison libtool \
               pkg-config gettext nasm yasm cmake meson ninja-build
 
-# 安装开发库 - 简化版本，避免依赖问题
+            # 安装开发库 - 简化版本，避免依赖问题
             apt install -y libx11-dev libfreetype6-dev libfontconfig1-dev \
               libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
               libsdl2-dev libgnutls28-dev libldap2-dev libjpeg-dev \
