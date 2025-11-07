@@ -2,12 +2,29 @@ name: Manual Create Bootstraps
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+      release_name:
+        description: 'Release name'
+        required: true
+        default: 'Build Environment Bootstraps'
+      prerelease:
+        description: 'Is this a prerelease?'
+        required: true
+        default: false
+        type: boolean
 
 jobs:
   create-bootstraps:
     runs-on: ubuntu-22.04
     
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
       - name: Install dependencies
         run: |
           sudo apt update
@@ -164,3 +181,44 @@ jobs:
           name: Bootstraps
           path: /opt/bootstraps.tar.xz
           retention-days: 30
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.release_tag }}
+          release_name: ${{ github.event.inputs.release_name }}
+          body: |
+            # Build Environment Bootstraps
+            
+            This release contains pre-configured build environments for cross-compilation.
+            
+            ## Contents
+            
+            - Ubuntu 18.04 (Bionic) 64-bit chroot environment
+            - Ubuntu 18.04 (Bionic) 32-bit chroot environment  
+            - Cross-compilation toolchains for Windows (mingw-w64)
+            - Development libraries and build tools
+            
+            ## Usage
+            
+            Extract the archive to `/opt/`:
+            ```bash
+            sudo tar -xJpf bootstraps.tar.xz -C /opt/
+            ```
+            
+            The environments can be used with `chroot` or `schroot`.
+            
+            ## Included Tools
+            
+            - GCC 7.5+ and newer versions (9, 10 if available)
+            - Clang build-essential tools
+            - CMake, Meson, Ninja
+            - Cross-compilers for Windows (mingw-w64)
+            - Development libraries for multimedia, graphics, etc.
+            
+          draft: false
+          prerelease: ${{ github.event.inputs.prerelease }}
+          files: |
+            /opt/bootstraps.tar.xz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
