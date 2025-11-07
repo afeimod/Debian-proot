@@ -58,7 +58,6 @@ jobs:
           -D glvnd=disabled \
           -D gallium-drivers=virgl,d3d12 \
           -D vulkan-drivers=[] \
-          -D dri3=enabled \
           -D llvm=disabled \
           -D glx=xlib \
           -D glx-direct=true \
