@@ -72,13 +72,8 @@ jobs:
           sudo mkdir -p ${{ env.BOOTSTRAP_DIR }}
           sudo chmod 755 ${{ env.BOOTSTRAP_DIR }}
           
-          # 下载 bootstrap.zip
-          echo "下载 bootstrap.zip..."
-          wget -O /tmp/bootstrap.zip "https://github.com/afeimod/Debian-proot/actions/runs/19154671728/artifacts/4494475035"
-          
-          # 解压 bootstrap.zip 得到 bootstraps.tar.xz
-          echo "解压 bootstrap.zip..."
-          unzip -o /tmp/bootstrap.zip -d /tmp/
+          echo "下载 bootstrap..."
+          wget -O /tmp/bootstraps.tar.xz "https://github.com/afeimod/Debian-proot/releases/download/v1.0.0/bootstraps.tar.xz"
           
           # 找到并解压 bootstraps.tar.xz
           echo "查找 bootstraps.tar.xz..."
@@ -375,14 +370,8 @@ jobs:
           sudo mkdir -p ${{ env.BOOTSTRAP_DIR }}
           sudo chmod 755 ${{ env.BOOTSTRAP_DIR }}
           
-          # 下载 bootstrap.zip
-          echo "下载 bootstrap.zip..."
-          wget -O /tmp/bootstrap.zip "https://github.com/afeimod/Debian-proot/actions/runs/19154671728/artifacts/4494475035"
-          
-          # 解压 bootstrap.zip 得到 bootstraps.tar.xz
-          echo "解压 bootstrap.zip..."
-          unzip -o /tmp/bootstrap.zip -d /tmp/
-          
+          echo "下载 bootstrap..."
+          wget -O /tmp/bootstraps.tar.xz "https://github.com/afeimod/Debian-proot/releases/download/v1.0.0/bootstraps.tar.xz"
           # 找到并解压 bootstraps.tar.xz
           echo "查找 bootstraps.tar.xz..."
           BOOTSTRAP_TAR=$(find /tmp -name "bootstraps.tar.xz" -o -name "*.tar.xz" | head -1)
