@@ -248,7 +248,8 @@ jobs:
               shift
             fi
           
-            bwrap --ro-bind "${BOOTSTRAP_PATH}" / --dev /dev --ro-bind /sys /sys \
+            bwrap --unshare-user \
+              --ro-bind "${BOOTSTRAP_PATH}" / --dev /dev --ro-bind /sys /sys \
               --proc /proc --tmpfs /tmp --tmpfs /home --tmpfs /run --tmpfs /var \
               --tmpfs /mnt --tmpfs /media --bind "${BUILD_DIR}" "${BUILD_DIR}" \
               --bind-try "${HOME}"/.ccache "${HOME}"/.ccache \
@@ -577,7 +578,8 @@ jobs:
               shift
             fi
           
-            bwrap --ro-bind "${BOOTSTRAP_PATH}" / --dev /dev --ro-bind /sys /sys \
+            bwrap --unshare-user \
+              --ro-bind "${BOOTSTRAP_PATH}" / --dev /dev --ro-bind /sys /sys \
               --proc /proc --tmpfs /tmp --tmpfs /home --tmpfs /run --tmpfs /var \
               --tmpfs /mnt --tmpfs /media --bind "${BUILD_DIR}" "${BUILD_DIR}" \
               --bind-try "${HOME}"/.ccache "${HOME}"/.ccache \
