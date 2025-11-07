@@ -1,3 +1,5 @@
+[file name]: wine-wow64-no.yml
+[file content begin]
 name: Wine and Proton 无bootBuilder
 
 on:
@@ -388,35 +390,64 @@ jobs:
             BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${WINE_BRANCH}-wow64"
           elif [ "$WINE_BRANCH" = "staging" ]; then
             git clone https://github.com/wine-mirror/wine.git wine
+            cd wine
+            
+            # 关闭 detached HEAD 建议
+            git config advice.detachedHead false
+            
             if [ "$WINE_VERSION" != "latest" ]; then
-              cd wine
               git checkout wine-$WINE_VERSION
-              cd ..
             fi
-            WINE_VERSION_ACTUAL=$(cd wine && git describe --tags --abbrev=0 2>/dev/null || echo "$WINE_VERSION")
-            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-staging-wow64"
+            WINE_VERSION_ACTUAL=$(git describe --tags --abbrev=0 2>/dev/null || echo "$WINE_VERSION")
+            COMMIT_HASH=$(git rev-parse --short HEAD)
+            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${COMMIT_HASH}-staging-wow64"
+            
+            # 修复 staging 补丁版本获取
+            # 使用正确的版本格式：vX.Y 而不是 wine-X.Y
+            STAGING_VERSION="v${WINE_VERSION_ACTUAL}"
+            echo "尝试下载 staging 补丁版本: $STAGING_VERSION"
             
             # 下载并应用 staging 补丁
-            cd wine
-            STAGING_VERSION="$WINE_VERSION_ACTUAL"
-            wget -O wine-staging-$STAGING_VERSION.tar.gz https://github.com/wine-staging/wine-staging/archive/refs/tags/$STAGING_VERSION.tar.gz
-            tar -xzf wine-staging-$STAGING_VERSION.tar.gz
+            wget -O wine-staging-${WINE_VERSION_ACTUAL}.tar.gz https://github.com/wine-staging/wine-staging/archive/refs/tags/${STAGING_VERSION}.tar.gz || \
+            wget -O wine-staging-${WINE_VERSION_ACTUAL}.tar.gz https://github.com/wine-staging/wine-staging/archive/refs/tags/v${WINE_VERSION_ACTUAL}.tar.gz
             
-            # 应用 staging 补丁
-            cd wine-staging-$STAGING_VERSION/staging
-            chmod +x patchinstall.py
-            ./patchinstall.py --all --destdir=../../
-            cd ../..
+            if [ -f "wine-staging-${WINE_VERSION_ACTUAL}.tar.gz" ]; then
+              tar -xzf wine-staging-${WINE_VERSION_ACTUAL}.tar.gz
+              
+              # 应用 staging 补丁
+              if [ -d "wine-staging-${WINE_VERSION_ACTUAL}" ]; then
+                cd wine-staging-${WINE_VERSION_ACTUAL}/staging
+                chmod +x patchinstall.py
+                ./patchinstall.py --all --destdir=../../
+                cd ../..
+              elif [ -d "wine-staging-v${WINE_VERSION_ACTUAL}" ]; then
+                cd wine-staging-v${WINE_VERSION_ACTUAL}/staging
+                chmod +x patchinstall.py
+                ./patchinstall.py --all --destdir=../../
+                cd ../..
+              else
+                echo "警告: 未找到预期的 staging 目录结构，跳过补丁应用"
+              fi
+            else
+              echo "警告: 无法下载 staging 补丁，继续构建无补丁版本"
+            fi
+            
+            cd ..
             
           elif [ "$WINE_BRANCH" = "vanilla" ]; then
             git clone https://github.com/wine-mirror/wine.git wine
+            cd wine
+            
+            # 关闭 detached HEAD 建议
+            git config advice.detachedHead false
+            
             if [ "$WINE_VERSION" != "latest" ]; then
-              cd wine
               git checkout wine-$WINE_VERSION
-              cd ..
             fi
-            WINE_VERSION_ACTUAL=$(cd wine && git describe --tags --abbrev=0 2>/dev/null || echo "$WINE_VERSION")
-            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-vanilla-wow64"
+            WINE_VERSION_ACTUAL=$(git describe --tags --abbrev=0 2>/dev/null || echo "$WINE_VERSION")
+            COMMIT_HASH=$(git rev-parse --short HEAD)
+            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${COMMIT_HASH}-vanilla-wow64"
+            cd ..
           else
             echo "未知的 Wine 分支: $WINE_BRANCH"
             exit 1
@@ -559,3 +590,4 @@ jobs:
             ${{ github.workspace }}/*.tar.xz
             ${{ github.workspace }}/checksums.txt
           retention-days: 30
+[file content end]
