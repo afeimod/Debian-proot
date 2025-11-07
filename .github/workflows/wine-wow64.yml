@@ -62,7 +62,7 @@ jobs:
             sudo apt update
     
             sudo apt install -y debootstrap schroot wget xz-utils qemu-user-static binfmt-support curl \
-              perl git bubblewrap autoconf ccache gcc-11 g++-11 \
+              perl git bubblewrap autoconf ccache gcc-11 g++-11 gcc-11-multilib g++-11-multilib \
               make flex bison gettext libfreetype6-dev libfontconfig1-dev \
               automake libtool pkg-config nasm yasm cmake ninja-build \
               libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
@@ -72,12 +72,15 @@ jobs:
               libvulkan1 \
               mesa-vulkan-drivers \
               libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
-              libavfilter-dev libswscale-dev
+              libavfilter-dev libswscale-dev \
+              libc6-dev libc6-dev-i386
+
+            # 确保 mingw 编译器使用 posix 线程模型
+            sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+            sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+            sudo update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
+            sudo update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
       
-            # 安装32位开发库
-            sudo apt install -y libc6-dev:i386
-            sudo apt install -y gcc-11-multilib g++-11-multilib
-            
       - name: 安装多媒体和音频依赖
         run: |
           sudo apt update
@@ -104,12 +107,6 @@ jobs:
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100
           sudo update-alternatives --install /usr/bin/cc cc /usr/bin/gcc-11 100
           sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++-11 100
-          
-          # 设置交叉编译器
-          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
-          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
-          sudo update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
-          sudo update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
           
           echo "验证主机编译器..."
           gcc --version
@@ -198,13 +195,13 @@ jobs:
           fi
           echo "✓ 引导环境验证成功"
           
-          # 设置编译器和标志 - 使用绝对路径避免问题
-          export CC="/usr/bin/gcc-11"
-          export CXX="/usr/bin/g++-11"
-          export CROSSCC_X32="/usr/bin/i686-w64-mingw32-gcc"
-          export CROSSCXX_X32="/usr/bin/i686-w64-mingw32-g++"
-          export CROSSCC_X64="/usr/bin/x86_64-w64-mingw32-gcc"
-          export CROSSCXX_X64="/usr/bin/x86_64-w64-mingw32-g++"
+          # 修复编译器设置 - 不使用绝对路径，让系统自动找到
+          export CC="gcc-11"
+          export CXX="g++-11"
+          export CROSSCC_X32="i686-w64-mingw32-gcc"
+          export CROSSCXX_X32="i686-w64-mingw32-g++"
+          export CROSSCC_X64="x86_64-w64-mingw32-gcc"
+          export CROSSCXX_X64="x86_64-w64-mingw32-g++"
           
           export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O2 -ftree-vectorize"
           export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O2 -ftree-vectorize"
@@ -214,21 +211,31 @@ jobs:
           export CROSSCFLAGS_X64="${CFLAGS_X64}"
           export CROSSLDFLAGS="${LDFLAGS}"
           
-          # 验证编译器
-          echo "验证编译器..."
-          $CC --version || echo "CC 失败"
-          $CXX --version || echo "CXX 失败"
-          $CROSSCC_X32 --version || echo "CROSSCC_X32 失败"
-          $CROSSCC_X64 --version || echo "CROSSCC_X64 失败"
+          # 验证编译器 - 在主机环境中测试
+          echo "验证主机编译器..."
+          which gcc-11 || echo "gcc-11 未找到"
+          which g++-11 || echo "g++-11 未找到"
+          which i686-w64-mingw32-gcc || echo "i686-w64-mingw32-gcc 未找到"
+          which x86_64-w64-mingw32-gcc || echo "x86_64-w64-mingw32-gcc 未找到"
           
-          # 启用 ccache
+          gcc-11 --version || echo "gcc-11 失败"
+          g++-11 --version || echo "g++-11 失败"
+          i686-w64-mingw32-gcc --version || echo "i686-w64-mingw32-gcc 失败"
+          x86_64-w64-mingw32-gcc --version || echo "x86_64-w64-mingw32-gcc 失败"
+          
+          # 测试简单的编译
+          echo "测试简单编译..."
+          echo 'int main() { return 0; }' > /tmp/test.c
+          gcc-11 -o /tmp/test /tmp/test.c && echo "✓ 主机编译测试成功" || echo "✗ 主机编译测试失败"
+          
+          # 启用 ccache - 简化设置
           if [ "$USE_CCACHE" = "true" ]; then
-            export CC="ccache $CC"
-            export CXX="ccache $CXX"
-            export CROSSCC_X32="ccache $CROSSCC_X32"
-            export CROSSCXX_X32="ccache $CROSSCXX_X32"
-            export CROSSCC_X64="ccache $CROSSCC_X64"
-            export CROSSCXX_X64="ccache $CROSSCXX_X64"
+            export CC="ccache gcc-11"
+            export CXX="ccache g++-11"
+            export CROSSCC_X32="ccache i686-w64-mingw32-gcc"
+            export CROSSCXX_X32="ccache i686-w64-mingw32-g++"
+            export CROSSCC_X64="ccache x86_64-w64-mingw32-gcc"
+            export CROSSCXX_X64="ccache x86_64-w64-mingw32-g++"
           fi
           
           # 创建构建目录
@@ -236,16 +243,29 @@ jobs:
           mkdir -p "$BUILD_DIR"
           cd "$BUILD_DIR"
           
-          # Bubblewrap 函数
+          # Bubblewrap 函数 - 修复环境变量传递
           build_with_bwrap() {
             if [ "${1}" = "32" ]; then
               BOOTSTRAP_PATH="$BOOTSTRAP_X32"
+              ARCH_SUFFIX="32"
             else
               BOOTSTRAP_PATH="$BOOTSTRAP_X64"
+              ARCH_SUFFIX="64"
             fi
           
             if [ "${1}" = "32" ] || [ "${1}" = "64" ]; then
               shift
+            fi
+          
+            # 设置架构特定的编译器
+            if [ "$ARCH_SUFFIX" = "32" ]; then
+              LOCAL_CC="$CROSSCC_X32"
+              LOCAL_CXX="$CROSSCXX_X32"
+              LOCAL_CFLAGS="$CFLAGS_X32"
+            else
+              LOCAL_CC="$CROSSCC_X64"
+              LOCAL_CXX="$CROSSCXX_X64"
+              LOCAL_CFLAGS="$CFLAGS_X64"
             fi
           
             bwrap --unshare-user \
@@ -254,12 +274,10 @@ jobs:
               --tmpfs /mnt --tmpfs /media --bind "${BUILD_DIR}" "${BUILD_DIR}" \
               --bind-try "${HOME}"/.ccache "${HOME}"/.ccache \
               --setenv PATH "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin" \
-              --setenv CC "$CC" \
-              --setenv CXX "$CXX" \
-              --setenv CROSSCC "$CROSSCC" \
-              --setenv CROSSCXX "$CROSSCXX" \
-              --setenv CFLAGS "$CFLAGS" \
-              --setenv CXXFLAGS "$CXXFLAGS" \
+              --setenv CC "$LOCAL_CC" \
+              --setenv CXX "$LOCAL_CXX" \
+              --setenv CFLAGS "$LOCAL_CFLAGS" \
+              --setenv CXXFLAGS "$LOCAL_CFLAGS" \
               --setenv LDFLAGS "$LDFLAGS" \
               "$@"
           }
@@ -314,7 +332,18 @@ jobs:
           
           mkdir build64
           cd build64
-          build_with_bwrap 64 ../wine/configure --enable-win64 --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          
+          # 首先测试在 chroot 环境中编译
+          echo "测试在 chroot 环境中编译..."
+          build_with_bwrap 64 sh -c 'echo "int main(){return 0;}" > test.c && gcc -o test test.c && echo "✓ Chroot 编译测试成功" || echo "✗ Chroot 编译测试失败"'
+
+          # 运行配置，如果失败则显示详细错误
+          if ! build_with_bwrap 64 ../wine/configure --enable-win64 --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"; then
+            echo "配置失败，检查 config.log:"
+            build_with_bwrap 64 cat config.log | tail -50
+            exit 1
+          fi
+          
           build_with_bwrap 64 make -j$(nproc) install
           cd ..
           
@@ -390,7 +419,7 @@ jobs:
             sudo apt update
     
             sudo apt install -y debootstrap schroot wget xz-utils qemu-user-static binfmt-support curl \
-              perl git bubblewrap autoconf ccache gcc-11 g++-11 \
+              perl git bubblewrap autoconf ccache gcc-11 g++-11 gcc-11-multilib g++-11-multilib \
               make flex bison gettext libfreetype6-dev libfontconfig1-dev \
               automake libtool pkg-config nasm yasm cmake ninja-build \
               libx11-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev \
@@ -400,11 +429,14 @@ jobs:
               libvulkan1 \
               mesa-vulkan-drivers \
               libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
-              libavfilter-dev libswscale-dev
-      
-            # 安装32位开发库
-            sudo apt install -y libc6-dev:i386
-            sudo apt install -y gcc-11-multilib g++-11-multilib
+              libavfilter-dev libswscale-dev \
+              libc6-dev libc6-dev-i386
+
+            # 确保 mingw 编译器使用 posix 线程模型
+            sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+            sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+            sudo update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
+            sudo update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
       
       - name: 安装多媒体和音频依赖
         run: |
@@ -432,12 +464,6 @@ jobs:
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100
           sudo update-alternatives --install /usr/bin/cc cc /usr/bin/gcc-11 100
           sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++-11 100
-          
-          # 设置交叉编译器
-          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
-          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
-          sudo update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
-          sudo update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
           
           echo "验证主机编译器..."
           gcc --version
@@ -528,13 +554,13 @@ jobs:
           fi
           echo "✓ 引导环境验证成功"
           
-          # 设置编译器和标志 - 使用绝对路径避免问题
-          export CC="/usr/bin/gcc-11"
-          export CXX="/usr/bin/g++-11"
-          export CROSSCC_X32="/usr/bin/i686-w64-mingw32-gcc"
-          export CROSSCXX_X32="/usr/bin/i686-w64-mingw32-g++"
-          export CROSSCC_X64="/usr/bin/x86_64-w64-mingw32-gcc"
-          export CROSSCXX_X64="/usr/bin/x86_64-w64-mingw32-g++"
+          # 修复编译器设置 - 不使用绝对路径，让系统自动找到
+          export CC="gcc-11"
+          export CXX="g++-11"
+          export CROSSCC_X32="i686-w64-mingw32-gcc"
+          export CROSSCXX_X32="i686-w64-mingw32-g++"
+          export CROSSCC_X64="x86_64-w64-mingw32-gcc"
+          export CROSSCXX_X64="x86_64-w64-mingw32-g++"
           
           export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O2 -ftree-vectorize"
           export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O2 -ftree-vectorize"
@@ -544,21 +570,31 @@ jobs:
           export CROSSCFLAGS_X64="${CFLAGS_X64}"
           export CROSSLDFLAGS="${LDFLAGS}"
           
-          # 验证编译器
-          echo "验证编译器..."
-          $CC --version || echo "CC 失败"
-          $CXX --version || echo "CXX 失败"
-          $CROSSCC_X32 --version || echo "CROSSCC_X32 失败"
-          $CROSSCC_X64 --version || echo "CROSSCC_X64 失败"
+          # 验证编译器 - 在主机环境中测试
+          echo "验证主机编译器..."
+          which gcc-11 || echo "gcc-11 未找到"
+          which g++-11 || echo "g++-11 未找到"
+          which i686-w64-mingw32-gcc || echo "i686-w64-mingw32-gcc 未找到"
+          which x86_64-w64-mingw32-gcc || echo "x86_64-w64-mingw32-gcc 未找到"
           
-          # 启用 ccache
+          gcc-11 --version || echo "gcc-11 失败"
+          g++-11 --version || echo "g++-11 失败"
+          i686-w64-mingw32-gcc --version || echo "i686-w64-mingw32-gcc 失败"
+          x86_64-w64-mingw32-gcc --version || echo "x86_64-w64-mingw32-gcc 失败"
+          
+          # 测试简单的编译
+          echo "测试简单编译..."
+          echo 'int main() { return 0; }' > /tmp/test.c
+          gcc-11 -o /tmp/test /tmp/test.c && echo "✓ 主机编译测试成功" || echo "✗ 主机编译测试失败"
+          
+          # 启用 ccache - 简化设置
           if [ "$USE_CCACHE" = "true" ]; then
-            export CC="ccache $CC"
-            export CXX="ccache $CXX"
-            export CROSSCC_X32="ccache $CROSSCC_X32"
-            export CROSSCXX_X32="ccache $CROSSCXX_X32"
-            export CROSSCC_X64="ccache $CROSSCC_X64"
-            export CROSSCXX_X64="ccache $CROSSCXX_X64"
+            export CC="ccache gcc-11"
+            export CXX="ccache g++-11"
+            export CROSSCC_X32="ccache i686-w64-mingw32-gcc"
+            export CROSSCXX_X32="ccache i686-w64-mingw32-g++"
+            export CROSSCC_X64="ccache x86_64-w64-mingw32-gcc"
+            export CROSSCXX_X64="ccache x86_64-w64-mingw32-g++"
           fi
           
           # 创建构建目录
@@ -566,16 +602,29 @@ jobs:
           mkdir -p "$BUILD_DIR"
           cd "$BUILD_DIR"
           
-          # Bubblewrap 函数
+          # Bubblewrap 函数 - 修复环境变量传递
           build_with_bwrap() {
             if [ "${1}" = "32" ]; then
               BOOTSTRAP_PATH="$BOOTSTRAP_X32"
+              ARCH_SUFFIX="32"
             else
               BOOTSTRAP_PATH="$BOOTSTRAP_X64"
+              ARCH_SUFFIX="64"
             fi
           
             if [ "${1}" = "32" ] || [ "${1}" = "64" ]; then
               shift
+            fi
+          
+            # 设置架构特定的编译器
+            if [ "$ARCH_SUFFIX" = "32" ]; then
+              LOCAL_CC="$CROSSCC_X32"
+              LOCAL_CXX="$CROSSCXX_X32"
+              LOCAL_CFLAGS="$CFLAGS_X32"
+            else
+              LOCAL_CC="$CROSSCC_X64"
+              LOCAL_CXX="$CROSSCXX_X64"
+              LOCAL_CFLAGS="$CFLAGS_X64"
             fi
           
             bwrap --unshare-user \
@@ -584,12 +633,10 @@ jobs:
               --tmpfs /mnt --tmpfs /media --bind "${BUILD_DIR}" "${BUILD_DIR}" \
               --bind-try "${HOME}"/.ccache "${HOME}"/.ccache \
               --setenv PATH "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin" \
-              --setenv CC "$CC" \
-              --setenv CXX "$CXX" \
-              --setenv CROSSCC "$CROSSCC" \
-              --setenv CROSSCXX "$CROSSCXX" \
-              --setenv CFLAGS "$CFLAGS" \
-              --setenv CXXFLAGS "$CXXFLAGS" \
+              --setenv CC "$LOCAL_CC" \
+              --setenv CXX "$LOCAL_CXX" \
+              --setenv CFLAGS "$LOCAL_CFLAGS" \
+              --setenv CXXFLAGS "$LOCAL_CFLAGS" \
               --setenv LDFLAGS "$LDFLAGS" \
               "$@"
           }
@@ -683,7 +730,18 @@ jobs:
           
           mkdir build64
           cd build64
-          build_with_bwrap 64 ../wine/configure --enable-win64 --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          
+          # 首先测试在 chroot 环境中编译
+          echo "测试在 chroot 环境中编译..."
+          build_with_bwrap 64 sh -c 'echo "int main(){return 0;}" > test.c && gcc -o test test.c && echo "✓ Chroot 编译测试成功" || echo "✗ Chroot 编译测试失败"'
+
+          # 运行配置，如果失败则显示详细错误
+          if ! build_with_bwrap 64 ../wine/configure --enable-win64 --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"; then
+            echo "配置失败，检查 config.log:"
+            build_with_bwrap 64 cat config.log | tail -50
+            exit 1
+          fi
+          
           build_with_bwrap 64 make -j$(nproc) install
           cd ..
           
