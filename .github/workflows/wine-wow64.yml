@@ -183,6 +183,11 @@ jobs:
           export BOOTSTRAP_X32="/opt/chroots/bionic32_chroot"
           export BUILD_DIR="/tmp/build_proton_${PROTON_BRANCH}"
           
+          # 设置构建和目标平台标识
+          export BUILD="x86_64-pc-linux-gnu"
+          export HOST_X64="x86_64-w64-mingw32"
+          export HOST_X32="i686-w64-mingw32"
+          
           # 验证引导环境路径
           echo "验证引导环境..."
           echo "BOOTSTRAP_X64: $BOOTSTRAP_X64"
@@ -248,9 +253,11 @@ jobs:
             if [ "${1}" = "32" ]; then
               BOOTSTRAP_PATH="$BOOTSTRAP_X32"
               ARCH_SUFFIX="32"
+              LOCAL_HOST="$HOST_X32"
             else
               BOOTSTRAP_PATH="$BOOTSTRAP_X64"
               ARCH_SUFFIX="64"
+              LOCAL_HOST="$HOST_X64"
             fi
           
             if [ "${1}" = "32" ] || [ "${1}" = "64" ]; then
@@ -274,6 +281,8 @@ jobs:
               --tmpfs /mnt --tmpfs /media --bind "${BUILD_DIR}" "${BUILD_DIR}" \
               --bind-try "${HOME}"/.ccache "${HOME}"/.ccache \
               --setenv PATH "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin" \
+              --setenv BUILD "$BUILD" \
+              --setenv HOST "$LOCAL_HOST" \
               --setenv CC "$LOCAL_CC" \
               --setenv CXX "$LOCAL_CXX" \
               --setenv CFLAGS "$LOCAL_CFLAGS" \
@@ -303,20 +312,17 @@ jobs:
           dlls/winevulkan/make_vulkan
           tools/make_requests
           tools/make_specfiles
-          echo "彻底修复 Termux 路径问题..."
-        
-            # 修改所有硬编码的 /tmp 路径
+          
+          # 修复 Termux 路径问题（如果需要）
+          if [ -n "$TERMUX_VERSION" ]; then
+            echo "修复 Termux 路径问题..."
             find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.in" -o -name "*.spec" \) -exec grep -l "/tmp" {} \; | xargs sed -i 's|/tmp/|/data/data/com.termux/files/usr/tmp/|g'
-        
-            # 修改 server 目录中的特定路径
             find server -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
-        
-            # 修改其他关键文件
             find . -name "file.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
             find . -name "loader.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
             find . -name "server.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
-        
             echo "路径修复完成"
+          fi
             
           autoreconf -f
           cd ..
@@ -337,13 +343,21 @@ jobs:
           echo "测试在 chroot 环境中编译..."
           build_with_bwrap 64 sh -c 'echo "int main(){return 0;}" > test.c && gcc -o test test.c && echo "✓ Chroot 编译测试成功" || echo "✗ Chroot 编译测试失败"'
 
-          # 运行配置，如果失败则显示详细错误
-          if ! build_with_bwrap 64 ../wine/configure --enable-win64 --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"; then
+          # 运行配置，添加 --host 参数明确指定交叉编译
+          echo "配置 64 位 Wine..."
+          if ! build_with_bwrap 64 ../wine/configure \
+            --enable-win64 \
+            --host="$HOST_X64" \
+            --without-oss \
+            --disable-winemenubuilder \
+            --disable-tests \
+            --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"; then
             echo "配置失败，检查 config.log:"
             build_with_bwrap 64 cat config.log | tail -50
             exit 1
           fi
           
+          echo "编译 64 位 Wine..."
           build_with_bwrap 64 make -j$(nproc) install
           cd ..
           
@@ -358,7 +372,16 @@ jobs:
           
           mkdir build32-tools
           cd build32-tools
-          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig build_with_bwrap 32 ../wine/configure --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
+          echo "配置 32 位工具..."
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig \
+          build_with_bwrap 32 ../wine/configure \
+            --host="$HOST_X32" \
+            --without-oss \
+            --disable-winemenubuilder \
+            --disable-tests \
+            --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
+          
+          echo "编译 32 位工具..."
           build_with_bwrap 32 make -j$(nproc) install
           cd ..
           
@@ -371,7 +394,18 @@ jobs:
           
           mkdir build32
           cd build32
-          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig build_with_bwrap 32 ../wine/configure --with-wine64="${BUILD_DIR}/build64" --with-wine-tools="${BUILD_DIR}/build32-tools" --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          echo "配置 32 位 Wine..."
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig \
+          build_with_bwrap 32 ../wine/configure \
+            --with-wine64="${BUILD_DIR}/build64" \
+            --with-wine-tools="${BUILD_DIR}/build32-tools" \
+            --host="$HOST_X32" \
+            --without-oss \
+            --disable-winemenubuilder \
+            --disable-tests \
+            --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          
+          echo "编译 32 位 Wine..."
           build_with_bwrap 32 make -j$(nproc) install
           cd ..
           
@@ -542,6 +576,11 @@ jobs:
           export BOOTSTRAP_X32="/opt/chroots/bionic32_chroot"
           export BUILD_DIR="/tmp/build_wine_${WINE_BRANCH}_${WINE_VERSION}"
           
+          # 设置构建和目标平台标识
+          export BUILD="x86_64-pc-linux-gnu"
+          export HOST_X64="x86_64-w64-mingw32"
+          export HOST_X32="i686-w64-mingw32"
+          
           # 验证引导环境路径
           echo "验证引导环境..."
           echo "BOOTSTRAP_X64: $BOOTSTRAP_X64"
@@ -607,9 +646,11 @@ jobs:
             if [ "${1}" = "32" ]; then
               BOOTSTRAP_PATH="$BOOTSTRAP_X32"
               ARCH_SUFFIX="32"
+              LOCAL_HOST="$HOST_X32"
             else
               BOOTSTRAP_PATH="$BOOTSTRAP_X64"
               ARCH_SUFFIX="64"
+              LOCAL_HOST="$HOST_X64"
             fi
           
             if [ "${1}" = "32" ] || [ "${1}" = "64" ]; then
@@ -633,6 +674,8 @@ jobs:
               --tmpfs /mnt --tmpfs /media --bind "${BUILD_DIR}" "${BUILD_DIR}" \
               --bind-try "${HOME}"/.ccache "${HOME}"/.ccache \
               --setenv PATH "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin" \
+              --setenv BUILD "$BUILD" \
+              --setenv HOST "$LOCAL_HOST" \
               --setenv CC "$LOCAL_CC" \
               --setenv CXX "$LOCAL_CXX" \
               --setenv CFLAGS "$LOCAL_CFLAGS" \
@@ -701,20 +744,17 @@ jobs:
           dlls/winevulkan/make_vulkan
           tools/make_requests
           tools/make_specfiles
-          echo "彻底修复 Termux 路径问题..."
-        
-            # 修改所有硬编码的 /tmp 路径
+          
+          # 修复 Termux 路径问题（如果需要）
+          if [ -n "$TERMUX_VERSION" ]; then
+            echo "修复 Termux 路径问题..."
             find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.in" -o -name "*.spec" \) -exec grep -l "/tmp" {} \; | xargs sed -i 's|/tmp/|/data/data/com.termux/files/usr/tmp/|g'
-        
-            # 修改 server 目录中的特定路径
             find server -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
-        
-            # 修改其他关键文件
             find . -name "file.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
             find . -name "loader.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
             find . -name "server.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
-        
             echo "路径修复完成"
+          fi
             
           autoreconf -f
           cd ..
@@ -735,13 +775,21 @@ jobs:
           echo "测试在 chroot 环境中编译..."
           build_with_bwrap 64 sh -c 'echo "int main(){return 0;}" > test.c && gcc -o test test.c && echo "✓ Chroot 编译测试成功" || echo "✗ Chroot 编译测试失败"'
 
-          # 运行配置，如果失败则显示详细错误
-          if ! build_with_bwrap 64 ../wine/configure --enable-win64 --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"; then
+          # 运行配置，添加 --host 参数明确指定交叉编译
+          echo "配置 64 位 Wine..."
+          if ! build_with_bwrap 64 ../wine/configure \
+            --enable-win64 \
+            --host="$HOST_X64" \
+            --without-oss \
+            --disable-winemenubuilder \
+            --disable-tests \
+            --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"; then
             echo "配置失败，检查 config.log:"
             build_with_bwrap 64 cat config.log | tail -50
             exit 1
           fi
           
+          echo "编译 64 位 Wine..."
           build_with_bwrap 64 make -j$(nproc) install
           cd ..
           
@@ -756,7 +804,16 @@ jobs:
           
           mkdir build32-tools
           cd build32-tools
-          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig build_with_bwrap 32 ../wine/configure --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
+          echo "配置 32 位工具..."
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig \
+          build_with_bwrap 32 ../wine/configure \
+            --host="$HOST_X32" \
+            --without-oss \
+            --disable-winemenubuilder \
+            --disable-tests \
+            --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
+          
+          echo "编译 32 位工具..."
           build_with_bwrap 32 make -j$(nproc) install
           cd ..
           
@@ -769,7 +826,18 @@ jobs:
           
           mkdir build32
           cd build32
-          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig build_with_bwrap 32 ../wine/configure --with-wine64="${BUILD_DIR}/build64" --with-wine-tools="${BUILD_DIR}/build32-tools" --without-oss --disable-winemenubuilder --disable-tests --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          echo "配置 32 位 Wine..."
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig \
+          build_with_bwrap 32 ../wine/configure \
+            --with-wine64="${BUILD_DIR}/build64" \
+            --with-wine-tools="${BUILD_DIR}/build32-tools" \
+            --host="$HOST_X32" \
+            --without-oss \
+            --disable-winemenubuilder \
+            --disable-tests \
+            --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+          
+          echo "编译 32 位 Wine..."
           build_with_bwrap 32 make -j$(nproc) install
           cd ..
           
