@@ -174,9 +174,50 @@ jobs:
           retention-days: 30
       
       - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.event.inputs.release_tag }}
-          files: /opt/bootstraps.tar.xz
+        id: create_release
+        uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.event.inputs.release_tag }}
+          release_name: Build Environment ${{ github.event.inputs.release_tag }}
+          body: |
+            # Build Environment Bootstraps
+            
+            This release contains pre-configured build environments for cross-compilation.
+            
+            ## Contents
+            
+            - Ubuntu 18.04 (Bionic) 64-bit chroot environment
+            - Ubuntu 18.04 (Bionic) 32-bit chroot environment  
+            - Cross-compilation toolchains for Windows (mingw-w64)
+            - Development libraries and build tools
+            
+            ## Usage
+            
+            Extract the archive to `/opt/`:
+            ```bash
+            sudo tar -xJpf bootstraps.tar.xz -C /opt/
+            ```
+            
+            The environments can be used with `chroot` or `schroot`.
+            
+            ## Included Tools
+            
+            - GCC 7.5+ and newer versions (9, 10 if available)
+            - Clang build-essential tools
+            - CMake, Meson, Ninja
+            - Cross-compilers for Windows (mingw-w64)
+            - Development libraries for multimedia, graphics, etc.
+          draft: false
+          prerelease: false
+      
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: /opt/bootstraps.tar.xz
+          asset_name: bootstraps.tar.xz
+          asset_content_type: application/x-xz
