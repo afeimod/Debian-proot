@@ -127,8 +127,8 @@ jobs:
             sudo chmod 755 /opt/chroots
     
             # 下载64位设置脚本
-            wget -O /tmp/setup_chroot_amd64.sh https://raw.githubusercontent.com/afeimod/linbox/main/path/setup_chroot_amd64.sh
-            chmod +x /tmp/setup_chroot_amd64.sh
+            wget -O /tmp/setup_chroot.sh https://raw.githubusercontent.com/afeimod/linbox/main/path/setup_chroot.sh
+            chmod +x /tmp/setup_chroot.sh
     
             # 下载32位设置脚本
             wget -O /tmp/setup_chroot_i386.sh https://raw.githubusercontent.com/afeimod/linbox/main/path/setup_chroot_i386.sh
@@ -141,9 +141,9 @@ jobs:
                 echo "主镜像失败，尝试备用镜像..."
                 sudo debootstrap --arch=amd64 bionic /opt/chroots/bionic64_chroot http://old-releases.ubuntu.com/ubuntu/
               }
-              sudo cp /tmp/setup_chroot_amd64.sh /opt/chroots/bionic64_chroot/tmp/
-              sudo chroot /opt/chroots/bionic64_chroot /bin/bash /tmp/setup_chroot_amd64.sh
-              sudo rm -f /opt/chroots/bionic64_chroot/tmp/setup_chroot_amd64.sh
+              sudo cp /tmp/setup_chroot.sh /opt/chroots/bionic64_chroot/tmp/
+              sudo chroot /opt/chroots/bionic64_chroot /bin/bash /tmp/setup_chroot.sh
+              sudo rm -f /opt/chroots/bionic64_chroot/tmp/setup_chroot.sh
             else
               echo "64位引导环境已存在"
             fi
@@ -454,8 +454,8 @@ jobs:
             sudo chmod 755 /opt/chroots
     
             # 下载64位设置脚本
-            wget -O /tmp/setup_chroot_amd64.sh https://raw.githubusercontent.com/afeimod/linbox/main/path/setup_chroot_amd64.sh
-            chmod +x /tmp/setup_chroot_amd64.sh
+            wget -O /tmp/setup_chroot.sh https://raw.githubusercontent.com/afeimod/linbox/main/path/setup_chroot.sh
+            chmod +x /tmp/setup_chroot.sh
     
             # 下载32位设置脚本
             wget -O /tmp/setup_chroot_i386.sh https://raw.githubusercontent.com/afeimod/linbox/main/path/setup_chroot_i386.sh
@@ -468,9 +468,9 @@ jobs:
                 echo "主镜像失败，尝试备用镜像..."
                 sudo debootstrap --arch=amd64 bionic /opt/chroots/bionic64_chroot http://old-releases.ubuntu.com/ubuntu/
               }
-              sudo cp /tmp/setup_chroot_amd64.sh /opt/chroots/bionic64_chroot/tmp/
-              sudo chroot /opt/chroots/bionic64_chroot /bin/bash /tmp/setup_chroot_amd64.sh
-              sudo rm -f /opt/chroots/bionic64_chroot/tmp/setup_chroot_amd64.sh
+              sudo cp /tmp/setup_chroot.sh /opt/chroots/bionic64_chroot/tmp/
+              sudo chroot /opt/chroots/bionic64_chroot /bin/bash /tmp/setup_chroot.sh
+              sudo rm -f /opt/chroots/bionic64_chroot/tmp/setup_chroot.sh
             else
               echo "64位引导环境已存在"
             fi
