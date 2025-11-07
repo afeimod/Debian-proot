@@ -25,15 +25,21 @@ jobs:
       run: |
         sudo sed -i "s/^Types: deb$/Types: deb deb-src/" /etc/apt/sources.list.d/ubuntu.sources
         sudo apt update
+        sudo apt-get install -y python3-pip ninja-build
+        sudo pip3 install meson==1.5.1
         sudo apt-get build-dep mesa -y
         # VirGL额外依赖
-        sudo apt-get install -y libepoxy-dev libgbm-dev meson ninja-build
+        sudo apt-get install -y libepoxy-dev libgbm-dev
 
     - name: 克隆 Mesa
       run: |
         git clone https://gitlab.freedesktop.org/mesa/mesa.git
         cd mesa
         git checkout ${{ github.event.inputs.mesa_version }}
+
+    - name: 验证 Meson 版本
+      run: |
+        meson --version
 
     - name: 构建 Mesa VirGL
       run: |
