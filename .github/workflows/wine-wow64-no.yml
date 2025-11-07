@@ -399,7 +399,7 @@ jobs:
             # 下载并应用 staging 补丁
             cd wine
             STAGING_VERSION="$WINE_VERSION_ACTUAL"
-            wget -O wine-staging-$STAGING_VERSION.tar.gz https://github.com/wine-staging/wine-staging/archive/refs/tags/v$STAGING_VERSION.tar.gz
+            wget -O wine-staging-$STAGING_VERSION.tar.gz https://github.com/wine-staging/wine-staging/archive/refs/tags/$STAGING_VERSION.tar.gz
             tar -xzf wine-staging-$STAGING_VERSION.tar.gz
             
             # 应用 staging 补丁
