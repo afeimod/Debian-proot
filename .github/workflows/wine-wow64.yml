@@ -175,252 +175,237 @@ jobs:
 
       - name: Build Proton
         run: |
-          set -e
-          
-          # 设置环境变量
-          export PROTON_BRANCH="${{ github.event.inputs.proton_branch || 'proton_10.0' }}"
-          export BOOTSTRAP_X64="/opt/chroots/bionic64_chroot"
-          export BOOTSTRAP_X32="/opt/chroots/bionic32_chroot"
-          export BUILD_DIR="/tmp/build_proton_${PROTON_BRANCH}"
-          
-          # 设置构建和目标平台标识
-          export BUILD="x86_64-pc-linux-gnu"
-          export HOST_X64="x86_64-w64-mingw32"
-          export HOST_X32="i686-w64-mingw32"
-          
-          # 验证引导环境路径
-          echo "验证引导环境..."
-          echo "BOOTSTRAP_X64: $BOOTSTRAP_X64"
-          echo "BOOTSTRAP_X32: $BOOTSTRAP_X32"
-          
-          if [ ! -d "$BOOTSTRAP_X64" ] || [ ! -d "$BOOTSTRAP_X32" ]; then
-            echo "错误: 引导环境不存在!"
-            ls -la /opt/chroots/ || echo "无法列出 /opt/chroots/"
-            exit 1
-          fi
-          echo "✓ 引导环境验证成功"
-          
-          # 修复编译器设置
-          export CC="gcc-11"
-          export CXX="g++-11"
-          export CROSSCC_X32="i686-w64-mingw32-gcc"
-          export CROSSCXX_X32="i686-w64-mingw32-g++"
-          export CROSSCC_X64="x86_64-w64-mingw32-gcc"
-          export CROSSCXX_X64="x86_64-w64-mingw32-g++"
-          
-          export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O2 -ftree-vectorize"
-          export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O2 -ftree-vectorize"
-          export LDFLAGS="-Wl,-O1,--sort-common,--as-needed"
-          
-          export CROSSCFLAGS_X32="${CFLAGS_X32}"
-          export CROSSCFLAGS_X64="${CFLAGS_X64}"
-          export CROSSLDFLAGS="${LDFLAGS}"
-          
-          # 验证编译器
-          echo "验证主机编译器..."
-          which gcc-11 || echo "gcc-11 未找到"
-          which g++-11 || echo "g++-11 未找到"
-          which i686-w64-mingw32-gcc || echo "i686-w64-mingw32-gcc 未找到"
-          which x86_64-w64-mingw32-gcc || echo "x86_64-w64-mingw32-gcc 未找到"
-          
-          # 启用 ccache
-          if [ "$USE_CCACHE" = "true" ]; then
-            export CC="ccache gcc-11"
-            export CXX="ccache g++-11"
-            export CROSSCC_X32="ccache i686-w64-mingw32-gcc"
-            export CROSSCXX_X32="ccache i686-w64-mingw32-g++"
-            export CROSSCC_X64="ccache x86_64-w64-mingw32-gcc"
-            export CROSSCXX_X64="ccache x86_64-w64-mingw32-g++"
-          fi
-          
-          # 创建构建目录
-          rm -rf "$BUILD_DIR"
-          mkdir -p "$BUILD_DIR"
-          cd "$BUILD_DIR"
-          
-          # Bubblewrap 函数
-          build_with_bwrap() {
-            if [ "${1}" = "32" ]; then
-              BOOTSTRAP_PATH="$BOOTSTRAP_X32"
-              ARCH_SUFFIX="32"
-              LOCAL_HOST="$HOST_X32"
+            set -e
+            
+            # 设置环境变量
+            export PROTON_BRANCH="${{ github.event.inputs.proton_branch || 'proton_10.0' }}"
+            export BOOTSTRAP_X64="/opt/chroots/bionic64_chroot"
+            export BOOTSTRAP_X32="/opt/chroots/bionic32_chroot"
+            export BUILD_DIR="/tmp/build_proton_${PROTON_BRANCH}"
+            
+            # 设置构建和目标平台标识
+            export BUILD="x86_64-pc-linux-gnu"
+            export HOST_X64="x86_64-w64-mingw32"
+            export HOST_X32="i686-w64-mingw32"
+            
+            # 验证引导环境路径
+            echo "验证引导环境..."
+            echo "BOOTSTRAP_X64: $BOOTSTRAP_X64"
+            echo "BOOTSTRAP_X32: $BOOTSTRAP_X32"
+            
+            if [ ! -d "$BOOTSTRAP_X64" ] || [ ! -d "$BOOTSTRAP_X32" ]; then
+              echo "错误: 引导环境不存在!"
+              ls -la /opt/chroots/ || echo "无法列出 /opt/chroots/"
+              exit 1
+            fi
+            echo "✓ 引导环境验证成功"
+            
+            # 修复编译器设置
+            export CC="gcc-11"
+            export CXX="g++-11"
+            export CROSSCC_X32="i686-w64-mingw32-gcc"
+            export CROSSCXX_X32="i686-w64-mingw32-g++"
+            export CROSSCC_X64="x86_64-w64-mingw32-gcc"
+            export CROSSCXX_X64="x86_64-w64-mingw32-g++"
+            
+            export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O2 -ftree-vectorize"
+            export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O2 -ftree-vectorize"
+            export LDFLAGS="-Wl,-O1,--sort-common,--as-needed"
+            
+            export CROSSCFLAGS_X32="${CFLAGS_X32}"
+            export CROSSCFLAGS_X64="${CFLAGS_X64}"
+            export CROSSLDFLAGS="${LDFLAGS}"
+            
+            # 验证编译器
+            echo "验证主机编译器..."
+            which gcc-11 || echo "gcc-11 未找到"
+            which g++-11 || echo "g++-11 未找到"
+            which i686-w64-mingw32-gcc || echo "i686-w64-mingw32-gcc 未找到"
+            which x86_64-w64-mingw32-gcc || echo "x86_64-w64-mingw32-gcc 未找到"
+            
+            # 启用 ccache
+            if [ "$USE_CCACHE" = "true" ]; then
+              export CC="ccache gcc-11"
+              export CXX="ccache g++-11"
+              export CROSSCC_X32="ccache i686-w64-mingw32-gcc"
+              export CROSSCXX_X32="ccache i686-w64-mingw32-g++"
+              export CROSSCC_X64="ccache x86_64-w64-mingw32-gcc"
+              export CROSSCXX_X64="ccache x86_64-w64-mingw32-g++"
+            fi
+            
+            # 创建构建目录
+            rm -rf "$BUILD_DIR"
+            mkdir -p "$BUILD_DIR"
+            cd "$BUILD_DIR"
+            
+            # Bubblewrap 函数
+            build_with_bwrap() {
+              if [ "${1}" = "32" ]; then
+                        BOOTSTRAP_PATH="$BOOTSTRAP_X32"
+                        ARCH_SUFFIX="32"
+                        LOCAL_HOST="$HOST_X32"
+              else
+                        BOOTSTRAP_PATH="$BOOTSTRAP_X64"
+                        ARCH_SUFFIX="64"
+                        LOCAL_HOST="$HOST_X64"
+              fi
+            
+              if [ "${1}" = "32" ] || [ "${1}" = "64" ]; then
+                        shift
+              fi
+            
+              # 设置架构特定的编译器
+              if [ "$ARCH_SUFFIX" = "32" ]; then
+                        LOCAL_CC="$CROSSCC_X32"
+                        LOCAL_CXX="$CROSSCXX_X32"
+                        LOCAL_CFLAGS="$CFLAGS_X32"
+              else
+                        LOCAL_CC="$CROSSCC_X64"
+                        LOCAL_CXX="$CROSSCXX_X64"
+                        LOCAL_CFLAGS="$CFLAGS_X64"
+              fi
+            
+              bwrap --unshare-user \
+                        --ro-bind "${BOOTSTRAP_PATH}" / --dev /dev --ro-bind /sys /sys \
+                        --proc /proc --tmpfs /tmp --tmpfs /home --tmpfs /run --tmpfs /var \
+                        --tmpfs /mnt --tmpfs /media --bind "${BUILD_DIR}" "${BUILD_DIR}" \
+                        --bind-try "${HOME}"/.ccache "${HOME}"/.ccache \
+                        --setenv PATH "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin" \
+                        --setenv BUILD "$BUILD" \
+                        --setenv HOST "$LOCAL_HOST" \
+                        --setenv CC "$LOCAL_CC" \
+                        --setenv CXX "$LOCAL_CXX" \
+                        --setenv CFLAGS "$LOCAL_CFLAGS" \
+                        --setenv CXXFLAGS "$LOCAL_CFLAGS" \
+                        --setenv LDFLAGS "$LDFLAGS" \
+                        "$@"
+            }
+            
+            echo "下载 Proton 源代码..."
+            
+            # 克隆 Proton 源代码
+            if [ -z "${PROTON_BRANCH}" ]; then
+              git clone --depth=1 https://github.com/ValveSoftware/wine
             else
-              BOOTSTRAP_PATH="$BOOTSTRAP_X64"
-              ARCH_SUFFIX="64"
-              LOCAL_HOST="$HOST_X64"
+              git clone --depth=1 https://github.com/ValveSoftware/wine -b "${PROTON_BRANCH}"
             fi
-          
-            if [ "${1}" = "32" ] || [ "${1}" = "64" ]; then
-              shift
-            fi
-          
-            # 设置架构特定的编译器
-            if [ "$ARCH_SUFFIX" = "32" ]; then
-              LOCAL_CC="$CROSSCC_X32"
-              LOCAL_CXX="$CROSSCXX_X32"
-              LOCAL_CFLAGS="$CFLAGS_X32"
+            
+            WINE_VERSION="$(cat wine/VERSION | tail -c +14)-$(git -C wine rev-parse --short HEAD)"
+            if [[ "${PROTON_BRANCH}" == "experimental_"* ]] || [ "${PROTON_BRANCH}" = "bleeding-edge" ]; then
+              BUILD_NAME=proton-exp-"${WINE_VERSION}"
             else
-              LOCAL_CC="$CROSSCC_X64"
-              LOCAL_CXX="$CROSSCXX_X64"
-              LOCAL_CFLAGS="$CFLAGS_X64"
+              BUILD_NAME=proton-"${WINE_VERSION}"
             fi
-          
-            bwrap --unshare-user \
-              --ro-bind "${BOOTSTRAP_PATH}" / --dev /dev --ro-bind /sys /sys \
-              --proc /proc --tmpfs /tmp --tmpfs /home --tmpfs /run --tmpfs /var \
-              --tmpfs /mnt --tmpfs /media --bind "${BUILD_DIR}" "${BUILD_DIR}" \
-              --bind-try "${HOME}"/.ccache "${HOME}"/.ccache \
-              --setenv PATH "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin" \
-              --setenv BUILD "$BUILD" \
-              --setenv HOST "$LOCAL_HOST" \
-              --setenv CC "$LOCAL_CC" \
-              --setenv CXX "$LOCAL_CXX" \
-              --setenv CFLAGS "$LOCAL_CFLAGS" \
-              --setenv CXXFLAGS "$LOCAL_CFLAGS" \
-              --setenv LDFLAGS "$LDFLAGS" \
-              "$@"
-          }
-          
-          echo "下载 Proton 源代码..."
-          
-          # 克隆 Proton 源代码
-          if [ -z "${PROTON_BRANCH}" ]; then
-            git clone --depth=1 https://github.com/ValveSoftware/wine
-          else
-            git clone --depth=1 https://github.com/ValveSoftware/wine -b "${PROTON_BRANCH}"
-          fi
-          
-          WINE_VERSION="$(cat wine/VERSION | tail -c +14)-$(git -C wine rev-parse --short HEAD)"
-          if [[ "${PROTON_BRANCH}" == "experimental_"* ]] || [ "${PROTON_BRANCH}" = "bleeding-edge" ]; then
-            BUILD_NAME=proton-exp-"${WINE_VERSION}"
-          else
-            BUILD_NAME=proton-"${WINE_VERSION}"
-          fi
-          
-          echo "准备 Wine 源代码..."
-          cd wine
-          dlls/winevulkan/make_vulkan
-          tools/make_requests
-          tools/make_specfiles
-          
-          autoreconf -f
-          cd ..
-          
-          # 第一步：构建 64 位工具集
-          echo "构建 64 位工具集..."
-          export CROSSCC="${CROSSCC_X64}"
-          export CROSSCXX="${CROSSCXX_X64}"
-          export CFLAGS="${CFLAGS_X64}"
-          export CXXFLAGS="${CFLAGS_X64}"
-          
-          mkdir build64-tools
-          cd build64-tools
-          
-          echo "配置 64 位工具集..."
-          if ! build_with_bwrap 64 ../wine/configure \
-            --host="$HOST_X64" \
-            --enable-win64 \
-            --without-oss \
-            --disable-winemenubuilder \
-            --disable-tests \
-            --prefix "${BUILD_DIR}/wine64-tools"; then
-            echo "64位工具集配置失败，检查 config.log:"
-            build_with_bwrap 64 cat config.log | tail -50
-            exit 1
-          fi
-          
-          echo "编译 64 位工具集..."
-          build_with_bwrap 64 make -j$(nproc)
-          cd ..
-          
-          # 第二步：构建 32 位工具集
-          echo "构建 32 位工具集..."
-          export CROSSCC="${CROSSCC_X32}"
-          export CROSSCXX="${CROSSCXX_X32}"
-          export CFLAGS="${CFLAGS_X32}"
-          export CXXFLAGS="${CFLAGS_X32}"
-          
-          mkdir build32-tools
-          cd build32-tools
-          
-          echo "配置 32 位工具集..."
-          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig \
-          build_with_bwrap 32 ../wine/configure \
-            --host="$HOST_X32" \
-            --without-oss \
-            --disable-winemenubuilder \
-            --disable-tests \
-            --prefix "${BUILD_DIR}/wine32-tools"
-          
-          echo "编译 32 位工具集..."
-          build_with_bwrap 32 make -j$(nproc)
-          cd ..
-          
-          # 第三步：构建 64 位 Wine
-          echo "构建 64 位 Wine..."
-          export CROSSCC="${CROSSCC_X64}"
-          export CROSSCXX="${CROSSCXX_X64}"
-          export CFLAGS="${CFLAGS_X64}"
-          export CXXFLAGS="${CFLAGS_X64}"
-          
-          mkdir build64
-          cd build64
-          
-          echo "配置 64 位 Wine..."
-          if ! build_with_bwrap 64 ../wine/configure \
-            --enable-win64 \
-            --host="$HOST_X64" \
-            --with-wine-tools="${BUILD_DIR}/build64-tools" \
-            --without-oss \
-            --disable-winemenubuilder \
-            --disable-tests \
-            --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"; then
-            echo "64位Wine配置失败，检查 config.log:"
-            build_with_bwrap 64 cat config.log | tail -50
-            exit 1
-          fi
-          
-          echo "编译 64 位 Wine..."
-          build_with_bwrap 64 make -j$(nproc) install
-          cd ..
-          
-          # 第四步：构建 32 位 Wine
-          echo "构建 32 位 Wine..."
-          export CROSSCC="${CROSSCC_X32}"
-          export CROSSCXX="${CROSSCXX_X32}"
-          export CFLAGS="${CFLAGS_X32}"
-          export CXXFLAGS="${CFLAGS_X32}"
-          
-          mkdir build32
-          cd build32
-          
-          echo "配置 32 位 Wine..."
-          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig \
-          build_with_bwrap 32 ../wine/configure \
-            --with-wine64="${BUILD_DIR}/build64" \
-            --with-wine-tools="${BUILD_DIR}/build32-tools" \
-            --host="$HOST_X32" \
-            --without-oss \
-            --disable-winemenubuilder \
-            --disable-tests \
-            --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
-          
-          echo "编译 32 位 Wine..."
-          build_with_bwrap 32 make -j$(nproc) install
-          cd ..
-          
-          echo "创建归档文件..."
-          export XZ_OPT="-9 -T 0"
-          
-          # 创建 x86 和 amd64 归档
-          for build in "wine-${BUILD_NAME}-x86" "wine-${BUILD_NAME}-amd64"; do
-            if [ -d "${build}" ]; then
-              tar -Jcf "${build}.tar.xz" "${build}"
-              mv "${build}.tar.xz" "$GITHUB_WORKSPACE"
+            
+            echo "准备 Wine 源代码..."
+            cd wine
+            dlls/winevulkan/make_vulkan
+            tools/make_requests
+            tools/make_specfiles
+            echo "彻底修复 Termux 路径问题..."
+        
+            # 修改所有硬编码的 /tmp 路径
+            find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.in" -o -name "*.spec" \) -exec grep -l "/tmp" {} \; | xargs sed -i 's|/tmp/|/data/data/com.termux/files/usr/tmp/|g'
+        
+            # 修改 server 目录中的特定路径
+            find server -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
+        
+            # 修改其他关键文件
+            find . -name "file.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
+            find . -name "loader.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
+            find . -name "server.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
+        
+            echo "路径修复完成"
+            
+            autoreconf -f
+            cd ..
+            
+            # 第一步：构建主机工具集（在主机上运行的工具）
+            echo "构建主机工具集..."
+            mkdir build-tools
+            cd build-tools
+            
+            echo "配置主机工具集..."
+            # 主机工具集不需要交叉编译，使用主机编译器
+            if ! build_with_bwrap 64 ../wine/configure \
+              --without-oss \
+              --disable-winemenubuilder \
+              --disable-tests \
+              --prefix "${BUILD_DIR}/host-tools"; then
+              echo "主机工具集配置失败，检查 config.log:"
+              build_with_bwrap 64 cat config.log | tail -50
+              exit 1
             fi
-          done
-          
-          echo "Proton 构建完成!"
+            
+            echo "编译主机工具集..."
+            build_with_bwrap 64 make -j$(nproc)
+            cd ..
+            
+            # 第二步：构建 64 位 Wine
+            echo "构建 64 位 Wine..."
+            export CROSSCC="${CROSSCC_X64}"
+            export CROSSCXX="${CROSSCXX_X64}"
+            export CFLAGS="${CFLAGS_X64}"
+            export CXXFLAGS="${CFLAGS_X64}"
+            
+            mkdir build64
+            cd build64
+            
+            echo "配置 64 位 Wine..."
+            if ! build_with_bwrap 64 ../wine/configure \
+              --enable-win64 \
+              --host="$HOST_X64" \
+              --with-wine-tools="${BUILD_DIR}/build-tools" \
+              --without-oss \
+              --disable-winemenubuilder \
+              --disable-tests \
+              --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"; then
+              echo "64位Wine配置失败，检查 config.log:"
+              build_with_bwrap 64 cat config.log | tail -50
+              exit 1
+            fi
+            
+            echo "编译 64 位 Wine..."
+            build_with_bwrap 64 make -j$(nproc) install
+            cd ..
+            
+            # 第三步：构建 32 位 Wine
+            echo "构建 32 位 Wine..."
+            export CROSSCC="${CROSSCC_X32}"
+            export CROSSCXX="${CROSSCXX_X32}"
+            export CFLAGS="${CFLAGS_X32}"
+            export CXXFLAGS="${CFLAGS_X32}"
+            
+            mkdir build32
+            cd build32
+            
+            echo "配置 32 位 Wine..."
+            PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig \
+            build_with_bwrap 32 ../wine/configure \
+              --with-wine64="${BUILD_DIR}/build64" \
+              --with-wine-tools="${BUILD_DIR}/build-tools" \
+              --host="$HOST_X32" \
+              --without-oss \
+              --disable-winemenubuilder \
+              --disable-tests \
+              --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
+            
+            echo "编译 32 位 Wine..."
+            build_with_bwrap 32 make -j$(nproc) install
+            cd ..
+            
+            echo "创建 Proton 归档..."
+            export XZ_OPT="-9 -T 0"
+            
+            # 创建 x86 和 amd64 归档
+            for build in "wine-${BUILD_NAME}-x86" "wine-${BUILD_NAME}-amd64"; do
+              if [ -d "${build}" ]; then
+                        tar -Jcf "${build}.tar.xz" "${build}"
+                        mv "${build}.tar.xz" "$GITHUB_WORKSPACE"
+              fi
+            done
+            
+            echo "Proton 构建完成!"
       
       - name: Generate checksums
         run: |
@@ -566,305 +551,309 @@ jobs:
       
       - name: Build Wine WoW64
         run: |
-          set -e
-          
-          # 设置环境变量
-          export WINE_BRANCH="${{ github.event.inputs.wine_branch || 'staging' }}"
-          export WINE_VERSION="${{ github.event.inputs.wine_version || 'latest' }}"
-          export EXPERIMENTAL_WOW64="true"
-          export BOOTSTRAP_X64="/opt/chroots/bionic64_chroot"
-          export BOOTSTRAP_X32="/opt/chroots/bionic32_chroot"
-          export BUILD_DIR="/tmp/build_wine_${WINE_BRANCH}_${WINE_VERSION}"
-          
-          # 设置构建和目标平台标识
-          export BUILD="x86_64-pc-linux-gnu"
-          export HOST_X64="x86_64-w64-mingw32"
-          export HOST_X32="i686-w64-mingw32"
-          
-          # 验证引导环境路径
-          echo "验证引导环境..."
-          echo "BOOTSTRAP_X64: $BOOTSTRAP_X64"
-          echo "BOOTSTRAP_X32: $BOOTSTRAP_X32"
-          
-          if [ ! -d "$BOOTSTRAP_X64" ] || [ ! -d "$BOOTSTRAP_X32" ]; then
-            echo "错误: 引导环境不存在!"
-            ls -la /opt/chroots/ || echo "无法列出 /opt/chroots/"
-            exit 1
-          fi
-          echo "✓ 引导环境验证成功"
-          
-          # 修复编译器设置 - 不使用绝对路径，让系统自动找到
-          export CC="gcc-11"
-          export CXX="g++-11"
-          export CROSSCC_X32="i686-w64-mingw32-gcc"
-          export CROSSCXX_X32="i686-w64-mingw32-g++"
-          export CROSSCC_X64="x86_64-w64-mingw32-gcc"
-          export CROSSCXX_X64="x86_64-w64-mingw32-g++"
-          
-          export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O2 -ftree-vectorize"
-          export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O2 -ftree-vectorize"
-          export LDFLAGS="-Wl,-O1,--sort-common,--as-needed"
-          
-          export CROSSCFLAGS_X32="${CFLAGS_X32}"
-          export CROSSCFLAGS_X64="${CFLAGS_X64}"
-          export CROSSLDFLAGS="${LDFLAGS}"
-          
-          # 验证编译器 - 在主机环境中测试
-          echo "验证主机编译器..."
-          which gcc-11 || echo "gcc-11 未找到"
-          which g++-11 || echo "g++-11 未找到"
-          which i686-w64-mingw32-gcc || echo "i686-w64-mingw32-gcc 未找到"
-          which x86_64-w64-mingw32-gcc || echo "x86_64-w64-mingw32-gcc 未找到"
-          
-          gcc-11 --version || echo "gcc-11 失败"
-          g++-11 --version || echo "g++-11 失败"
-          i686-w64-mingw32-gcc --version || echo "i686-w64-mingw32-gcc 失败"
-          x86_64-w64-mingw32-gcc --version || echo "x86_64-w64-mingw32-gcc 失败"
-          
-          # 测试简单的编译
-          echo "测试简单编译..."
-          echo 'int main() { return 0; }' > /tmp/test.c
-          gcc-11 -o /tmp/test /tmp/test.c && echo "✓ 主机编译测试成功" || echo "✗ 主机编译测试失败"
-          
-          # 启用 ccache - 简化设置
-          if [ "$USE_CCACHE" = "true" ]; then
-            export CC="ccache gcc-11"
-            export CXX="ccache g++-11"
-            export CROSSCC_X32="ccache i686-w64-mingw32-gcc"
-            export CROSSCXX_X32="ccache i686-w64-mingw32-g++"
-            export CROSSCC_X64="ccache x86_64-w64-mingw32-gcc"
-            export CROSSCXX_X64="ccache x86_64-w64-mingw32-g++"
-          fi
-          
-          # 创建构建目录
-          rm -rf "$BUILD_DIR"
-          mkdir -p "$BUILD_DIR"
-          cd "$BUILD_DIR"
-          
-          # Bubblewrap 函数 - 修复环境变量传递
-          build_with_bwrap() {
-            if [ "${1}" = "32" ]; then
-              BOOTSTRAP_PATH="$BOOTSTRAP_X32"
-              ARCH_SUFFIX="32"
-              LOCAL_HOST="$HOST_X32"
-            else
-              BOOTSTRAP_PATH="$BOOTSTRAP_X64"
-              ARCH_SUFFIX="64"
-              LOCAL_HOST="$HOST_X64"
+            set -e
+            
+            # 设置环境变量
+            export WINE_BRANCH="${{ github.event.inputs.wine_branch || 'staging' }}"
+            export WINE_VERSION="${{ github.event.inputs.wine_version || 'latest' }}"
+            export EXPERIMENTAL_WOW64="true"
+            export BOOTSTRAP_X64="/opt/chroots/bionic64_chroot"
+            export BOOTSTRAP_X32="/opt/chroots/bionic32_chroot"
+            export BUILD_DIR="/tmp/build_wine_${WINE_BRANCH}_${WINE_VERSION}"
+            
+            # 设置构建和目标平台标识
+            export BUILD="x86_64-pc-linux-gnu"
+            export HOST_X64="x86_64-w64-mingw32"
+            export HOST_X32="i686-w64-mingw32"
+            
+            # 验证引导环境路径
+            echo "验证引导环境..."
+            echo "BOOTSTRAP_X64: $BOOTSTRAP_X64"
+            echo "BOOTSTRAP_X32: $BOOTSTRAP_X32"
+            
+            if [ ! -d "$BOOTSTRAP_X64" ] || [ ! -d "$BOOTSTRAP_X32" ]; then
+              echo "错误: 引导环境不存在!"
+              ls -la /opt/chroots/ || echo "无法列出 /opt/chroots/"
+              exit 1
             fi
-          
-            if [ "${1}" = "32" ] || [ "${1}" = "64" ]; then
-              shift
-            fi
-          
-            # 设置架构特定的编译器
-            if [ "$ARCH_SUFFIX" = "32" ]; then
-              LOCAL_CC="$CROSSCC_X32"
-              LOCAL_CXX="$CROSSCXX_X32"
-              LOCAL_CFLAGS="$CFLAGS_X32"
-            else
-              LOCAL_CC="$CROSSCC_X64"
-              LOCAL_CXX="$CROSSCXX_X64"
-              LOCAL_CFLAGS="$CFLAGS_X64"
-            fi
-          
-            bwrap --unshare-user \
-              --ro-bind "${BOOTSTRAP_PATH}" / --dev /dev --ro-bind /sys /sys \
-              --proc /proc --tmpfs /tmp --tmpfs /home --tmpfs /run --tmpfs /var \
-              --tmpfs /mnt --tmpfs /media --bind "${BUILD_DIR}" "${BUILD_DIR}" \
-              --bind-try "${HOME}"/.ccache "${HOME}"/.ccache \
-              --setenv PATH "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin" \
-              --setenv BUILD "$BUILD" \
-              --setenv HOST "$LOCAL_HOST" \
-              --setenv CC "$LOCAL_CC" \
-              --setenv CXX "$LOCAL_CXX" \
-              --setenv CFLAGS "$LOCAL_CFLAGS" \
-              --setenv CXXFLAGS "$LOCAL_CFLAGS" \
-              --setenv LDFLAGS "$LDFLAGS" \
-              "$@"
-          }
-          
-          echo "下载 Wine 源代码..."
-          
-          # 根据分支确定 Wine 源代码
-          if [ "$WINE_BRANCH" = "staging-tkg" ] || [ "$WINE_BRANCH" = "staging-tkg-fsync" ]; then
-            if [ "$WINE_BRANCH" = "staging-tkg" ]; then
-              git clone --depth=1 https://github.com/Kron4ek/wine-tkg wine
-            else
-              git clone --depth=1 https://github.com/Kron4ek/wine-tkg wine -b fsync
-            fi
-            WINE_VERSION="$(cat wine/VERSION | tail -c +14)"
-            BUILD_NAME="${WINE_VERSION}-${WINE_BRANCH}"
-          elif [ "${WINE_VERSION}" = "git" ]; then
-            git clone --depth=1 https://gitlab.winehq.org/wine/wine.git wine
-            BUILD_NAME="${WINE_VERSION}-$(git -C wine rev-parse --short HEAD)"
-          else
-            # 将 "latest" 替换为实际版本
-            if [ "${WINE_VERSION}" = "latest" ] || [ -z "${WINE_VERSION}" ]; then
-              WINE_VERSION="$(wget -q -O - "https://raw.githubusercontent.com/wine-mirror/wine/master/VERSION" | tail -c +14)"
+            echo "✓ 引导环境验证成功"
+            
+            # 修复编译器设置
+            export CC="gcc-11"
+            export CXX="g++-11"
+            export CROSSCC_X32="i686-w64-mingw32-gcc"
+            export CROSSCXX_X32="i686-w64-mingw32-g++"
+            export CROSSCC_X64="x86_64-w64-mingw32-gcc"
+            export CROSSCXX_X64="x86_64-w64-mingw32-g++"
+            
+            export CFLAGS_X32="-march=i686 -msse2 -mfpmath=sse -O2 -ftree-vectorize"
+            export CFLAGS_X64="-march=x86-64 -msse3 -mfpmath=sse -O2 -ftree-vectorize"
+            export LDFLAGS="-Wl,-O1,--sort-common,--as-needed"
+            
+            export CROSSCFLAGS_X32="${CFLAGS_X32}"
+            export CROSSCFLAGS_X64="${CFLAGS_X64}"
+            export CROSSLDFLAGS="${LDFLAGS}"
+            
+            # 验证编译器
+            echo "验证主机编译器..."
+            which gcc-11 || echo "gcc-11 未找到"
+            which g++-11 || echo "g++-11 未找到"
+            which i686-w64-mingw32-gcc || echo "i686-w64-mingw32-gcc 未找到"
+            which x86_64-w64-mingw32-gcc || echo "x86_64-w64-mingw32-gcc 未找到"
+            
+            # 启用 ccache
+            if [ "$USE_CCACHE" = "true" ]; then
+              export CC="ccache gcc-11"
+              export CXX="ccache g++-11"
+              export CROSSCC_X32="ccache i686-w64-mingw32-gcc"
+              export CROSSCXX_X32="ccache i686-w64-mingw32-g++"
+              export CROSSCC_X64="ccache x86_64-w64-mingw32-gcc"
+              export CROSSCXX_X64="ccache x86_64-w64-mingw32-g++"
             fi
             
-            # 确定 URL 版本
-            if [ "$(echo "$WINE_VERSION" | cut -d "." -f2 | cut -c1)" = "0" ]; then
-              WINE_URL_VERSION=$(echo "$WINE_VERSION" | cut -d "." -f 1).0
+            # 创建构建目录
+            rm -rf "$BUILD_DIR"
+            mkdir -p "$BUILD_DIR"
+            cd "$BUILD_DIR"
+            
+            # Bubblewrap 函数
+            build_with_bwrap() {
+              if [ "${1}" = "32" ]; then
+                        BOOTSTRAP_PATH="$BOOTSTRAP_X32"
+                        ARCH_SUFFIX="32"
+                        LOCAL_HOST="$HOST_X32"
+              else
+                        BOOTSTRAP_PATH="$BOOTSTRAP_X64"
+                        ARCH_SUFFIX="64"
+                        LOCAL_HOST="$HOST_X64"
+              fi
+            
+              if [ "${1}" = "32" ] || [ "${1}" = "64" ]; then
+                        shift
+              fi
+            
+              # 设置架构特定的编译器
+              if [ "$ARCH_SUFFIX" = "32" ]; then
+                        LOCAL_CC="$CROSSCC_X32"
+                        LOCAL_CXX="$CROSSCXX_X32"
+                        LOCAL_CFLAGS="$CFLAGS_X32"
+              else
+                        LOCAL_CC="$CROSSCC_X64"
+                        LOCAL_CXX="$CROSSCXX_X64"
+                        LOCAL_CFLAGS="$CFLAGS_X64"
+              fi
+            
+              bwrap --unshare-user \
+                        --ro-bind "${BOOTSTRAP_PATH}" / --dev /dev --ro-bind /sys /sys \
+                        --proc /proc --tmpfs /tmp --tmpfs /home --tmpfs /run --tmpfs /var \
+                        --tmpfs /mnt --tmpfs /media --bind "${BUILD_DIR}" "${BUILD_DIR}" \
+                        --bind-try "${HOME}"/.ccache "${HOME}"/.ccache \
+                        --setenv PATH "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin" \
+                        --setenv BUILD "$BUILD" \
+                        --setenv HOST "$LOCAL_HOST" \
+                        --setenv CC "$LOCAL_CC" \
+                        --setenv CXX "$LOCAL_CXX" \
+                        --setenv CFLAGS "$LOCAL_CFLAGS" \
+                        --setenv CXXFLAGS "$LOCAL_CFLAGS" \
+                        --setenv LDFLAGS "$LDFLAGS" \
+                        "$@"
+            }
+            
+            echo "下载 Wine 源代码..."
+            
+            # 根据分支确定 Wine 源代码
+            if [ "$WINE_BRANCH" = "staging-tkg" ] || [ "$WINE_BRANCH" = "staging-tkg-fsync" ]; then
+              if [ "$WINE_BRANCH" = "staging-tkg" ]; then
+                        git clone --depth=1 https://github.com/Kron4ek/wine-tkg wine
+              else
+                        git clone --depth=1 https://github.com/Kron4ek/wine-tkg wine -b fsync
+              fi
+              WINE_VERSION="$(cat wine/VERSION | tail -c +14)"
+              BUILD_NAME="${WINE_VERSION}-${WINE_BRANCH}"
+            elif [ "${WINE_VERSION}" = "git" ]; then
+              git clone --depth=1 https://gitlab.winehq.org/wine/wine.git wine
+              BUILD_NAME="${WINE_VERSION}-$(git -C wine rev-parse --short HEAD)"
             else
-              WINE_URL_VERSION=$(echo "$WINE_VERSION" | cut --d "." -f 1).x
-            fi
-            
-            BUILD_NAME="${WINE_VERSION}"
-            
-            wget -q --show-progress "https://dl.winehq.org/wine/source/${WINE_URL_VERSION}/wine-${WINE_VERSION}.tar.xz"
-            tar xf "wine-${WINE_VERSION}.tar.xz"
-            mv "wine-${WINE_VERSION}" wine
-            
-            # 如果需要，应用 Staging 补丁
-            if [ "${WINE_BRANCH}" = "staging" ]; then
-              STAGING_VERSION="${WINE_VERSION}"
-              BUILD_NAME="${WINE_VERSION}"-staging
-              
-              wget -q --show-progress "https://github.com/wine-staging/wine-staging/archive/v${STAGING_VERSION}.tar.gz" || \
-                git clone --depth=1 https://github.com/wine-staging/wine-staging wine-staging-"${STAGING_VERSION}"
-              
-              if [ -f v"${STAGING_VERSION}".tar.gz ]; then
-                tar xf v"${STAGING_VERSION}".tar.gz
+              # 将 "latest" 替换为实际版本
+              if [ "${WINE_VERSION}" = "latest" ] || [ -z "${WINE_VERSION}" ]; then
+                        WINE_VERSION="$(wget -q -O - "https://raw.githubusercontent.com/wine-mirror/wine/master/VERSION" | tail -c +14)"
               fi
               
-              cd wine
-              if [ -f ../wine-staging-"${STAGING_VERSION}"/patches/patchinstall.sh ]; then
-                ../wine-staging-"${STAGING_VERSION}"/patches/patchinstall.sh --all
-              elif [ -f ../wine-staging-"${STAGING_VERSION}"/staging/patchinstall.py ]; then
-                ../wine-staging-"${STAGING_VERSION}"/staging/patchinstall.py --all
+              # 确定 URL 版本
+              if [ "$(echo "$WINE_VERSION" | cut -d "." -f2 | cut -c1)" = "0" ]; then
+                        WINE_URL_VERSION=$(echo "$WINE_VERSION" | cut -d "." -f 1).0
+              else
+                        WINE_URL_VERSION=$(echo "$WINE_VERSION" | cut --d "." -f 1).x
               fi
-              cd ..
+              
+              BUILD_NAME="${WINE_VERSION}"
+              
+              wget -q --show-progress "https://dl.winehq.org/wine/source/${WINE_URL_VERSION}/wine-${WINE_VERSION}.tar.xz"
+              tar xf "wine-${WINE_VERSION}.tar.xz"
+              mv "wine-${WINE_VERSION}" wine
+              
+              # 如果需要，应用 Staging 补丁
+              if [ "${WINE_BRANCH}" = "staging" ]; then
+                        STAGING_VERSION="${WINE_VERSION}"
+                        BUILD_NAME="${WINE_VERSION}"-staging
+                        
+                        wget -q --show-progress "https://github.com/wine-staging/wine-staging/archive/v${STAGING_VERSION}.tar.gz" || \
+                          git clone --depth=1 https://github.com/wine-staging/wine-staging wine-staging-"${STAGING_VERSION}"
+                        
+                        if [ -f v"${STAGING_VERSION}".tar.gz ]; then
+                          tar xf v"${STAGING_VERSION}".tar.gz
+                        fi
+                        
+                        cd wine
+                        if [ -f ../wine-staging-"${STAGING_VERSION}"/patches/patchinstall.sh ]; then
+                          ../wine-staging-"${STAGING_VERSION}"/patches/patchinstall.sh --all
+                        elif [ -f ../wine-staging-"${STAGING_VERSION}"/staging/patchinstall.py ]; then
+                          ../wine-staging-"${STAGING_VERSION}"/staging/patchinstall.py --all
+                        fi
+                        cd ..
+              fi
             fi
-          fi
-          
-          echo "准备 Wine 源代码..."
-          cd wine
-          dlls/winevulkan/make_vulkan
-          tools/make_requests
-          tools/make_specfiles
-          
-          # 修复 Termux 路径问题（如果需要）
-          if [ -n "$TERMUX_VERSION" ]; then
-            echo "修复 Termux 路径问题..."
+            
+            echo "准备 Wine 源代码..."
+            cd wine
+            dlls/winevulkan/make_vulkan
+            tools/make_requests
+            tools/make_specfiles
+            echo "彻底修复 Termux 路径问题..."
+        
+            # 修改所有硬编码的 /tmp 路径
             find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.in" -o -name "*.spec" \) -exec grep -l "/tmp" {} \; | xargs sed -i 's|/tmp/|/data/data/com.termux/files/usr/tmp/|g'
+        
+            # 修改 server 目录中的特定路径
             find server -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
+        
+            # 修改其他关键文件
             find . -name "file.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
             find . -name "loader.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
             find . -name "server.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
+        
             echo "路径修复完成"
-          fi
             
-          autoreconf -f
-          cd ..
-          
-          # 构建 64 位
-          echo "构建 64 位 Wine..."
-          export CROSSCC="${CROSSCC_X64}"
-          export CROSSCXX="${CROSSCXX_X64}"
-          export CFLAGS="${CFLAGS_X64}"
-          export CXXFLAGS="${CFLAGS_X64}"
-          export CROSSCFLAGS="${CROSSCFLAGS_X64}"
-          export CROSSCXXFLAGS="${CROSSCFLAGS_X64}"
-          
-          mkdir build64
-          cd build64
-          
-          # 首先测试在 chroot 环境中编译
-          echo "测试在 chroot 环境中编译..."
-          build_with_bwrap 64 sh -c 'echo "int main(){return 0;}" > test.c && gcc -o test test.c && echo "✓ Chroot 编译测试成功" || echo "✗ Chroot 编译测试失败"'
-
-          # 运行配置，添加 --host 参数明确指定交叉编译
-          echo "配置 64 位 Wine..."
-          if ! build_with_bwrap 64 ../wine/configure \
-            --enable-win64 \
-            --host="$HOST_X64" \
-            --without-oss \
-            --disable-winemenubuilder \
-            --disable-tests \
-            --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"; then
-            echo "配置失败，检查 config.log:"
-            build_with_bwrap 64 cat config.log | tail -50
-            exit 1
-          fi
-          
-          echo "编译 64 位 Wine..."
-          build_with_bwrap 64 make -j$(nproc) install
-          cd ..
-          
-          # 构建 32 位工具
-          echo "构建 32 位工具..."
-          export CROSSCC="${CROSSCC_X32}"
-          export CROSSCXX="${CROSSCXX_X32}"
-          export CFLAGS="${CFLAGS_X32}"
-          export CXXFLAGS="${CFLAGS_X32}"
-          export CROSSCFLAGS="${CROSSCFLAGS_X32}"
-          export CROSSCXXFLAGS="${CROSSCFLAGS_X32}"
-          
-          mkdir build32-tools
-          cd build32-tools
-          echo "配置 32 位工具..."
-          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig \
-          build_with_bwrap 32 ../wine/configure \
-            --host="$HOST_X32" \
-            --without-oss \
-            --disable-winemenubuilder \
-            --disable-tests \
-            --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
-          
-          echo "编译 32 位工具..."
-          build_with_bwrap 32 make -j$(nproc) install
-          cd ..
-          
-          # 构建 32 位 Wine
-          echo "构建 32 位 Wine..."
-          export CFLAGS="${CFLAGS_X64}"
-          export CXXFLAGS="${CFLAGS_X64}"
-          export CROSSCFLAGS="${CROSSCFLAGS_X64}"
-          export CROSSCXXFLAGS="${CROSSCFLAGS_X64}"
-          
-          mkdir build32
-          cd build32
-          echo "配置 32 位 Wine..."
-          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig \
-          build_with_bwrap 32 ../wine/configure \
-            --with-wine64="${BUILD_DIR}/build64" \
-            --with-wine-tools="${BUILD_DIR}/build32-tools" \
-            --host="$HOST_X32" \
-            --without-oss \
-            --disable-winemenubuilder \
-            --disable-tests \
-            --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
-          
-          echo "编译 32 位 Wine..."
-          build_with_bwrap 32 make -j$(nproc) install
-          cd ..
-          
-          echo "创建 WoW64 归档..."
-          export XZ_OPT="-9 -T 0"
-          
-          # 创建 WoW64 构建
-          if [ -d "wine-${BUILD_NAME}-amd64" ]; then
-            cp -r "wine-${BUILD_NAME}-amd64" "wine-${BUILD_NAME}-WoW64"
+            autoreconf -f
+            cd ..
             
-            # 转换为 WoW64
-            if [ -f "wine-${BUILD_NAME}-WoW64/bin/wine64" ]; then
-              rm -f "wine-${BUILD_NAME}-WoW64/bin/wine" "wine-${BUILD_NAME}-WoW64/bin/wine-preloader"
-              cp "wine-${BUILD_NAME}-WoW64/bin/wine64" "wine-${BUILD_NAME}-WoW64/bin/wine"
+            # 第一步：构建主机工具集（在主机上运行的工具）
+            echo "构建主机工具集..."
+            mkdir build-tools
+            cd build-tools
+            
+            echo "配置主机工具集..."
+            # 主机工具集不需要交叉编译，使用主机编译器
+            if ! build_with_bwrap 64 ../wine/configure \
+              --without-oss \
+              --disable-winemenubuilder \
+              --disable-tests \
+              --prefix "${BUILD_DIR}/host-tools"; then
+              echo "主机工具集配置失败，检查 config.log:"
+              build_with_bwrap 64 cat config.log | tail -50
+              exit 1
             fi
             
-            rm -rf "wine-${BUILD_NAME}-WoW64/lib/wine/i386-unix"
+            echo "编译主机工具集..."
+            build_with_bwrap 64 make -j$(nproc)
+            cd ..
             
-            # 删除非 WoW64 构建
-            rm -rf "wine-${BUILD_NAME}-x86"
-            rm -rf "wine-${BUILD_NAME}-amd64"
+            # 第二步：构建 64 位 Wine
+            echo "构建 64 位 Wine..."
+            export CROSSCC="${CROSSCC_X64}"
+            export CROSSCXX="${CROSSCXX_X64}"
+            export CFLAGS="${CFLAGS_X64}"
+            export CXXFLAGS="${CFLAGS_X64}"
             
-            tar -Jcf "wine-${BUILD_NAME}-WoW64.tar.xz" "wine-${BUILD_NAME}-WoW64"
-            mv "wine-${BUILD_NAME}-WoW64.tar.xz" "$GITHUB_WORKSPACE"
-          fi
-          
-          echo "Wine WoW64 构建完成!"
+            mkdir build64
+            cd build64
+            
+            echo "配置 64 位 Wine..."
+            if ! build_with_bwrap 64 ../wine/configure \
+              --enable-win64 \
+              --host="$HOST_X64" \
+              --with-wine-tools="${BUILD_DIR}/build-tools" \
+              --without-oss \
+              --disable-winemenubuilder \
+              --disable-tests \
+              --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"; then
+              echo "64位Wine配置失败，检查 config.log:"
+              build_with_bwrap 64 cat config.log | tail -50
+              exit 1
+            fi
+            
+            echo "编译 64 位 Wine..."
+            build_with_bwrap 64 make -j$(nproc) install
+            cd ..
+            
+            # 第三步：构建 32 位 Wine
+            echo "构建 32 位 Wine..."
+            export CROSSCC="${CROSSCC_X32}"
+            export CROSSCXX="${CROSSCXX_X32}"
+            export CFLAGS="${CFLAGS_X32}"
+            export CXXFLAGS="${CFLAGS_X32}"
+            
+            mkdir build32
+            cd build32
+            
+            echo "配置 32 位 Wine..."
+            PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig \
+            build_with_bwrap 32 ../wine/configure \
+              --with-wine64="${BUILD_DIR}/build64" \
+              --with-wine-tools="${BUILD_DIR}/build-tools" \
+              --host="$HOST_X32" \
+              --without-oss \
+              --disable-winemenubuilder \
+              --disable-tests \
+              --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
+            
+            echo "编译 32 位 Wine..."
+            build_with_bwrap 32 make -j$(nproc) install
+            cd ..
+            
+            echo "创建 WoW64 归档..."
+            export XZ_OPT="-9 -T 0"
+            
+            # 创建 WoW64 构建
+            if [ -d "wine-${BUILD_NAME}-amd64" ] && [ -d "wine-${BUILD_NAME}-x86" ]; then
+              # 创建 WoW64 目录结构
+              mkdir -p "wine-${BUILD_NAME}-WoW64"
+              
+              # 复制 64 位文件
+              cp -r "wine-${BUILD_NAME}-amd64"/* "wine-${BUILD_NAME}-WoW64"/
+              
+              # 复制 32 位文件到相应位置
+              cp -r "wine-${BUILD_NAME}-x86/bin"/* "wine-${BUILD_NAME}-WoW64/bin/" 2>/dev/null || true
+              cp -r "wine-${BUILD_NAME}-x86/lib"/* "wine-${BUILD_NAME}-WoW64/lib/" 2>/dev/null || true
+              cp -r "wine-${BUILD_NAME}-x86/share"/* "wine-${BUILD_NAME}-WoW64/share/" 2>/dev/null || true
+              cp -r "wine-${BUILD_NAME}-x86/include"/* "wine-${BUILD_NAME}-WoW64/include/" 2>/dev/null || true
+              
+              # 设置 WoW64 结构
+              if [ -f "wine-${BUILD_NAME}-WoW64/bin/wine64" ]; then
+                        # 创建 wine 链接指向 wine64
+                        cd "wine-${BUILD_NAME}-WoW64/bin"
+                        rm -f wine wine-preloader
+                        cp wine64 wine
+                        cd "$BUILD_DIR"
+              fi
+              
+              # 清理不必要的文件
+              rm -rf "wine-${BUILD_NAME}-WoW64/lib/wine/i386-unix"/*.a 2>/dev/null || true
+              
+              # 创建归档
+              tar -Jcf "wine-${BUILD_NAME}-WoW64.tar.xz" "wine-${BUILD_NAME}-WoW64"
+              mv "wine-${BUILD_NAME}-WoW64.tar.xz" "$GITHUB_WORKSPACE"
+              
+              # 清理临时文件
+              rm -rf "wine-${BUILD_NAME}-x86"
+              rm -rf "wine-${BUILD_NAME}-amd64"
+            else
+              echo "错误: 无法找到构建的Wine目录"
+              ls -la "$BUILD_DIR"
+              exit 1
+            fi
+            
+            echo "Wine WoW64 构建完成!"
       
       - name: Generate checksums
         run: |
