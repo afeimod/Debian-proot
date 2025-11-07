@@ -27,7 +27,7 @@ jobs:
         sudo apt update
         sudo apt-get build-dep mesa -y
         # VirGL额外依赖
-        sudo apt-get install -y libepoxy-dev libgbm-dev
+        sudo apt-get install -y libepoxy-dev libgbm-dev meson ninja-build
 
     - name: 克隆 Mesa
       run: |
@@ -52,7 +52,7 @@ jobs:
           -D glvnd=disabled \
           -D gallium-drivers=virgl,swrast \
           -D vulkan-drivers=[] \
-          -D dri-drivers= \
+          -D dri3=enabled \
           -D llvm=disabled \
           -D glx=xlib \
           -D glx-direct=true \
