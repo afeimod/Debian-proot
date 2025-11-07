@@ -400,31 +400,37 @@ jobs:
             COMMIT_HASH=$(git rev-parse --short HEAD)
             BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${COMMIT_HASH}-staging-wow64"
             
-            # 修复 staging 补丁版本获取
+            # 修复：从 wine-X.Y 格式中提取纯版本号
+            PURE_VERSION=$(echo "$WINE_VERSION_ACTUAL" | sed 's/^wine-//')
+            echo "提取的纯版本号: $PURE_VERSION"
+            
             # 使用正确的版本格式：vX.Y 而不是 wine-X.Y
-            STAGING_VERSION="v${WINE_VERSION_ACTUAL}"
+            STAGING_VERSION="v${PURE_VERSION}"
             echo "尝试下载 staging 补丁版本: $STAGING_VERSION"
             
-            # 下载并应用 staging 补丁
-            wget -O wine-staging-${WINE_VERSION_ACTUAL}.tar.gz https://github.com/wine-staging/wine-staging/archive/refs/tags/${STAGING_VERSION}.tar.gz || \
-            wget -O wine-staging-${WINE_VERSION_ACTUAL}.tar.gz https://github.com/wine-staging/wine-staging/archive/refs/tags/v${WINE_VERSION_ACTUAL}.tar.gz
+            # 下载并应用 staging 补丁 - 修复版本格式
+            wget -O wine-staging-${PURE_VERSION}.tar.gz https://github.com/wine-staging/wine-staging/archive/refs/tags/${STAGING_VERSION}.tar.gz || \
+            wget -O wine-staging-${PURE_VERSION}.tar.gz https://github.com/wine-staging/wine-staging/archive/refs/tags/v${PURE_VERSION}.tar.gz
             
-            if [ -f "wine-staging-${WINE_VERSION_ACTUAL}.tar.gz" ]; then
-              tar -xzf wine-staging-${WINE_VERSION_ACTUAL}.tar.gz
+            if [ -f "wine-staging-${PURE_VERSION}.tar.gz" ]; then
+              tar -xzf wine-staging-${PURE_VERSION}.tar.gz
               
-              # 应用 staging 补丁
-              if [ -d "wine-staging-${WINE_VERSION_ACTUAL}" ]; then
-                cd wine-staging-${WINE_VERSION_ACTUAL}/staging
+              # 应用 staging 补丁 - 修复目录名
+              if [ -d "wine-staging-${STAGING_VERSION}" ]; then
+                cd wine-staging-${STAGING_VERSION}/staging
                 chmod +x patchinstall.py
                 ./patchinstall.py --all --destdir=../../
                 cd ../..
-              elif [ -d "wine-staging-v${WINE_VERSION_ACTUAL}" ]; then
-                cd wine-staging-v${WINE_VERSION_ACTUAL}/staging
+              elif [ -d "wine-staging-v${PURE_VERSION}" ]; then
+                cd wine-staging-v${PURE_VERSION}/staging
                 chmod +x patchinstall.py
                 ./patchinstall.py --all --destdir=../../
                 cd ../..
               else
                 echo "警告: 未找到预期的 staging 目录结构，跳过补丁应用"
+                # 列出当前目录查看实际结构
+                echo "当前目录内容:"
+                ls -la
               fi
             else
               echo "警告: 无法下载 staging 补丁，继续构建无补丁版本"
@@ -466,10 +472,13 @@ jobs:
           echo "路径修复完成"
           
           # 根据版本选择修复方式
-          VERSION_MAJOR=$(echo $WINE_VERSION_ACTUAL | cut -d. -f1)
-          VERSION_MINOR=$(echo $WINE_VERSION_ACTUAL | cut -d. -f2)
+          # 从 WINE_VERSION_ACTUAL 中提取纯数字版本号
+          PURE_VERSION=$(echo "$WINE_VERSION_ACTUAL" | sed 's/^wine-//')
+          VERSION_MAJOR=$(echo $PURE_VERSION | cut -d. -f1)
+          VERSION_MINOR=$(echo $PURE_VERSION | cut -d. -f2)
           
           echo "Wine 版本: $WINE_VERSION_ACTUAL"
+          echo "纯版本号: $PURE_VERSION"
           echo "主版本: $VERSION_MAJOR, 次版本: $VERSION_MINOR"
           
           # 判断版本是否 >= 9.10
