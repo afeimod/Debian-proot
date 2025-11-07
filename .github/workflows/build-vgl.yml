@@ -59,10 +59,10 @@ jobs:
           -D gallium-drivers=virgl,d3d12 \
           -D vulkan-drivers=[] \
           -D llvm=disabled \
-          -D glx=xlib \
+          -D xlib-lease=enabled \
+          -D glx=dri \
           -D glx-direct=true \
           -D gbm=enabled \
-          -D egl=enabled \
           -D shared-glapi=enabled
 
         ninja -C builddir
