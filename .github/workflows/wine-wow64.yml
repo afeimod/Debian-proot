@@ -172,7 +172,7 @@ jobs:
               echo "✗ 引导环境创建失败"
               exit 1
             fi
-      
+
       - name: Build Proton
         run: |
           set -e
@@ -200,7 +200,7 @@ jobs:
           fi
           echo "✓ 引导环境验证成功"
           
-          # 修复编译器设置 - 不使用绝对路径，让系统自动找到
+          # 修复编译器设置
           export CC="gcc-11"
           export CXX="g++-11"
           export CROSSCC_X32="i686-w64-mingw32-gcc"
@@ -216,24 +216,14 @@ jobs:
           export CROSSCFLAGS_X64="${CFLAGS_X64}"
           export CROSSLDFLAGS="${LDFLAGS}"
           
-          # 验证编译器 - 在主机环境中测试
+          # 验证编译器
           echo "验证主机编译器..."
           which gcc-11 || echo "gcc-11 未找到"
           which g++-11 || echo "g++-11 未找到"
           which i686-w64-mingw32-gcc || echo "i686-w64-mingw32-gcc 未找到"
           which x86_64-w64-mingw32-gcc || echo "x86_64-w64-mingw32-gcc 未找到"
           
-          gcc-11 --version || echo "gcc-11 失败"
-          g++-11 --version || echo "g++-11 失败"
-          i686-w64-mingw32-gcc --version || echo "i686-w64-mingw32-gcc 失败"
-          x86_64-w64-mingw32-gcc --version || echo "x86_64-w64-mingw32-gcc 失败"
-          
-          # 测试简单的编译
-          echo "测试简单编译..."
-          echo 'int main() { return 0; }' > /tmp/test.c
-          gcc-11 -o /tmp/test /tmp/test.c && echo "✓ 主机编译测试成功" || echo "✗ 主机编译测试失败"
-          
-          # 启用 ccache - 简化设置
+          # 启用 ccache
           if [ "$USE_CCACHE" = "true" ]; then
             export CC="ccache gcc-11"
             export CXX="ccache g++-11"
@@ -248,7 +238,7 @@ jobs:
           mkdir -p "$BUILD_DIR"
           cd "$BUILD_DIR"
           
-          # Bubblewrap 函数 - 修复环境变量传递
+          # Bubblewrap 函数
           build_with_bwrap() {
             if [ "${1}" = "32" ]; then
               BOOTSTRAP_PATH="$BOOTSTRAP_X32"
@@ -313,46 +303,79 @@ jobs:
           tools/make_requests
           tools/make_specfiles
           
-          # 修复 Termux 路径问题（如果需要）
-          if [ -n "$TERMUX_VERSION" ]; then
-            echo "修复 Termux 路径问题..."
-            find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.in" -o -name "*.spec" \) -exec grep -l "/tmp" {} \; | xargs sed -i 's|/tmp/|/data/data/com.termux/files/usr/tmp/|g'
-            find server -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
-            find . -name "file.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
-            find . -name "loader.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
-            find . -name "server.c" -exec sed -i 's|"/tmp"|"/data/data/com.termux/files/usr/tmp"|g' {} +
-            echo "路径修复完成"
-          fi
-            
           autoreconf -f
           cd ..
           
-          # 构建 64 位
+          # 第一步：构建 64 位工具集
+          echo "构建 64 位工具集..."
+          export CROSSCC="${CROSSCC_X64}"
+          export CROSSCXX="${CROSSCXX_X64}"
+          export CFLAGS="${CFLAGS_X64}"
+          export CXXFLAGS="${CFLAGS_X64}"
+          
+          mkdir build64-tools
+          cd build64-tools
+          
+          echo "配置 64 位工具集..."
+          if ! build_with_bwrap 64 ../wine/configure \
+            --host="$HOST_X64" \
+            --enable-win64 \
+            --without-oss \
+            --disable-winemenubuilder \
+            --disable-tests \
+            --prefix "${BUILD_DIR}/wine64-tools"; then
+            echo "64位工具集配置失败，检查 config.log:"
+            build_with_bwrap 64 cat config.log | tail -50
+            exit 1
+          fi
+          
+          echo "编译 64 位工具集..."
+          build_with_bwrap 64 make -j$(nproc)
+          cd ..
+          
+          # 第二步：构建 32 位工具集
+          echo "构建 32 位工具集..."
+          export CROSSCC="${CROSSCC_X32}"
+          export CROSSCXX="${CROSSCXX_X32}"
+          export CFLAGS="${CFLAGS_X32}"
+          export CXXFLAGS="${CFLAGS_X32}"
+          
+          mkdir build32-tools
+          cd build32-tools
+          
+          echo "配置 32 位工具集..."
+          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig \
+          build_with_bwrap 32 ../wine/configure \
+            --host="$HOST_X32" \
+            --without-oss \
+            --disable-winemenubuilder \
+            --disable-tests \
+            --prefix "${BUILD_DIR}/wine32-tools"
+          
+          echo "编译 32 位工具集..."
+          build_with_bwrap 32 make -j$(nproc)
+          cd ..
+          
+          # 第三步：构建 64 位 Wine
           echo "构建 64 位 Wine..."
           export CROSSCC="${CROSSCC_X64}"
           export CROSSCXX="${CROSSCXX_X64}"
           export CFLAGS="${CFLAGS_X64}"
           export CXXFLAGS="${CFLAGS_X64}"
-          export CROSSCFLAGS="${CROSSCFLAGS_X64}"
-          export CROSSCXXFLAGS="${CROSSCFLAGS_X64}"
           
           mkdir build64
           cd build64
           
-          # 首先测试在 chroot 环境中编译
-          echo "测试在 chroot 环境中编译..."
-          build_with_bwrap 64 sh -c 'echo "int main(){return 0;}" > test.c && gcc -o test test.c && echo "✓ Chroot 编译测试成功" || echo "✗ Chroot 编译测试失败"'
-
-          # 运行配置，添加 --host 参数明确指定交叉编译
           echo "配置 64 位 Wine..."
           if ! build_with_bwrap 64 ../wine/configure \
             --enable-win64 \
             --host="$HOST_X64" \
+            --with-wine-tools="${BUILD_DIR}/build64-tools" \
             --without-oss \
             --disable-winemenubuilder \
             --disable-tests \
             --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"; then
-            echo "配置失败，检查 config.log:"
+            echo "64位Wine配置失败，检查 config.log:"
             build_with_bwrap 64 cat config.log | tail -50
             exit 1
           fi
@@ -361,39 +384,16 @@ jobs:
           build_with_bwrap 64 make -j$(nproc) install
           cd ..
           
-          # 构建 32 位工具
-          echo "构建 32 位工具..."
+          # 第四步：构建 32 位 Wine
+          echo "构建 32 位 Wine..."
           export CROSSCC="${CROSSCC_X32}"
           export CROSSCXX="${CROSSCXX_X32}"
           export CFLAGS="${CFLAGS_X32}"
           export CXXFLAGS="${CFLAGS_X32}"
-          export CROSSCFLAGS="${CROSSCFLAGS_X32}"
-          export CROSSCXXFLAGS="${CROSSCFLAGS_X32}"
-          
-          mkdir build32-tools
-          cd build32-tools
-          echo "配置 32 位工具..."
-          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig \
-          build_with_bwrap 32 ../wine/configure \
-            --host="$HOST_X32" \
-            --without-oss \
-            --disable-winemenubuilder \
-            --disable-tests \
-            --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
-          
-          echo "编译 32 位工具..."
-          build_with_bwrap 32 make -j$(nproc) install
-          cd ..
-          
-          # 构建 32 位 Wine
-          echo "构建 32 位 Wine..."
-          export CFLAGS="${CFLAGS_X64}"
-          export CXXFLAGS="${CFLAGS_X64}"
-          export CROSSCFLAGS="${CROSSCFLAGS_X64}"
-          export CROSSCXXFLAGS="${CROSSCFLAGS_X64}"
           
           mkdir build32
           cd build32
+          
           echo "配置 32 位 Wine..."
           PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/lib/i386-linux-gnu/pkgconfig \
           build_with_bwrap 32 ../wine/configure \
@@ -403,7 +403,7 @@ jobs:
             --without-oss \
             --disable-winemenubuilder \
             --disable-tests \
-            --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-amd64"
+            --prefix "${BUILD_DIR}/wine-${BUILD_NAME}-x86"
           
           echo "编译 32 位 Wine..."
           build_with_bwrap 32 make -j$(nproc) install
