@@ -1,5 +1,3 @@
-[file name]: wine-wow64-no.yml
-[file content begin]
 name: Wine and Proton 无bootBuilder
 
 on:
@@ -590,4 +588,3 @@ jobs:
             ${{ github.workspace }}/*.tar.xz
             ${{ github.workspace }}/checksums.txt
           retention-days: 30
-[file content end]
