@@ -1,4 +1,4 @@
-name: Build MangoHud (aarch64, Termux glibc)
+name: Build MangoHud (aarch64)
 
 on:
   workflow_dispatch:
@@ -151,7 +151,7 @@ jobs:
           fi
 
       # 🏗️ 构建 MangoHud
-      - name: 构建 MangoHud (Termux glibc)
+      - name: 构建 MangoHud (arm64)
         run: |
           cd MangoHud
           sudo mkdir -p /usr
@@ -196,9 +196,9 @@ jobs:
       # 📦 打包结果
       - name: 打包构建产物
         run: |
-          cd /usr
-          TAR_NAME="termux-glibc-mangohud-${{ env.VERSION }}-aarch64.tar.gz"
-          tar -czvf /home/runner/$TAR_NAME glibc
+          cd /
+          TAR_NAME="termux-mangohud-${{ env.VERSION }}-aarch64.tar.gz"
+          tar -czvf /home/runner/$TAR_NAME usr
           echo "TAR_NAME=$TAR_NAME" >> $GITHUB_ENV
           echo "📦 打包完成: $TAR_NAME"
 
