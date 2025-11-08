@@ -154,10 +154,10 @@ jobs:
       - name: 构建 MangoHud (arm64)
         run: |
           cd MangoHud
-          sudo mkdir -p /usr
-          sudo chmod -R 777 /usr
+          sudo mkdir -p /opt/mesa
+          sudo chmod -R 777 /opt/mesa
           meson setup build \
-            --prefix=/usr \
+            --prefix=/opt/mesa \
             --libdir=lib \
             -Dbuildtype=release \
             -Dwith_x11=enabled \
@@ -174,7 +174,7 @@ jobs:
       # 🔧 修正 $LIB 变量
       - name: 修正 MangoHud 启动脚本
         run: |
-          ROOT=/usr
+          ROOT=/opt/mesa
           if [ -f "$ROOT/bin/mangohud" ]; then
             sed -i 's|/\\$LIB|/lib|g' "$ROOT/bin/mangohud"
           fi
@@ -182,7 +182,7 @@ jobs:
       # 🧱 修补 ELF 解释器
       - name: 修补 ELF 可执行文件
         run: |
-          ROOT=/usr
+          ROOT=/opt/mesa
           INTERP=$ROOT/lib/ld-linux-aarch64.so.1
           for dir in "$ROOT/bin" "$ROOT/lib"; do
             [ -d "$dir" ] || continue
@@ -196,9 +196,9 @@ jobs:
       # 📦 打包结果
       - name: 打包构建产物
         run: |
-          cd /
+          cd /opt
           TAR_NAME="termux-mangohud-${{ env.VERSION }}-aarch64.tar.gz"
-          tar -czvf /home/runner/$TAR_NAME usr
+          tar -czvf /home/runner/$TAR_NAME mesa
           echo "TAR_NAME=$TAR_NAME" >> $GITHUB_ENV
           echo "📦 打包完成: $TAR_NAME"
 
