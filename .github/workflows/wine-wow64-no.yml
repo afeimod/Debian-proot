@@ -40,17 +40,18 @@ on:
         required: false
         default: 'latest'
         type: string
-  release:
-    types: [published]
 
 env:
   USE_CCACHE: true
   BUILD_DIR: /tmp/build_wine
 
+permissions:
+  contents: write  # 允许 GITHUB_TOKEN 创建 Release
+
 jobs:
   build-proton:
     runs-on: ubuntu-24.04
-    if: github.event.inputs.build_type == 'proton' || (github.event_name == 'schedule' && github.event.schedule == '0 0 1,15 * *') || github.event_name == 'release'
+    if: github.event.inputs.build_type == 'proton' || (github.event_name == 'schedule' && github.event.schedule == '0 0 1,15 * *')
     timeout-minutes: 180
     
     steps:
@@ -263,31 +264,46 @@ jobs:
             ${{ github.workspace }}/checksums.txt
           retention-days: 30
 
-      - name: Upload Proton Release Assets
-        if: github.event_name == 'release'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: 发布 Proton 到 GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'proton'
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ${{ github.workspace }}/${{ env.BUILD_NAME }}.tar.xz
-          asset_name: ${{ env.BUILD_NAME }}.tar.xz
-          asset_content_type: application/x-xz
+          tag_name: proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-wow64
+          name: Proton ${{ github.event.inputs.proton_branch || 'proton_10.0' }} (WOW64 with Vulkan & GStreamer for Termux)
+          body: |
+            # Proton ${{ github.event.inputs.proton_branch || 'proton_10.0' }} - WOW64 with Vulkan & GStreamer for Termux
+            
+            ## 版本信息
+            - **Proton 分支**: ${{ github.event.inputs.proton_branch || 'proton_10.0' }}
+            - **架构**: True WOW64 (同时支持 32 位和 64 位 Windows 应用程序)
+            - **平台**: Termux (Android)
+            - **图形 API**: Vulkan 支持已启用
+            - **多媒体**: 完整 GStreamer 支持
+            
+            ## 特性
+            ✓ 真正的 WOW64 架构
+            ✓ 同时支持 32 位和 64 位 Windows 应用程序
+            ✓ Vulkan 图形 API 支持
+            ✓ 完整的 GStreamer 支持
+            ✓ 中文环境支持
+            ✓ 基于 Valve Proton，专为游戏优化
+            
+            ## 安装说明
+            解压后，将 `${{ env.BUILD_NAME }}` 文件夹放置在 Termux 的合适位置，并设置环境变量。
 
-      - name: Upload Checksums to Release
-        if: github.event_name == 'release'
-        uses: actions/upload-release-asset@v1
+            ## 构建信息
+            - 构建时间: ${{ github.event.head_commit.timestamp }}
+            - 提交: ${{ github.sha }}
+            - 工作流: ${{ github.workflow }}
+          files: |
+            ${{ github.workspace }}/${{ env.BUILD_NAME }}.tar.xz
+            ${{ github.workspace }}/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ${{ github.workspace }}/checksums.txt
-          asset_name: checksums.txt
-          asset_content_type: text/plain
 
   build-wine-wow64:
     runs-on: ubuntu-24.04
-    if: github.event.inputs.build_type == 'wine-wow64' || (github.event_name == 'schedule' && github.event.schedule == '0 2 5,20 * *') || github.event_name == 'release'
+    if: github.event.inputs.build_type == 'wine-wow64' || (github.event_name == 'schedule' && github.event.schedule == '0 2 5,20 * *')
     timeout-minutes: 180
     
     steps:
@@ -625,24 +641,40 @@ jobs:
             ${{ github.workspace }}/checksums.txt
           retention-days: 30
 
-      - name: Upload Wine Release Assets
-        if: github.event_name == 'release'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: 发布 Wine 到 GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'wine-wow64'
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ${{ github.workspace }}/${{ env.BUILD_NAME }}.tar.xz
-          asset_name: ${{ env.BUILD_NAME }}.tar.xz
-          asset_content_type: application/x-xz
+          tag_name: wine-${{ github.event.inputs.wine_branch || 'staging' }}-${{ github.event.inputs.wine_version || 'latest' }}-wow64
+          name: Wine ${{ github.event.inputs.wine_branch || 'staging' }} ${{ github.event.inputs.wine_version || 'latest' }} (WOW64 with Vulkan & GStreamer for Termux)
+          body: |
+            # Wine ${{ github.event.inputs.wine_branch || 'staging' }} ${{ github.event.inputs.wine_version || 'latest' }} - WOW64 with Vulkan & GStreamer for Termux
+            
+            ## 版本信息
+            - **Wine 分支**: ${{ github.event.inputs.wine_branch || 'staging' }}
+            - **Wine 版本**: ${{ github.event.inputs.wine_version || 'latest' }}
+            - **架构**: True WOW64 (同时支持 32 位和 64 位 Windows 应用程序)
+            - **平台**: Termux (Android)
+            - **图形 API**: Vulkan 支持已启用
+            - **多媒体**: 完整 GStreamer 支持
+            
+            ## 特性
+            ✓ 真正的 WOW64 架构
+            ✓ 同时支持 32 位和 64 位 Windows 应用程序
+            ✓ Vulkan 图形 API 支持
+            ✓ 完整的 GStreamer 支持
+            ✓ 中文环境支持
+            ✓ 应用了关键补丁提升兼容性
+            
+            ## 安装说明
+            解压后，将 `${{ env.BUILD_NAME }}` 文件夹放置在 Termux 的合适位置，并设置环境变量。
 
-      - name: Upload Wine Checksums to Release
-        if: github.event_name == 'release'
-        uses: actions/upload-release-asset@v1
+            ## 构建信息
+            - 构建时间: ${{ github.event.head_commit.timestamp }}
+            - 提交: ${{ github.sha }}
+            - 工作流: ${{ github.workflow }}
+          files: |
+            ${{ github.workspace }}/${{ env.BUILD_NAME }}.tar.xz
+            ${{ github.workspace }}/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ${{ github.workspace }}/checksums.txt
-          asset_name: checksums.txt
-          asset_content_type: text/plain
