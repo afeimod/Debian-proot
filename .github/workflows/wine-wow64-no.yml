@@ -126,16 +126,7 @@ jobs:
               libgstreamer-plugins-base1.0-dev \
               libgstreamer-plugins-good1.0-dev \
               libgstreamer-plugins-bad1.0-dev \
-              gstreamer1.0-plugins-base \
-              gstreamer1.0-plugins-good \
-              gstreamer1.0-plugins-bad \
-              gstreamer1.0-plugins-ugly \
-              gstreamer1.0-libav \
-              gstreamer1.0-pulseaudio \
-              gstreamer1.0-alsa \
-              gstreamer1.0-gl \
-              gstreamer1.0-qt5 \
-              gstreamer1.0-gtk3 \
+              gstreamer1.0-* \
               libmpg123-dev \
               libopenal-dev \
               libfaad-dev \
@@ -155,94 +146,95 @@ jobs:
 
       - name: 构建 Proton WOW64 版本
         run: |
-          set -e
-          
-          echo "开始构建 Proton WOW64 版本..."
-          echo "分支: ${{ github.event.inputs.proton_branch || 'proton_10.0' }}"
-          
-          # 设置中文构建环境
-          export LANG=zh_CN.UTF-8
-          export LC_ALL=zh_CN.UTF-8
-          export LANGUAGE=zh_CN:zh:en_US:en
-          
-          # 清理并创建构建目录
-          rm -rf $BUILD_DIR/proton
-          mkdir -p $BUILD_DIR/proton
-          cd $BUILD_DIR/proton
-          
-          # 克隆 Proton 源码
-          git clone https://github.com/ValveSoftware/wine
-          cd wine
-          
-          # 切换到指定的 Proton 分支
-          PROTON_BRANCH="${{ github.event.inputs.proton_branch || 'proton_10.0' }}"
-          echo "切换到分支: $PROTON_BRANCH"
-          git checkout $PROTON_BRANCH
-          
-          
-          # 生成 configure 脚本
-          echo "生成 configure 脚本..."
-          ./autogen.sh
-          
-          # 配置和构建真正的 WOW64 Proton
-          mkdir -p build-wow64
-          cd build-wow64
-          
-          export CROSSCC="x86_64-w64-mingw32-gcc"
-          export CROSSCXX="x86_64-w64-mingw32-g++"
-          export CFLAGS="-march=x86-64 -msse3 -mfpmath=sse -O3 -ftree-vectorize -pipe"
-          export CXXFLAGS="-march=x86-64 -msse3 -mfpmath=sse -O3 -ftree-vectorize -pipe"
-          export CROSSCFLAGS="-march=x86-64 -msse3 -mfpmath=sse -O3 -ftree-vectorize -pipe"
-          export CROSSCXXFLAGS="-march=x86-64 -msse3 -mfpmath=sse -O3 -ftree-vectorize -pipe"
+            set -e
+            
+            echo "开始构建 Proton WOW64 版本..."
+            echo "分支: ${{ github.event.inputs.proton_branch || 'proton_10.0' }}"
+            
+            # 设置中文构建环境
+            export LANG=zh_CN.UTF-8
+            export LC_ALL=zh_CN.UTF-8
+            export LANGUAGE=zh_CN:zh:en_US:en
+            
+            # 清理并创建构建目录
+            rm -rf $BUILD_DIR/proton
+            mkdir -p $BUILD_DIR/proton
+            cd $BUILD_DIR/proton
+            
+            # 克隆 Proton 源码
+            git clone https://github.com/afeimod/wine
+            cd wine
+            
+            # 切换到指定的 Proton 分支
+            PROTON_BRANCH="${{ github.event.inputs.proton_branch || 'proton_10.0' }}"
+            echo "切换到分支: $PROTON_BRANCH"
+            git checkout $PROTON_BRANCH
+            
+            
+            
+            # 生成 configure 脚本
+            echo "生成 configure 脚本..."
+            ./autogen.sh
+            
+            # 配置和构建真正的 WOW64 Proton
+            mkdir -p build-wow64
+            cd build-wow64
+            
+            export CROSSCC="x86_64-w64-mingw32-gcc"
+            export CROSSCXX="x86_64-w64-mingw32-g++"
+            export CFLAGS="-march=x86-64 -msse3 -mfpmath=sse -O3 -ftree-vectorize -pipe"
+            export CXXFLAGS="-march=x86-64 -msse3 -mfpmath=sse -O3 -ftree-vectorize -pipe"
+            export CROSSCFLAGS="-march=x86-64 -msse3 -mfpmath=sse -O3 -ftree-vectorize -pipe"
+            export CROSSCXXFLAGS="-march=x86-64 -msse3 -mfpmath=sse -O3 -ftree-vectorize -pipe"
 
-          # 配置真正的 WOW64 Proton，启用 Vulkan 和完整 GStreamer 支持
-          ../configure \
-            --enable-win64 \
-            --enable-archs=i386,x86_64 \
-            --prefix=/tmp/wine-install-proton \
-            --with-x \
-            --with-vulkan \
-            --with-alsa \
-            --with-pulse \
-            --with-freetype \
-            --with-fontconfig \
-            --with-gstreamer \
-            --with-gettext \
-            --with-sdl \
-            --enable-nls \
-            --disable-winemenubuilder \
-            --disable-win16 \
-            --disable-tests \
-            --without-ldap \
-            --without-capi \
-            --without-oss \
-            --without-cups \
-            --without-dbus \
-            --without-coreaudio \
-            --without-gphoto \
-            --without-osmesa \
-            --without-sane \
-            --without-pcap \
-            --without-pcsclite \
-            --without-udev \
-            --without-unwind \
-            --without-usb \
-            --without-v4l2 \
-            --without-wayland
+            # 配置真正的 WOW64 Proton，启用 Vulkan 和完整 GStreamer 支持，禁用 Steam 特定功能
+            ../configure \
+              --enable-win64 \
+              --enable-archs=i386,x86_64 \
+              --prefix=/tmp/wine-install-proton \
+              --with-x \
+              --with-vulkan \
+              --with-alsa \
+              --with-pulse \
+              --with-freetype \
+              --with-fontconfig \
+              --with-gstreamer \
+              --with-gettext \
+              --with-sdl \
+              --enable-nls \
+              --disable-winemenubuilder \
+              --disable-win16 \
+              --disable-tests \
+              --without-ldap \
+              --without-capi \
+              --without-oss \
+              --without-cups \
+              --without-dbus \
+              --without-coreaudio \
+              --without-gphoto \
+              --without-osmesa \
+              --without-sane \
+              --without-pcap \
+              --without-pcsclite \
+              --without-udev \
+              --without-unwind \
+              --without-usb \
+              --without-v4l2 \
+              --without-wayland
 
-          # 构建真正的 WOW64 Proton
-          echo "开始构建支持 Vulkan 和完整 GStreamer 的 WOW64 Proton..."
-          make -j$(nproc)
-          make install
-          
-          cd ../..
-          
-          # 获取版本信息
-          VERSION_PROTON=$(cd wine && git describe --tags --abbrev=0 2>/dev/null || echo "$PROTON_BRANCH")
-          COMMIT_HASH=$(cd wine && git rev-parse --short HEAD)
-          PROTON_VERSION="${VERSION_PROTON}-${COMMIT_HASH}"
-          echo "PROTON_VERSION=$PROTON_VERSION" >> $GITHUB_ENV
-          echo "BUILD_NAME=proton-${PROTON_VERSION}-wow64" >> $GITHUB_ENV
+            # 构建真正的 WOW64 Proton
+            echo "开始构建支持 Vulkan 和完整 GStreamer 的 WOW64 Proton..."
+            make -j$(nproc)
+            make install
+            
+            cd ../..
+            
+            # 获取版本信息
+            VERSION_PROTON=$(cd wine && git describe --tags --abbrev=0 2>/dev/null || echo "$PROTON_BRANCH")
+            COMMIT_HASH=$(cd wine && git rev-parse --short HEAD)
+            PROTON_VERSION="${VERSION_PROTON}-${COMMIT_HASH}"
+            echo "PROTON_VERSION=$PROTON_VERSION" >> $GITHUB_ENV
+            echo "BUILD_NAME=proton-${PROTON_VERSION}-wow64-xuser" >> $GITHUB_ENV
 
       - name: 准备打包
         run: |
@@ -276,7 +268,7 @@ jobs:
       - name: Upload Proton artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-WoW64
+          name: Proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-WoW64-xuser
           path: |
             ${{ github.workspace }}/*.tar.xz
             ${{ github.workspace }}/checksums.txt
@@ -286,10 +278,10 @@ jobs:
         uses: softprops/action-gh-release@v1
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'proton'
         with:
-          tag_name: proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-wow64
-          name: Proton ${{ github.event.inputs.proton_branch || 'proton_10.0' }} (WOW64 with Vulkan & GStreamer for Termux)
+          tag_name: proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-wow64-xuser
+          name: Proton ${{ github.event.inputs.proton_branch || 'proton_10.0' }} (WOW64 with Vulkan & GStreamer for Termux - xuser)
           body: |
-            # Proton ${{ github.event.inputs.proton_branch || 'proton_10.0' }} - WOW64 with Vulkan & GStreamer for Termux
+            # Proton ${{ github.event.inputs.proton_branch || 'proton_10.0' }} - WOW64 with Vulkan & GStreamer for Termux (xuser)
             
             ## 版本信息
             - **Proton 分支**: ${{ github.event.inputs.proton_branch || 'proton_10.0' }}
@@ -297,6 +289,7 @@ jobs:
             - **平台**: Termux (Android)
             - **图形 API**: Vulkan 支持已启用
             - **多媒体**: 完整 GStreamer 支持
+            - **用户名**: xuser (已移除 Steam 优化)
             
             ## 特性
             ✓ 真正的 WOW64 架构
@@ -304,7 +297,13 @@ jobs:
             ✓ Vulkan 图形 API 支持
             ✓ 完整的 GStreamer 支持
             ✓ 中文环境支持
-            ✓ 基于 Valve Proton，专为游戏优化
+            ✓ 基于 Valve Proton，但移除了 Steam 特定优化
+            ✓ 默认用户名改为 xuser
+            
+            ## 重要变更
+            - 所有对 `steamuser` 的引用已改为 `xuser`
+            - 移除了 Steam 特定的优化和组件
+            - 更适合通用 Windows 应用程序运行
             
             ## 安装说明
             解压后，将 `${{ env.BUILD_NAME }}` 文件夹放置在 Termux 的合适位置，并设置环境变量。
@@ -396,16 +395,7 @@ jobs:
               libgstreamer-plugins-base1.0-dev \
               libgstreamer-plugins-good1.0-dev \
               libgstreamer-plugins-bad1.0-dev \
-              gstreamer1.0-plugins-base \
-              gstreamer1.0-plugins-good \
-              gstreamer1.0-plugins-bad \
-              gstreamer1.0-plugins-ugly \
-              gstreamer1.0-libav \
-              gstreamer1.0-pulseaudio \
-              gstreamer1.0-alsa \
-              gstreamer1.0-gl \
-              gstreamer1.0-qt5 \
-              gstreamer1.0-gtk3 \
+              gstreamer1.0-* \
               libmpg123-dev \
               libopenal-dev \
               libfaad-dev \
