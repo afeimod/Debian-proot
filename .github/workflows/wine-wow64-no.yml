@@ -124,18 +124,8 @@ jobs:
               libunwind-dev \
               libgstreamer1.0-dev \
               libgstreamer-plugins-base1.0-dev \
-              libgstreamer-plugins-good1.0-dev \
-              libgstreamer-plugins-bad1.0-dev \
-              gstreamer1.0-* \
               libmpg123-dev \
-              libopenal-dev \
-              libfaad-dev \
-              libflac-dev \
-              libvorbis-dev \
-              libx264-dev \
-              libx265-dev \
-              libvpx-dev \
-              libtheora-dev
+              libopenal-dev
 
       - name: 设置中文语言环境
         run: |
@@ -162,7 +152,7 @@ jobs:
             cd $BUILD_DIR/proton
             
             # 克隆 Proton 源码
-            git clone https://github.com/afeimod/wine
+            git clone https://github.com/ValveSoftware/wine
             cd wine
             
             # 切换到指定的 Proton 分支
