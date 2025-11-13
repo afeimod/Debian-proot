@@ -50,7 +50,7 @@ permissions:
 
 jobs:
   build-proton:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     if: github.event.inputs.build_type == 'proton' || (github.event_name == 'schedule' && github.event.schedule == '0 0 1,15 * *')
     timeout-minutes: 360  # 增加到6小时
     
@@ -323,7 +323,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-wine-wow64:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     if: github.event.inputs.build_type == 'wine-wow64' || (github.event_name == 'schedule' && github.event.schedule == '0 2 5,20 * *')
     timeout-minutes: 360  # 增加到6小时
     
