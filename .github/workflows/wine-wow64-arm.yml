@@ -185,14 +185,11 @@ jobs:
           
               # ARM64 WOW64 配置
               ../configure \
-                --build=aarch64-linux-gnu \
-                --host=aarch64-linux-gnu \
-                --with-wine64=../wine64 \
-                --with-wine-tools=../tools \
-                --prefix=/tmp/wine-install-proton \
                 --enable-win64 \
+                --enable-archs=i386,aarch64,arm \
                 --with-x \
                 --with-vulkan \
+                --with-mingw \
                 --with-alsa \
                 --with-pulse \
                 --with-freetype \
