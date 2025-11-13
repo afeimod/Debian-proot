@@ -178,53 +178,55 @@ jobs:
             mkdir -p build-arm64
             cd build-arm64
             
-            # ARM64 专用编译标志
-            export CFLAGS="-march=armv8-a -O3 -ftree-vectorize -pipe"
-            export CXXFLAGS="-march=armv8-a -O3 -ftree-vectorize -pipe"
-            
-            # 添加 GStreamer 库路径到链接器搜索路径
-            export LDFLAGS="-Wl,-rpath,/data/data/com.winlator/files/rootfs/usr/lib/gstreamer-1.0 -Wl,-rpath,/data/data/com.winlator/files/rootfs/usr/lib"
-            export GST_PLUGIN_PATH="/data/data/com.winlator/files/rootfs/usr/lib/gstreamer-1.0"
-            
-            # 配置 ARM64 WOW64 Proton，启用 Vulkan 和完整 GStreamer 支持
-            ../configure \
-              --enable-win64 \
-              --enable-archs=i386,x86_64 \
-              --prefix=/tmp/wine-install-proton \
-              --with-x \
-              --with-vulkan \
-              --with-alsa \
-              --with-pulse \
-              --with-freetype \
-              --with-fontconfig \
-              --with-gstreamer \
-              --with-gettext \
-              --with-sdl \
-              --enable-nls \
-              --disable-winemenubuilder \
-              --disable-win16 \
-              --disable-tests \
-              --without-ldap \
-              --without-capi \
-              --without-oss \
-              --without-cups \
-              --without-dbus \
-              --without-coreaudio \
-              --without-gphoto \
-              --without-osmesa \
-              --without-sane \
-              --without-pcap \
-              --without-pcsclite \
-              --without-udev \
-              --without-unwind \
-              --without-usb \
-              --without-v4l2 \
-              --without-wayland
+            # ARM64 WOW64 专用编译标志
+              export CFLAGS="-march=armv8-a+crc+crypto -O2 -pipe -fPIC"
+              export CXXFLAGS="-march=armv8-a+crc+crypto -O2 -pipe -fPIC"
+              
+          
+              # ARM64 WOW64 配置
+              ../configure \
+                --build=aarch64-linux-gnu \
+                --host=aarch64-linux-gnu \
+                --with-wine64=../wine64 \
+                --with-wine-tools=../tools \
+                --prefix=/tmp/wine-install-proton \
+                --enable-win64 \
+                --with-x \
+                --with-vulkan \
+                --with-alsa \
+                --with-pulse \
+                --with-freetype \
+                --with-fontconfig \
+                --with-gstreamer \
+                --with-gettext \
+                --with-sdl \
+                --enable-nls \
+                --disable-winemenubuilder \
+                --disable-win16 \
+                --disable-tests \
+                --without-ldap \
+                --without-capi \
+                --without-oss \
+                --without-cups \
+                --without-dbus \
+                --without-coreaudio \
+                --without-gphoto \
+                --without-osmesa \
+                --without-sane \
+                --without-pcap \
+                --without-pcsclite \
+                --without-udev \
+                --without-unwind \
+                --without-usb \
+                --without-v4l2 \
+                --without-wayland
+          
+              echo "开始编译 ARM64 WOW64 Wine..."
+              make -j$(nproc)
+              make install
+          
+              echo "ARM64 WOW64 Wine 构建完成"
 
-            # 构建 ARM64 WOW64 Proton
-            echo "开始构建支持 Vulkan 和完整 GStreamer 的 ARM64 WOW64 Proton..."
-            make -j$(nproc)
-            make install
             
             cd ../..
             
