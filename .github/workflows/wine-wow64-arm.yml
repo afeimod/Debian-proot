@@ -52,7 +52,7 @@ jobs:
   build-proton:
     runs-on: ubuntu-24.04-arm
     if: github.event.inputs.build_type == 'proton' || (github.event_name == 'schedule' && github.event.schedule == '0 0 1,15 * *')
-    timeout-minutes: 180
+    timeout-minutes: 240  # 增加超时时间
     
     steps:
       - uses: actions/checkout@v4
@@ -143,6 +143,18 @@ jobs:
           export LANG=zh_CN.UTF-8
           export LC_ALL=zh_CN.UTF-8
 
+      - name: 设置编译环境
+        run: |
+          # 增加交换空间以避免内存不足
+          sudo fallocate -l 4G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          
+          # 设置更宽松的 ulimit
+          ulimit -s unlimited
+          ulimit -n 65536
+
       - name: 构建 Proton ARM64 WOW64 版本
         run: |
             set -e
@@ -169,7 +181,6 @@ jobs:
             echo "切换到分支: $PROTON_BRANCH"
             git checkout $PROTON_BRANCH
             
-            
             # 生成 configure 脚本
             echo "生成 configure 脚本..."
             ./autogen.sh
@@ -179,60 +190,50 @@ jobs:
             cd build-arm64
             
             # ARM64 WOW64 专用编译标志
-              export CFLAGS="-march=armv8-a+crc+crypto -O2 -pipe -fPIC"
-              export CXXFLAGS="-march=armv8-a+crc+crypto -O2 -pipe -fPIC"
-              
-          
-              # ARM64 WOW64 配置
-              ../configure \
-                --enable-win64 \
-                --enable-archs=i386,aarch64,arm \
-                --with-x \
-                --with-vulkan \
-                --with-mingw \
-                --with-alsa \
-                --with-pulse \
-                --with-freetype \
-                --with-fontconfig \
-                --with-gstreamer \
-                --with-gettext \
-                --with-sdl \
-                --enable-nls \
-                --disable-winemenubuilder \
-                --disable-win16 \
-                --disable-tests \
-                --without-ldap \
-                --without-capi \
-                --without-oss \
-                --without-cups \
-                --without-dbus \
-                --without-coreaudio \
-                --without-gphoto \
-                --without-osmesa \
-                --without-sane \
-                --without-pcap \
-                --without-pcsclite \
-                --without-udev \
-                --without-unwind \
-                --without-usb \
-                --without-v4l2 \
-                --without-wayland
-          
-              echo "开始编译 ARM64 WOW64 Wine..."
-              make -j$(nproc)
-              make install
-          
-              echo "ARM64 WOW64 Wine 构建完成"
-
+            export CFLAGS="-march=armv8-a+crc+crypto -O2 -pipe -fPIC"
+            export CXXFLAGS="-march=armv8-a+crc+crypto -O2 -pipe -fPIC"
             
-            cd ../..
+            # ARM64 WOW64 配置
+            ../configure \
+              --enable-win64 \
+              --enable-archs=i386,aarch64,arm \
+              --with-x \
+              --with-vulkan \
+              --with-mingw \
+              --with-alsa \
+              --with-pulse \
+              --with-freetype \
+              --with-fontconfig \
+              --with-gstreamer \
+              --with-gettext \
+              --with-sdl \
+              --enable-nls \
+              --disable-winemenubuilder \
+              --disable-win16 \
+              --disable-tests \
+              --without-ldap \
+              --without-capi \
+              --without-oss \
+              --without-cups \
+              --without-dbus \
+              --without-coreaudio \
+              --without-gphoto \
+              --without-osmesa \
+              --without-sane \
+              --without-pcap \
+              --without-pcsclite \
+              --without-udev \
+              --without-unwind \
+              --without-usb \
+              --without-v4l2 \
+              --without-wayland
             
-            # 获取版本信息
-            VERSION_PROTON=$(cd wine && git describe --tags --abbrev=0 2>/dev/null || echo "$PROTON_BRANCH")
-            COMMIT_HASH=$(cd wine && git rev-parse --short HEAD)
-            PROTON_VERSION="${VERSION_PROTON}-${COMMIT_HASH}"
-            echo "PROTON_VERSION=$PROTON_VERSION" >> $GITHUB_ENV
-            echo "BUILD_NAME=proton-${PROTON_VERSION}-arm64-wow64-xuser" >> $GITHUB_ENV
+            echo "开始编译 ARM64 WOW64 Wine..."
+            # 使用更少的并行作业以避免资源耗尽
+            make -j$(($(nproc) / 2))
+            make install
+            
+            echo "ARM64 WOW64 Wine 构建完成"
 
       - name: 准备打包
         run: |
@@ -321,7 +322,7 @@ jobs:
   build-wine-wow64:
     runs-on: ubuntu-24.04-arm
     if: github.event.inputs.build_type == 'wine-wow64' || (github.event_name == 'schedule' && github.event.schedule == '0 2 5,20 * *')
-    timeout-minutes: 180
+    timeout-minutes: 240  # 增加超时时间
     
     steps:
       - uses: actions/checkout@v4
@@ -411,6 +412,18 @@ jobs:
           sudo update-locale LANG=zh_CN.UTF-8
           export LANG=zh_CN.UTF-8
           export LC_ALL=zh_CN.UTF-8
+
+      - name: 设置编译环境
+        run: |
+          # 增加交换空间以避免内存不足
+          sudo fallocate -l 4G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          
+          # 设置更宽松的 ulimit
+          ulimit -s unlimited
+          ulimit -n 65536
 
       - name: 构建 Wine ARM64 WOW64 版本
         run: |
@@ -579,8 +592,6 @@ jobs:
           echo "当前源码目录: $(pwd)"
           echo "构建名称: $BUILD_NAME"
           
-          
-          
           # 根据版本选择修复方式
           # 从 WINE_VERSION_ACTUAL 中提取纯数字版本号
           PURE_VERSION=$(echo "$WINE_VERSION_ACTUAL" | sed 's/^wine-//')
@@ -620,8 +631,8 @@ jobs:
           cd build-arm64
           
           # ARM64 专用编译标志
-          export CFLAGS="-march=armv8-a -O3 -ftree-vectorize -pipe"
-          export CXXFLAGS="-march=armv8-a -O3 -ftree-vectorize -pipe"
+          export CFLAGS="-march=armv8-a -O2 -pipe -fPIC"
+          export CXXFLAGS="-march=armv8-a -O2 -pipe -fPIC"
 
           # 配置 ARM64 WOW64 Wine，启用 Vulkan 和完整 GStreamer 支持
           ../configure \
@@ -658,9 +669,9 @@ jobs:
             --without-v4l2 \
             --without-wayland
 
-          # 构建 ARM64 WOW64 Wine
+          # 构建 ARM64 WOW64 Wine - 使用更少的并行作业
           echo "开始构建支持 Vulkan 和完整 GStreamer 的 ARM64 WOW64 Wine..."
-          make -j$(nproc)
+          make -j$(($(nproc) / 2))
           make install
 
       - name: 准备打包
