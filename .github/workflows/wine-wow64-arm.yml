@@ -145,15 +145,25 @@ jobs:
 
       - name: 设置编译环境
         run: |
-          # 增加交换空间以避免内存不足
-          sudo fallocate -l 4G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          
-          # 设置更宽松的 ulimit
-          ulimit -s unlimited
-          ulimit -n 65536
+            # 检查并创建交换空间（如果不存在）
+            if ! sudo swapon --show | grep -q /swapfile; then
+              echo "创建交换文件..."
+              sudo rm -f /swapfile
+              sudo dd if=/dev/zero of=/swapfile bs=1M count=4096 oflag=direct
+              sudo chmod 600 /swapfile
+              sudo mkswap /swapfile
+              sudo swapon /swapfile
+            else
+              echo "交换文件已存在"
+            fi
+    
+            # 验证交换空间
+            echo "当前内存和交换空间:"
+            free -h
+    
+            # 设置编译环境
+            ulimit -s unlimited
+            ulimit -n 65536
 
       - name: 构建 Proton ARM64 WOW64 版本
         run: |
