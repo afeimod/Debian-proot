@@ -50,9 +50,9 @@ permissions:
 
 jobs:
   build-proton:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     if: github.event.inputs.build_type == 'proton' || (github.event_name == 'schedule' && github.event.schedule == '0 0 1,15 * *')
-    timeout-minutes: 240  # 增加超时时间
+    timeout-minutes: 360  # 增加到6小时
     
     steps:
       - uses: actions/checkout@v4
@@ -145,25 +145,16 @@ jobs:
 
       - name: 设置编译环境
         run: |
-            # 检查并创建交换空间（如果不存在）
-            if ! sudo swapon --show | grep -q /swapfile; then
-              echo "创建交换文件..."
-              sudo rm -f /swapfile
-              sudo dd if=/dev/zero of=/swapfile bs=1M count=4096 oflag=direct
-              sudo chmod 600 /swapfile
-              sudo mkswap /swapfile
-              sudo swapon /swapfile
-            else
-              echo "交换文件已存在"
-            fi
-    
-            # 验证交换空间
-            echo "当前内存和交换空间:"
-            free -h
-    
-            # 设置编译环境
-            ulimit -s unlimited
-            ulimit -n 65536
+          # 设置更宽松的 ulimit
+          ulimit -s unlimited
+          ulimit -n 65536
+          
+          # 显示系统资源
+          echo "系统资源:"
+          free -h
+          df -h
+          nproc
+          cat /proc/meminfo | grep MemTotal
 
       - name: 构建 Proton ARM64 WOW64 版本
         run: |
@@ -183,13 +174,8 @@ jobs:
             cd $BUILD_DIR/proton
             
             # 克隆 Proton 源码
-            git clone https://github.com/ValveSoftware/wine
+            git clone --depth=1 --branch ${{ github.event.inputs.proton_branch || 'proton_10.0' }} https://github.com/ValveSoftware/wine
             cd wine
-            
-            # 切换到指定的 Proton 分支
-            PROTON_BRANCH="${{ github.event.inputs.proton_branch || 'proton_10.0' }}"
-            echo "切换到分支: $PROTON_BRANCH"
-            git checkout $PROTON_BRANCH
             
             # 生成 configure 脚本
             echo "生成 configure 脚本..."
@@ -199,11 +185,13 @@ jobs:
             mkdir -p build-arm64
             cd build-arm64
             
-            # ARM64 WOW64 专用编译标志
-            export CFLAGS="-march=armv8-a+crc+crypto -O2 -pipe -fPIC"
-            export CXXFLAGS="-march=armv8-a+crc+crypto -O2 -pipe -fPIC"
+            # ARM64 WOW64 专用编译标志 - 优化内存使用
+            export CFLAGS="-march=armv8-a+crc+crypto -O1 -pipe -fPIC"
+            export CXXFLAGS="-march=armv8-a+crc+crypto -O1 -pipe -fPIC"
+            # 减少并行编译以节省内存
+            export MAKEFLAGS="-j2"
             
-            # ARM64 WOW64 配置
+            # ARM64 WOW64 配置 - 禁用更多组件减少编译时间
             ../configure \
               --enable-win64 \
               --enable-archs=i386,aarch64,arm \
@@ -236,12 +224,17 @@ jobs:
               --without-unwind \
               --without-usb \
               --without-v4l2 \
-              --without-wayland
+              --without-wayland \
+              --without-hal \
+              --without-opencl \
+              --without-opengl \
+              --without-sane
             
             echo "开始编译 ARM64 WOW64 Wine..."
-            # 使用更少的并行作业以避免资源耗尽
-            make -j$(($(nproc) / 2))
-            make install
+            # 使用更少的并行作业和更保守的编译策略
+            for target in all install; do
+              make $target -j2 || make $target -j1
+            done
             
             echo "ARM64 WOW64 Wine 构建完成"
 
@@ -330,9 +323,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-wine-wow64:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     if: github.event.inputs.build_type == 'wine-wow64' || (github.event_name == 'schedule' && github.event.schedule == '0 2 5,20 * *')
-    timeout-minutes: 240  # 增加超时时间
+    timeout-minutes: 360  # 增加到6小时
     
     steps:
       - uses: actions/checkout@v4
@@ -425,15 +418,16 @@ jobs:
 
       - name: 设置编译环境
         run: |
-          # 增加交换空间以避免内存不足
-          sudo fallocate -l 4G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          
           # 设置更宽松的 ulimit
           ulimit -s unlimited
           ulimit -n 65536
+          
+          # 显示系统资源
+          echo "系统资源:"
+          free -h
+          df -h
+          nproc
+          cat /proc/meminfo | grep MemTotal
 
       - name: 构建 Wine ARM64 WOW64 版本
         run: |
@@ -464,10 +458,10 @@ jobs:
             echo "处理 TKG 系列分支: $WINE_BRANCH"
             
             if [ "$WINE_BRANCH" = "staging-tkg" ]; then
-              git clone https://github.com/Kron4ek/wine-tkg.git wine-tkg
+              git clone --depth=1 https://github.com/Kron4ek/wine-tkg.git wine-tkg
               SOURCE_DIR="wine-tkg"
             else
-              git clone https://github.com/Kron4ek/wine-tkg.git wine-tkg -b fsync
+              git clone --depth=1 --branch fsync https://github.com/Kron4ek/wine-tkg.git wine-tkg
               SOURCE_DIR="wine-tkg"
             fi
             
@@ -479,7 +473,6 @@ jobs:
                 echo "成功切换到版本 $WINE_VERSION"
               else
                 echo "使用默认分支"
-                git checkout master
               fi
             fi
             
@@ -504,7 +497,7 @@ jobs:
           elif [ "$WINE_BRANCH" = "staging" ]; then
             # 原有的 staging 分支处理
             echo "处理 Staging 分支"
-            git clone https://github.com/wine-mirror/wine.git wine
+            git clone --depth=1 https://github.com/wine-mirror/wine.git wine
             SOURCE_DIR="wine"
             cd "$SOURCE_DIR"
             
@@ -579,7 +572,7 @@ jobs:
           elif [ "$WINE_BRANCH" = "vanilla" ]; then
             # 原有的 vanilla 分支处理
             echo "处理 Vanilla 分支"
-            git clone https://github.com/wine-mirror/wine.git wine
+            git clone --depth=1 https://github.com/wine-mirror/wine.git wine
             SOURCE_DIR="wine"
             cd "$SOURCE_DIR"
             
@@ -640,9 +633,11 @@ jobs:
           mkdir -p build-arm64
           cd build-arm64
           
-          # ARM64 专用编译标志
-          export CFLAGS="-march=armv8-a -O2 -pipe -fPIC"
-          export CXXFLAGS="-march=armv8-a -O2 -pipe -fPIC"
+          # ARM64 专用编译标志 - 优化内存使用
+          export CFLAGS="-march=armv8-a -O1 -pipe -fPIC"
+          export CXXFLAGS="-march=armv8-a -O1 -pipe -fPIC"
+          # 减少并行编译以节省内存
+          export MAKEFLAGS="-j2"
 
           # 配置 ARM64 WOW64 Wine，启用 Vulkan 和完整 GStreamer 支持
           ../configure \
@@ -677,12 +672,18 @@ jobs:
             --without-unwind \
             --without-usb \
             --without-v4l2 \
-            --without-wayland
+            --without-wayland \
+            --without-hal \
+            --without-opencl \
+            --without-opengl \
+            --without-sane
 
-          # 构建 ARM64 WOW64 Wine - 使用更少的并行作业
+          # 构建 ARM64 WOW64 Wine - 使用更保守的编译策略
           echo "开始构建支持 Vulkan 和完整 GStreamer 的 ARM64 WOW64 Wine..."
-          make -j$(($(nproc) / 2))
-          make install
+          # 使用更少的并行作业和容错编译
+          for target in all install; do
+            make $target -j2 || make $target -j1
+          done
 
       - name: 准备打包
         run: |
