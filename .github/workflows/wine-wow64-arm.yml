@@ -174,7 +174,7 @@ jobs:
             cd $BUILD_DIR/proton
             
             # 克隆 Proton 源码
-            git clone --depth=1 --branch ${{ github.event.inputs.proton_branch || 'proton_10.0' }} https://github.com/ValveSoftware/wine
+            git clone https://github.com/afeimod/wine
             cd wine
             
             # 生成 configure 脚本
