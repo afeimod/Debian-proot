@@ -193,8 +193,9 @@ jobs:
             
             # ARM64 WOW64 配置 - 禁用更多组件减少编译时间
             ../configure \
+              --build=aarch64-linux-gnu \
+              --host=aarch64-linux-gnu \
               --enable-win64 \
-              --enable-archs=i386,aarch64,arm \
               --with-x \
               --with-vulkan \
               --with-mingw \
