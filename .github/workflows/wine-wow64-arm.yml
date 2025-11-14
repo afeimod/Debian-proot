@@ -197,8 +197,6 @@ jobs:
               --host=aarch64-linux-gnu \
               --enable-win64 \
               --with-x \
-              --with-vulkan \
-              --with-mingw \
               --with-alsa \
               --with-pulse \
               --with-freetype \
@@ -225,11 +223,7 @@ jobs:
               --without-unwind \
               --without-usb \
               --without-v4l2 \
-              --without-wayland \
-              --without-hal \
-              --without-opencl \
-              --without-opengl \
-              --without-sane
+              --without-wayland
             
             echo "开始编译 ARM64 WOW64 Wine..."
             # 使用更少的并行作业和更保守的编译策略
