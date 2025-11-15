@@ -198,7 +198,8 @@ jobs:
             # ARM64 WOW64 配置 - 禁用更多组件减少编译时间
             ../configure \
               --build=aarch64-linux-gnu \
-              --host=i386,aarch64-linux-gnu \
+              --host=aarch64-linux-gnu \
+              --enable-archs=i386 \
               --prefix=/tmp/wine-install-proton \
               --enable-win64 \
               --with-x \
