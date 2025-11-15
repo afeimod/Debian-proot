@@ -163,6 +163,10 @@ jobs:
             echo "开始构建 Proton ARM64 WOW64 版本..."
             echo "分支: ${{ github.event.inputs.proton_branch || 'proton_10.0' }}"
             
+            # 设置构建名称
+            BUILD_NAME="proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-arm64-wow64-xuser"
+            echo "BUILD_NAME=$BUILD_NAME" >> $GITHUB_ENV
+            
             # 设置中文构建环境
             export LANG=zh_CN.UTF-8
             export LC_ALL=zh_CN.UTF-8
@@ -234,28 +238,51 @@ jobs:
             
             echo "ARM64 WOW64 Wine 构建完成"
 
+      - name: 检查安装目录
+        run: |
+          echo "检查安装目录内容:"
+          if [ -d "/tmp/wine-install-proton" ]; then
+            find /tmp/wine-install-proton -type f | head -20 || echo "未找到文件"
+            du -sh /tmp/wine-install-proton || echo "无法计算目录大小"
+          else
+            echo "安装目录 /tmp/wine-install-proton 不存在"
+          fi
+
       - name: 准备打包
         run: |
           # 创建打包目录
           PACKAGE_NAME="${{ env.BUILD_NAME }}"
           mkdir -p wine-package/$PACKAGE_NAME
           
-          # 复制 Wine 安装文件
-          echo "复制 Wine 文件到 $PACKAGE_NAME..."
-          cp -r /tmp/wine-install-proton/* wine-package/$PACKAGE_NAME/
+          # 检查源目录是否存在
+          if [ -d "/tmp/wine-install-proton" ]; then
+            echo "复制 Wine 文件到 $PACKAGE_NAME..."
+            cp -r /tmp/wine-install-proton/* wine-package/$PACKAGE_NAME/ || echo "复制文件时出现问题"
+          else
+            echo "错误: 源目录 /tmp/wine-install-proton 不存在"
+            exit 1
+          fi
 
       - name: 创建打包文件
         run: |
           PACKAGE_NAME="${{ env.BUILD_NAME }}"
           
-          echo "最终文件结构:"
-          find wine-package -type f | sort | head -20
-          
-          # 使用 tar.xz 格式打包
-          tar -cJf $PACKAGE_NAME.tar.xz -C wine-package $PACKAGE_NAME
-          
-          echo "打包完成:"
-          ls -lh *.tar.xz
+          echo "检查打包目录内容:"
+          if [ -d "wine-package/$PACKAGE_NAME" ]; then
+            echo "最终文件结构:"
+            find "wine-package/$PACKAGE_NAME" -type f | head -20
+            echo "目录大小:"
+            du -sh "wine-package/$PACKAGE_NAME"
+            
+            # 使用 tar.xz 格式打包
+            tar -cJf "$PACKAGE_NAME.tar.xz" -C wine-package "$PACKAGE_NAME"
+            
+            echo "打包完成:"
+            ls -lh *.tar.xz
+          else
+            echo "错误: 打包目录 wine-package/$PACKAGE_NAME 不存在"
+            exit 1
+          fi
 
       - name: Generate checksums
         run: |
@@ -313,7 +340,7 @@ jobs:
             - 提交: ${{ github.sha }}
             - 工作流: ${{ github.workflow }}
           files: |
-            ${{ github.workspace }}/${{ env.BUILD_NAME }}.tar.xz
+            ${{ github.workspace }}/*.tar.xz
             ${{ github.workspace }}/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -635,51 +662,55 @@ jobs:
           # 减少并行编译以节省内存
           export MAKEFLAGS="-j2"
 
-          # 配置 ARM64 WOW64 Wine，启用 Vulkan 和完整 GStreamer 支持
-          ../configure \
-            --enable-win64 \
-            --enable-archs=i386,x86_64 \
-            --prefix=/tmp/wine-install-arm64 \
-            --with-x \
-            --with-vulkan \
-            --with-alsa \
-            --with-pulse \
-            --with-freetype \
-            --with-fontconfig \
-            --with-gstreamer \
-            --with-gettext \
-            --with-sdl \
-            --enable-nls \
-            --disable-winemenubuilder \
-            --disable-win16 \
-            --disable-tests \
-            --without-ldap \
-            --without-capi \
-            --without-oss \
-            --without-cups \
-            --without-dbus \
-            --without-coreaudio \
-            --without-gphoto \
-            --without-osmesa \
-            --without-sane \
-            --without-pcap \
-            --without-pcsclite \
-            --without-udev \
-            --without-unwind \
-            --without-usb \
-            --without-v4l2 \
-            --without-wayland \
-            --without-hal \
-            --without-opencl \
-            --without-opengl \
-            --without-sane
+            ../configure \
+              --build=aarch64-linux-gnu \
+              --host=aarch64-linux-gnu \
+              --prefix=/tmp/wine-install-arm64 \
+              --enable-win64 \
+              --with-x \
+              --with-alsa \
+              --with-pulse \
+              --with-freetype \
+              --with-fontconfig \
+              --with-gstreamer \
+              --with-gettext \
+              --with-sdl \
+              --enable-nls \
+              --disable-winemenubuilder \
+              --disable-win16 \
+              --disable-tests \
+              --without-ldap \
+              --without-capi \
+              --without-oss \
+              --without-cups \
+              --without-dbus \
+              --without-coreaudio \
+              --without-gphoto \
+              --without-osmesa \
+              --without-sane \
+              --without-pcap \
+              --without-pcsclite \
+              --without-udev \
+              --without-unwind \
+              --without-usb \
+              --without-v4l2 \
+              --without-wayland
+            
+            echo "开始编译 ARM64 WOW64 Wine..."
+            # 使用更少的并行作业和更保守的编译策略
+            for target in all install; do
+              make $target -j2 || make $target -j1
+            done
 
-          # 构建 ARM64 WOW64 Wine - 使用更保守的编译策略
-          echo "开始构建支持 Vulkan 和完整 GStreamer 的 ARM64 WOW64 Wine..."
-          # 使用更少的并行作业和容错编译
-          for target in all install; do
-            make $target -j2 || make $target -j1
-          done
+      - name: 检查安装目录
+        run: |
+          echo "检查安装目录内容:"
+          if [ -d "/tmp/wine-install-arm64" ]; then
+            find /tmp/wine-install-arm64 -type f | head -20 || echo "未找到文件"
+            du -sh /tmp/wine-install-arm64 || echo "无法计算目录大小"
+          else
+            echo "安装目录 /tmp/wine-install-arm64 不存在"
+          fi
 
       - name: 准备打包
         run: |
@@ -687,22 +718,35 @@ jobs:
           PACKAGE_NAME="${{ env.BUILD_NAME }}"
           mkdir -p wine-package/$PACKAGE_NAME
           
-          # 复制 Wine 安装文件
-          echo "复制 Wine 文件到 $PACKAGE_NAME..."
-          cp -r /tmp/wine-install-arm64/* wine-package/$PACKAGE_NAME/
+          # 检查源目录是否存在
+          if [ -d "/tmp/wine-install-arm64" ]; then
+            echo "复制 Wine 文件到 $PACKAGE_NAME..."
+            cp -r /tmp/wine-install-arm64/* wine-package/$PACKAGE_NAME/ || echo "复制文件时出现问题"
+          else
+            echo "错误: 源目录 /tmp/wine-install-arm64 不存在"
+            exit 1
+          fi
 
       - name: 创建打包文件
         run: |
           PACKAGE_NAME="${{ env.BUILD_NAME }}"
           
-          echo "最终文件结构:"
-          find wine-package -type f | sort | head -20
-          
-          # 使用 tar.xz 格式打包
-          tar -cJf $PACKAGE_NAME.tar.xz -C wine-package $PACKAGE_NAME
-          
-          echo "打包完成:"
-          ls -lh *.tar.xz
+          echo "检查打包目录内容:"
+          if [ -d "wine-package/$PACKAGE_NAME" ]; then
+            echo "最终文件结构:"
+            find "wine-package/$PACKAGE_NAME" -type f | head -20
+            echo "目录大小:"
+            du -sh "wine-package/$PACKAGE_NAME"
+            
+            # 使用 tar.xz 格式打包
+            tar -cJf "$PACKAGE_NAME.tar.xz" -C wine-package "$PACKAGE_NAME"
+            
+            echo "打包完成:"
+            ls -lh *.tar.xz
+          else
+            echo "错误: 打包目录 wine-package/$PACKAGE_NAME 不存在"
+            exit 1
+          fi
 
       - name: Generate checksums
         run: |
@@ -753,7 +797,7 @@ jobs:
             - 提交: ${{ github.sha }}
             - 工作流: ${{ github.workflow }}
           files: |
-            ${{ github.workspace }}/${{ env.BUILD_NAME }}.tar.xz
+            ${{ github.workspace }}/*.tar.xz
             ${{ github.workspace }}/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
