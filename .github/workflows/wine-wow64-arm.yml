@@ -185,21 +185,20 @@ jobs:
             echo "生成 configure 脚本..."
             ./autogen.sh
             
-            # 配置和构建 ARM64 WOW64 Proton
-            mkdir -p build-arm64
-            cd build-arm64
+            # 第一步：构建 64 位 Wine
+            echo "=== 构建 64 位 Wine ==="
+            mkdir -p build64
+            cd build64
             
-            # ARM64 WOW64 专用编译标志 - 优化内存使用
-            export CFLAGS="-march=armv8-a+crc+crypto -O1 -pipe -fPIC"
-            export CXXFLAGS="-march=armv8-a+crc+crypto -O1 -pipe -fPIC"
-            # 减少并行编译以节省内存
+            # 64 位编译标志
+            export CFLAGS="-march=armv8-a+crc+crypto -O2 -pipe -fPIC"
+            export CXXFLAGS="-march=armv8-a+crc+crypto -O2 -pipe -fPIC"
             export MAKEFLAGS="-j2"
             
-            # ARM64 WOW64 配置 - 禁用更多组件减少编译时间
+            # 配置 64 位 Wine
             ../configure \
               --build=aarch64-linux-gnu \
               --host=aarch64-linux-gnu \
-              --enable-archs=i386 \
               --prefix=/tmp/wine-install-proton \
               --enable-win64 \
               --with-x \
@@ -231,11 +230,57 @@ jobs:
               --without-v4l2 \
               --without-wayland
             
-            echo "开始编译 ARM64 WOW64 Wine..."
-            # 使用更少的并行作业和更保守的编译策略
-            for target in all install; do
-              make $target -j2 || make $target -j1
-            done
+            echo "编译 64 位 Wine..."
+            make -j2 install || make -j1 install
+            
+            cd ..
+            
+            # 第二步：构建 32 位 Wine
+            echo "=== 构建 32 位 Wine ==="
+            mkdir -p build32
+            cd build32
+            
+            # 安装 32 位依赖
+            sudo apt update
+            sudo apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+            
+            # 32 位编译标志
+            export CFLAGS="-march=armv8-a -O2 -pipe -fPIC"
+            export CXXFLAGS="-march=armv8-a -O2 -pipe -fPIC"
+            export MAKEFLAGS="-j2"
+            
+            # 配置 32 位 Wine，指向已安装的 64 位版本
+            ../configure \
+              --build=arm-linux-gnueabihf \
+              --host=arm-linux-gnueabihf \
+              --with-wine64=../build64 \
+              --with-x \
+              --with-alsa \
+              --with-pulse \
+              --with-freetype \
+              --with-fontconfig \
+              --disable-winemenubuilder \
+              --disable-win16 \
+              --disable-tests \
+              --without-ldap \
+              --without-capi \
+              --without-oss \
+              --without-cups \
+              --without-dbus \
+              --without-coreaudio \
+              --without-gphoto \
+              --without-osmesa \
+              --without-sane \
+              --without-pcap \
+              --without-pcsclite \
+              --without-udev \
+              --without-unwind \
+              --without-usb \
+              --without-v4l2 \
+              --without-wayland
+            
+            echo "编译 32 位 Wine..."
+            make -j2 install || make -j1 install
             
             echo "ARM64 WOW64 Wine 构建完成"
 
