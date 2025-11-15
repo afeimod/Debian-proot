@@ -195,6 +195,7 @@ jobs:
             ../configure \
               --build=aarch64-linux-gnu \
               --host=aarch64-linux-gnu \
+              --prefix=/tmp/wine-install-proton \
               --enable-win64 \
               --with-x \
               --with-alsa \
