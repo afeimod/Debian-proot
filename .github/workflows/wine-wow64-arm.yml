@@ -56,12 +56,16 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: 安装构建依赖
         run: |
           sudo apt update
           # 先修复损坏的依赖
           sudo apt --fix-broken install -y
+          
+          # 添加 32 位架构支持
+          sudo dpkg --add-architecture armhf
+          sudo apt update
           
           # 基础构建依赖 - ARM64 专用
           BASE_DEPS="\
@@ -69,72 +73,222 @@ jobs:
             perl \
             git \
             wget \
+            curl \
             xz-utils \
             bubblewrap \
             autoconf \
+            automake \
+            autotools-dev \
             flex \
             bison \
             gcc \
             g++ \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libtool \
             libx11-dev \
+            libx11-dev:armhf \
             libxext-dev \
+            libxext-dev:armhf \
             libxi-dev \
+            libxi-dev:armhf \
             libxrandr-dev \
+            libxrandr-dev:armhf \
             libxcursor-dev \
+            libxcursor-dev:armhf \
             libxcomposite-dev \
+            libxcomposite-dev:armhf \
             libxdamage-dev \
+            libxdamage-dev:armhf \
             libxfixes-dev \
+            libxfixes-dev:armhf \
             libxxf86vm-dev \
+            libxxf86vm-dev:armhf \
             libxrender-dev \
+            libxrender-dev:armhf \
             libxinerama-dev \
+            libxinerama-dev:armhf \
             libgl-dev \
-            libsdl2-dev \
+            libgl-dev:armhf \
             libglu-dev \
+            libglu-dev:armhf \
             libosmesa6-dev \
+            libosmesa6-dev:armhf \
             libfreetype6-dev \
+            libfreetype6-dev:armhf \
             libfontconfig1-dev \
+            libfontconfig1-dev:armhf \
             libpcap-dev \
+            libpcap-dev:armhf \
             libdbus-1-dev \
+            libdbus-1-dev:armhf \
             libssl-dev \
+            libssl-dev:armhf \
             libasound2-dev \
+            libasound2-dev:armhf \
             libpulse-dev \
+            libpulse-dev:armhf \
             libudev-dev \
+            libudev-dev:armhf \
             libcups2-dev \
+            libcups2-dev:armhf \
             libjpeg-dev \
+            libjpeg-dev:armhf \
             libpng-dev \
+            libpng-dev:armhf \
             libtiff-dev \
+            libtiff-dev:armhf \
             libxml2-dev \
+            libxml2-dev:armhf \
             libvulkan-dev \
+            libvulkan-dev:armhf \
             vulkan-tools \
             libvulkan1 \
+            libvulkan1:armhf \
             mesa-vulkan-drivers \
             gettext \
             libgettextpo-dev \
+            libgettextpo-dev:armhf \
             locales \
             language-pack-zh-hans"
           
           sudo apt install -y $BASE_DEPS
 
+          # 安装交叉编译工具链
+          CROSS_DEPS="\
+            gcc-arm-linux-gnueabihf \
+            g++-arm-linux-gnueabihf \
+            binutils-arm-linux-gnueabihf \
+            gcc-aarch64-linux-gnu \
+            g++-aarch64-linux-gnu \
+            binutils-aarch64-linux-gnu \
+            crossbuild-essential-armhf \
+            crossbuild-essential-arm64"
+          
+          sudo apt install -y $CROSS_DEPS
+
       - name: 安装多媒体和音频依赖
         run: |
             sudo apt update
-            # 安装完整的 GStreamer
+            # 安装完整的 GStreamer (64位和32位)
             sudo apt install -y \
               libunwind-dev \
+              libunwind-dev:armhf \
               libgstreamer1.0-dev \
+              libgstreamer1.0-dev:armhf \
               libgstreamer-plugins-base1.0-dev \
+              libgstreamer-plugins-base1.0-dev:armhf \
               libgstreamer-plugins-good1.0-dev \
+              libgstreamer-plugins-good1.0-dev:armhf \
               libgstreamer-plugins-bad1.0-dev \
-              gstreamer1.0-* \
+              libgstreamer-plugins-bad1.0-dev:armhf \
+              gstreamer1.0-plugins-base \
+              gstreamer1.0-plugins-base:armhf \
+              gstreamer1.0-plugins-good \
+              gstreamer1.0-plugins-good:armhf \
+              gstreamer1.0-plugins-bad \
+              gstreamer1.0-plugins-bad:armhf \
+              gstreamer1.0-plugins-ugly \
+              gstreamer1.0-plugins-ugly:armhf \
+              gstreamer1.0-libav \
+              gstreamer1.0-libav:armhf \
+              gstreamer1.0-tools \
               libmpg123-dev \
+              libmpg123-dev:armhf \
               libopenal-dev \
+              libopenal-dev:armhf \
               libfaad-dev \
+              libfaad-dev:armhf \
               libflac-dev \
+              libflac-dev:armhf \
               libvorbis-dev \
+              libvorbis-dev:armhf \
               libx264-dev \
+              libx264-dev:armhf \
               libx265-dev \
+              libx265-dev:armhf \
               libvpx-dev \
-              libtheora-dev
+              libvpx-dev:armhf \
+              libtheora-dev \
+              libtheora-dev:armhf \
+              libavcodec-dev \
+              libavcodec-dev:armhf \
+              libavformat-dev \
+              libavformat-dev:armhf \
+              libavutil-dev \
+              libavutil-dev:armhf \
+              libswscale-dev \
+              libswscale-dev:armhf"
+
+      - name: 安装系统工具和其他依赖
+        run: |
+          sudo apt update
+          # 安装必要的系统工具
+          sudo apt install -y \
+            file \
+            zip \
+            unzip \
+            patchelf \
+            meson \
+            nasm \
+            yasm \
+            python3 \
+            python3-pip \
+            python3-setuptools \
+            libc6-dev \
+            libc6-dev-armhf-cross \
+            linux-libc-dev \
+            linux-libc-dev:armhf \
+            libstdc++6 \
+            libstdc++6:armhf \
+            libgcc1 \
+            libgcc1:armhf
+
+          # 安装 Wine 构建可能需要的其他库
+          sudo apt install -y \
+            libkrb5-dev \
+            libkrb5-dev:armhf \
+            libgnutls28-dev \
+            libgnutls28-dev:armhf \
+            libldap2-dev \
+            libldap2-dev:armhf \
+            libgsm1-dev \
+            libgsm1-dev:armhf \
+            libmpg123-dev \
+            libmpg123-dev:armhf \
+            libopenal-dev \
+            libopenal-dev:armhf \
+            libcapi20-dev \
+            libcapi20-dev:armhf \
+            libcups2-dev \
+            libcups2-dev:armhf \
+            libosmesa6-dev \
+            libosmesa6-dev:armhf \
+            libsane-dev \
+            libsane-dev:armhf \
+            libv4l-dev \
+            libv4l-dev:armhf \
+            libgphoto2-dev \
+            libgphoto2-dev:armhf \
+            libusb-1.0-0-dev \
+            libusb-1.0-0-dev:armhf \
+            libpcsclite-dev \
+            libpcsclite-dev:armhf
+
+      - name: 设置交叉编译环境
+        run: |
+          # 创建交叉编译工具链符号链接
+          sudo ln -sf /usr/bin/aarch64-linux-gnu-gcc /usr/local/bin/aarch64-linux-gnu-gcc
+          sudo ln -sf /usr/bin/aarch64-linux-gnu-g++ /usr/local/bin/aarch64-linux-gnu-g++
+          sudo ln -sf /usr/bin/arm-linux-gnueabihf-gcc /usr/local/bin/arm-linux-gnueabihf-gcc
+          sudo ln -sf /usr/bin/arm-linux-gnueabihf-g++ /usr/local/bin/arm-linux-gnueabihf-g++
+          
+          # 验证工具链
+          echo "验证交叉编译工具链:"
+          aarch64-linux-gnu-gcc --version
+          arm-linux-gnueabihf-gcc --version
 
       - name: 设置中文语言环境
         run: |
