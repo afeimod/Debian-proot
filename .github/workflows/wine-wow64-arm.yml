@@ -274,11 +274,54 @@ jobs:
           mkdir -p "$FEX_BUILD_DIR"
           cd "$FEX_BUILD_DIR"
           
-          # 克隆 FEX-Emu 源码
-          git clone https://github.com/FEX-Emu/FEX.git
+          # 克隆 FEX-Emu 源码（使用递归克隆以包含子模块）
+          git clone --recursive https://github.com/FEX-Emu/FEX.git
           cd FEX
           git checkout 4afbdd9afb4738b2abbf303493c5b67f58b8ae4c
           
+          # 确保所有子模块都已正确初始化
+          git submodule update --init --recursive
+          
+          # 手动下载并设置缺失的子模块
+          echo "手动设置缺失的子模块..."
+          
+          # jemalloc
+          if [ ! -d "External/jemalloc" ]; then
+            git clone https://github.com/jemalloc/jemalloc.git External/jemalloc
+            cd External/jemalloc
+            git checkout 5.3.0
+            cd ../..
+          fi
+          
+          # xxhash
+          if [ ! -d "External/xxhash" ]; then
+            git clone https://github.com/Cyan4973/xxHash.git External/xxhash
+            cd External/xxhash
+            git checkout v0.8.2
+            cd ../..
+          fi
+          
+          # fmt
+          if [ ! -d "External/fmt" ]; then
+            git clone https://github.com/fmtlib/fmt.git External/fmt
+            cd External/fmt
+            git checkout 9.1.0
+            cd ../..
+          fi
+          
+          # range-v3
+          if [ ! -d "External/range-v3" ]; then
+            git clone https://github.com/ericniebler/range-v3.git External/range-v3
+            cd External/range-v3
+            git checkout 0.12.0
+            cd ../..
+          fi
+          
+          # cpp-optparse
+          if [ ! -d "Source/Common/cpp-optparse" ]; then
+            git clone https://github.com/Sonicadvance1/cpp-optparse.git Source/Common/cpp-optparse
+          fi
+
           # 下载 llvm-mingw 工具链
           wget -O llvm-mingw.tar.xz https://github.com/bylaws/llvm-mingw/releases/download/20250920/llvm-mingw-20250920-ucrt-ubuntu-22.04-aarch64.tar.xz
           tar -xJf llvm-mingw.tar.xz -C /tmp
@@ -310,7 +353,7 @@ jobs:
           
           # 构建 WOW64 版本
           mkdir build-wow64 && cd build-wow64
-          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXXFLAGS="$CXXFLAGS" \
             -GNinja \
             -DCMAKE_INSTALL_PREFIX=/tmp/fex-install \
             -DCMAKE_INSTALL_LIBDIR=/tmp/fex-install/lib/wine/aarch64-windows \
@@ -665,11 +708,54 @@ jobs:
           mkdir -p "$FEX_BUILD_DIR"
           cd "$FEX_BUILD_DIR"
           
-          # 克隆 FEX-Emu 源码
-          git clone https://github.com/FEX-Emu/FEX.git
+          # 克隆 FEX-Emu 源码（使用递归克隆以包含子模块）
+          git clone --recursive https://github.com/FEX-Emu/FEX.git
           cd FEX
           git checkout 4afbdd9afb4738b2abbf303493c5b67f58b8ae4c
           
+          # 确保所有子模块都已正确初始化
+          git submodule update --init --recursive
+          
+          # 手动下载并设置缺失的子模块
+          echo "手动设置缺失的子模块..."
+          
+          # jemalloc
+          if [ ! -d "External/jemalloc" ]; then
+            git clone https://github.com/jemalloc/jemalloc.git External/jemalloc
+            cd External/jemalloc
+            git checkout 5.3.0
+            cd ../..
+          fi
+          
+          # xxhash
+          if [ ! -d "External/xxhash" ]; then
+            git clone https://github.com/Cyan4973/xxHash.git External/xxhash
+            cd External/xxhash
+            git checkout v0.8.2
+            cd ../..
+          fi
+          
+          # fmt
+          if [ ! -d "External/fmt" ]; then
+            git clone https://github.com/fmtlib/fmt.git External/fmt
+            cd External/fmt
+            git checkout 9.1.0
+            cd ../..
+          fi
+          
+          # range-v3
+          if [ ! -d "External/range-v3" ]; then
+            git clone https://github.com/ericniebler/range-v3.git External/range-v3
+            cd External/range-v3
+            git checkout 0.12.0
+            cd ../..
+          fi
+          
+          # cpp-optparse
+          if [ ! -d "Source/Common/cpp-optparse" ]; then
+            git clone https://github.com/Sonicadvance1/cpp-optparse.git Source/Common/cpp-optparse
+          fi
+
           # 下载 llvm-mingw 工具链
           wget -O llvm-mingw.tar.xz https://github.com/bylaws/llvm-mingw/releases/download/20250920/llvm-mingw-20250920-ucrt-ubuntu-22.04-aarch64.tar.xz
           tar -xJf llvm-mingw.tar.xz -C /tmp
@@ -701,7 +787,7 @@ jobs:
           
           # 构建 WOW64 版本
           mkdir build-wow64 && cd build-wow64
-          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXXFLAGS="$CXXFLAGS" \
             -GNinja \
             -DCMAKE_INSTALL_PREFIX=/tmp/fex-install \
             -DCMAKE_INSTALL_LIBDIR=/tmp/fex-install/lib/wine/aarch64-windows \
