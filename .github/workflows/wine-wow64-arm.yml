@@ -329,31 +329,12 @@ jobs:
           export PATH="/tmp/llvm-mingw-20250920-ucrt-ubuntu-22.04-aarch64/bin:$PATH"
           export CFLAGS="-O3 -g -pipe -Wall -Wextra"
           export CXXFLAGS="$CFLAGS"
-          export LDFLAGS="-Wl,--gc-sections -static"
+          export LDFLAGS="-Wl,--gc-sections"
           
-          # 构建 ARM64EC 版本
-          mkdir build-arm64ec && cd build-arm64ec
-          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
-            -GNinja \
-            -DCMAKE_INSTALL_PREFIX=/tmp/fex-install \
-            -DCMAKE_INSTALL_LIBDIR=/tmp/fex-install/lib/wine/aarch64-windows \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE=../Data/CMake/toolchain_mingw.cmake \
-            -DENABLE_LTO=False \
-            -DTUNE_CPU=none \
-            -DMINGW_TRIPLE=arm64ec-w64-mingw32 \
-            -DBUILD_TESTING=False \
-            -DENABLE_JEMALLOC_GLIBC_ALLOC=False \
-            ..
-          
-          # 修复 dlltool 命令
-          sed -i 's/arm64ec-w64-mingw32-dlltool/llvm-dlltool -m arm64ec/g' build.ninja
-          ninja
-          cd ..
-          
-          # 构建 WOW64 版本
+          # 首先只构建 WOW64 版本，因为 ARM64EC 可能有问题
+          echo "=== 构建 WOW64 版本 ==="
           mkdir build-wow64 && cd build-wow64
-          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXXFLAGS="$CXXFLAGS" \
+          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
             -GNinja \
             -DCMAKE_INSTALL_PREFIX=/tmp/fex-install \
             -DCMAKE_INSTALL_LIBDIR=/tmp/fex-install/lib/wine/aarch64-windows \
@@ -370,10 +351,52 @@ jobs:
           ninja
           cd ..
           
+          # 尝试构建 ARM64EC 版本，但如果失败则继续
+          echo "=== 尝试构建 ARM64EC 版本 ==="
+          mkdir build-arm64ec && cd build-arm64ec
+          set +e  # 允许 ARM64EC 构建失败
+          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+            -GNinja \
+            -DCMAKE_INSTALL_PREFIX=/tmp/fex-install \
+            -DCMAKE_INSTALL_LIBDIR=/tmp/fex-install/lib/wine/aarch64-windows \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=../Data/CMake/toolchain_mingw.cmake \
+            -DENABLE_LTO=False \
+            -DTUNE_CPU=none \
+            -DMINGW_TRIPLE=arm64ec-w64-mingw32 \
+            -DBUILD_TESTING=False \
+            -DENABLE_JEMALLOC_GLIBC_ALLOC=False \
+            ..
+          
+          if [ $? -eq 0 ]; then
+            # 修复 dlltool 命令
+            sed -i 's/arm64ec-w64-mingw32-dlltool/llvm-dlltool -m arm64ec/g' build.ninja
+            ninja
+          else
+            echo "ARM64EC 配置失败，跳过 ARM64EC 构建"
+          fi
+          set -e  # 恢复错误检查
+          cd ..
+          
           # 安装 FEX-Emu
           mkdir -p /tmp/fex-install/lib/wine/aarch64-windows
-          cp build-arm64ec/libarm64ecfex.dll /tmp/fex-install/lib/wine/aarch64-windows/
-          cp build-wow64/libwow64fex.dll /tmp/fex-install/lib/wine/aarch64-windows/
+          
+          # 复制 WOW64 DLL（必须存在）
+          if [ -f "build-wow64/libwow64fex.dll" ]; then
+            cp build-wow64/libwow64fex.dll /tmp/fex-install/lib/wine/aarch64-windows/
+            echo "已复制 libwow64fex.dll"
+          else
+            echo "错误: libwow64fex.dll 不存在"
+            exit 1
+          fi
+          
+          # 尝试复制 ARM64EC DLL（如果存在）
+          if [ -f "build-arm64ec/libarm64ecfex.dll" ]; then
+            cp build-arm64ec/libarm64ecfex.dll /tmp/fex-install/lib/wine/aarch64-windows/
+            echo "已复制 libarm64ecfex.dll"
+          else
+            echo "警告: libarm64ecfex.dll 不存在，跳过 ARM64EC 支持"
+          fi
           
           echo "FEX-Emu 构建完成"
 
@@ -418,7 +441,7 @@ jobs:
             echo "分支: ${{ github.event.inputs.proton_branch || 'proton_10.0' }}"
             
             # 设置构建名称
-            BUILD_NAME="proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-arm64-wow64-xuser-fex"
+            BUILD_NAME="proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-arm64-wow64-xuser"
             echo "BUILD_NAME=$BUILD_NAME" >> $GITHUB_ENV
             
             # 设置中文构建环境
@@ -449,7 +472,7 @@ jobs:
             export CXXFLAGS="-march=armv8-a+crc+crypto -O3 -g -pipe -Wall -Wextra -fPIC"
             export MAKEFLAGS="-j2"
             
-            # 配置 64 位 Wine - 启用 ARM64EC 支持
+            # 配置 64 位 Wine
             ../configure \
               --build=aarch64-linux-gnu \
               --host=aarch64-linux-gnu \
@@ -543,9 +566,15 @@ jobs:
           echo "集成 FEX-Emu DLL 到 Wine 安装目录..."
           if [ -d "/tmp/wine-install-proton" ] && [ -d "/tmp/fex-install" ]; then
             mkdir -p /tmp/wine-install-proton/lib/wine/aarch64-windows
-            cp /tmp/fex-install/lib/wine/aarch64-windows/*.dll /tmp/wine-install-proton/lib/wine/aarch64-windows/
-            echo "FEX-Emu DLL 集成完成"
-            ls -la /tmp/wine-install-proton/lib/wine/aarch64-windows/
+            
+            # 检查 FEX DLL 是否存在
+            if [ -f "/tmp/fex-install/lib/wine/aarch64-windows/libwow64fex.dll" ]; then
+              cp /tmp/fex-install/lib/wine/aarch64-windows/*.dll /tmp/wine-install-proton/lib/wine/aarch64-windows/
+              echo "FEX-Emu DLL 集成完成"
+              ls -la /tmp/wine-install-proton/lib/wine/aarch64-windows/
+            else
+              echo "警告: FEX-Emu DLL 不存在，跳过集成"
+            fi
           else
             echo "警告: 无法找到 Wine 或 FEX-Emu 安装目录"
           fi
@@ -605,7 +634,7 @@ jobs:
       - name: Upload Proton artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-ARM64-WoW64-xuser-FEX
+          name: Proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-ARM64-WoW64-xuser
           path: |
             ${{ github.workspace }}/*.tar.xz
             ${{ github.workspace }}/checksums.txt
@@ -615,33 +644,38 @@ jobs:
         uses: softprops/action-gh-release@v1
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'proton'
         with:
-          tag_name: proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-arm64-wow64-xuser-fex
-          name: Proton ${{ github.event.inputs.proton_branch || 'proton_10.0' }} (ARM64 WOW64 with FEX-Emu & Vulkan for Termux - xuser)
+          tag_name: proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-arm64-wow64-xuser
+          name: Proton ${{ github.event.inputs.proton_branch || 'proton_10.0' }} (ARM64 WOW64 with Vulkan & GStreamer for Termux - xuser)
           body: |
-            # Proton ${{ github.event.inputs.proton_branch || 'proton_10.0' }} - ARM64 WOW64 with FEX-Emu & Vulkan for Termux (xuser)
+            # Proton ${{ github.event.inputs.proton_branch || 'proton_10.0' }} - ARM64 WOW64 with Vulkan & GStreamer for Termux (xuser)
             
             ## 版本信息
             - **Proton 分支**: ${{ github.event.inputs.proton_branch || 'proton_10.0' }}
             - **架构**: ARM64 WOW64 (在 ARM64 设备上运行 32 位和 64 位 Windows 应用程序)
             - **平台**: Termux (Android ARM64)
             - **图形 API**: Vulkan 支持已启用
-            - **ARM64EC**: 通过 FEX-Emu 支持 ARM64EC
+            - **多媒体**: 完整 GStreamer 支持
             - **用户名**: xuser (已移除 Steam 优化)
             
-            ## 新特性
-            ✓ 集成 FEX-Emu 支持 ARM64EC
-            ✓ 优化的编译标志 (基于 FEX spec)
+            ## 特性
             ✓ ARM64 原生架构
             ✓ WOW64 支持 (在 ARM64 上运行 32 位和 64 位 Windows 应用程序)
             ✓ Vulkan 图形 API 支持
             ✓ 完整的 GStreamer 支持
             ✓ 中文环境支持
+            ✓ 基于 Valve Proton，但移除了 Steam 特定优化
+            ✓ 默认用户名改为 xuser
+            ✓ 针对 ARM64 架构优化编译
             
-            ## FEX-Emu 集成
-            - libarm64ecfex.dll: ARM64EC 仿真支持
-            - libwow64fex.dll: WOW64 仿真支持
-            - 基于 FEX-Emu commit 4afbdd9
-            - 使用 LLVM-MinGW 工具链构建
+            ## FEX-Emu 状态
+            - WOW64 仿真支持已集成
+            - ARM64EC 支持: 当前版本中 ARM64EC 构建失败，已跳过
+            
+            ## 重要变更
+            - 所有对 `steamuser` 的引用已改为 `xuser`
+            - 移除了 Steam 特定的优化和组件
+            - 更适合通用 Windows 应用程序运行
+            - 针对 ARM64 架构优化
             
             ## 安装说明
             解压后，将 `${{ env.BUILD_NAME }}` 文件夹放置在 Termux 的合适位置，并设置环境变量。
@@ -763,31 +797,12 @@ jobs:
           export PATH="/tmp/llvm-mingw-20250920-ucrt-ubuntu-22.04-aarch64/bin:$PATH"
           export CFLAGS="-O3 -g -pipe -Wall -Wextra"
           export CXXFLAGS="$CFLAGS"
-          export LDFLAGS="-Wl,--gc-sections -static"
+          export LDFLAGS="-Wl,--gc-sections"
           
-          # 构建 ARM64EC 版本
-          mkdir build-arm64ec && cd build-arm64ec
-          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
-            -GNinja \
-            -DCMAKE_INSTALL_PREFIX=/tmp/fex-install \
-            -DCMAKE_INSTALL_LIBDIR=/tmp/fex-install/lib/wine/aarch64-windows \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE=../Data/CMake/toolchain_mingw.cmake \
-            -DENABLE_LTO=False \
-            -DTUNE_CPU=none \
-            -DMINGW_TRIPLE=arm64ec-w64-mingw32 \
-            -DBUILD_TESTING=False \
-            -DENABLE_JEMALLOC_GLIBC_ALLOC=False \
-            ..
-          
-          # 修复 dlltool 命令
-          sed -i 's/arm64ec-w64-mingw32-dlltool/llvm-dlltool -m arm64ec/g' build.ninja
-          ninja
-          cd ..
-          
-          # 构建 WOW64 版本
+          # 首先只构建 WOW64 版本，因为 ARM64EC 可能有问题
+          echo "=== 构建 WOW64 版本 ==="
           mkdir build-wow64 && cd build-wow64
-          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXXFLAGS="$CXXFLAGS" \
+          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
             -GNinja \
             -DCMAKE_INSTALL_PREFIX=/tmp/fex-install \
             -DCMAKE_INSTALL_LIBDIR=/tmp/fex-install/lib/wine/aarch64-windows \
@@ -804,10 +819,52 @@ jobs:
           ninja
           cd ..
           
+          # 尝试构建 ARM64EC 版本，但如果失败则继续
+          echo "=== 尝试构建 ARM64EC 版本 ==="
+          mkdir build-arm64ec && cd build-arm64ec
+          set +e  # 允许 ARM64EC 构建失败
+          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+            -GNinja \
+            -DCMAKE_INSTALL_PREFIX=/tmp/fex-install \
+            -DCMAKE_INSTALL_LIBDIR=/tmp/fex-install/lib/wine/aarch64-windows \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=../Data/CMake/toolchain_mingw.cmake \
+            -DENABLE_LTO=False \
+            -DTUNE_CPU=none \
+            -DMINGW_TRIPLE=arm64ec-w64-mingw32 \
+            -DBUILD_TESTING=False \
+            -DENABLE_JEMALLOC_GLIBC_ALLOC=False \
+            ..
+          
+          if [ $? -eq 0 ]; then
+            # 修复 dlltool 命令
+            sed -i 's/arm64ec-w64-mingw32-dlltool/llvm-dlltool -m arm64ec/g' build.ninja
+            ninja
+          else
+            echo "ARM64EC 配置失败，跳过 ARM64EC 构建"
+          fi
+          set -e  # 恢复错误检查
+          cd ..
+          
           # 安装 FEX-Emu
           mkdir -p /tmp/fex-install/lib/wine/aarch64-windows
-          cp build-arm64ec/libarm64ecfex.dll /tmp/fex-install/lib/wine/aarch64-windows/
-          cp build-wow64/libwow64fex.dll /tmp/fex-install/lib/wine/aarch64-windows/
+          
+          # 复制 WOW64 DLL（必须存在）
+          if [ -f "build-wow64/libwow64fex.dll" ]; then
+            cp build-wow64/libwow64fex.dll /tmp/fex-install/lib/wine/aarch64-windows/
+            echo "已复制 libwow64fex.dll"
+          else
+            echo "错误: libwow64fex.dll 不存在"
+            exit 1
+          fi
+          
+          # 尝试复制 ARM64EC DLL（如果存在）
+          if [ -f "build-arm64ec/libarm64ecfex.dll" ]; then
+            cp build-arm64ec/libarm64ecfex.dll /tmp/fex-install/lib/wine/aarch64-windows/
+            echo "已复制 libarm64ecfex.dll"
+          else
+            echo "警告: libarm64ecfex.dll 不存在，跳过 ARM64EC 支持"
+          fi
           
           echo "FEX-Emu 构建完成"
 
@@ -975,7 +1032,7 @@ jobs:
             fi
             
             COMMIT_HASH=$(git rev-parse --short HEAD)
-            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${WINE_BRANCH}-arm64-wow64-fex"
+            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${WINE_BRANCH}-arm64-wow64"
             
           elif [ "$WINE_BRANCH" = "staging" ]; then
             # staging 分支处理
@@ -991,7 +1048,7 @@ jobs:
             fi
             WINE_VERSION_ACTUAL=$(git describe --tags --abbrev=0 2>/dev/null || echo "$WINE_VERSION")
             COMMIT_HASH=$(git rev-parse --short HEAD)
-            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${COMMIT_HASH}-staging-arm64-wow64-fex"
+            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${COMMIT_HASH}-staging-arm64-wow64"
             
             # 应用 staging 补丁
             PURE_VERSION=$(echo "$WINE_VERSION_ACTUAL" | sed 's/^wine-//')
@@ -1032,7 +1089,7 @@ jobs:
             fi
             WINE_VERSION_ACTUAL=$(git describe --tags --abbrev=0 2>/dev/null || echo "$WINE_VERSION")
             COMMIT_HASH=$(git rev-parse --short HEAD)
-            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${COMMIT_HASH}-vanilla-arm64-wow64-fex"
+            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${COMMIT_HASH}-vanilla-arm64-wow64"
             
           else
             echo "未知的 Wine 分支: $WINE_BRANCH"
@@ -1129,9 +1186,15 @@ jobs:
           echo "集成 FEX-Emu DLL 到 Wine 安装目录..."
           if [ -d "/tmp/wine-install-arm64" ] && [ -d "/tmp/fex-install" ]; then
             mkdir -p /tmp/wine-install-arm64/lib/wine/aarch64-windows
-            cp /tmp/fex-install/lib/wine/aarch64-windows/*.dll /tmp/wine-install-arm64/lib/wine/aarch64-windows/
-            echo "FEX-Emu DLL 集成完成"
-            ls -la /tmp/wine-install-arm64/lib/wine/aarch64-windows/
+            
+            # 检查 FEX DLL 是否存在
+            if [ -f "/tmp/fex-install/lib/wine/aarch64-windows/libwow64fex.dll" ]; then
+              cp /tmp/fex-install/lib/wine/aarch64-windows/*.dll /tmp/wine-install-arm64/lib/wine/aarch64-windows/
+              echo "FEX-Emu DLL 集成完成"
+              ls -la /tmp/wine-install-arm64/lib/wine/aarch64-windows/
+            else
+              echo "警告: FEX-Emu DLL 不存在，跳过集成"
+            fi
           else
             echo "警告: 无法找到 Wine 或 FEX-Emu 安装目录"
           fi
@@ -1191,7 +1254,7 @@ jobs:
       - name: Upload Wine ARM64 WoW64 artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Wine-${{ github.event.inputs.wine_branch || 'staging' }}-${{ github.event.inputs.wine_version || 'latest' }}-ARM64-WoW64-FEX
+          name: Wine-${{ github.event.inputs.wine_branch || 'staging' }}-${{ github.event.inputs.wine_version || 'latest' }}-ARM64-WoW64
           path: |
             ${{ github.workspace }}/*.tar.xz
             ${{ github.workspace }}/checksums.txt
@@ -1201,10 +1264,10 @@ jobs:
         uses: softprops/action-gh-release@v1
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'wine-wow64'
         with:
-          tag_name: wine-${{ github.event.inputs.wine_branch || 'staging' }}-${{ github.event.inputs.wine_version || 'latest' }}-arm64-wow64-fex
-          name: Wine ${{ github.event.inputs.wine_branch || 'staging' }} ${{ github.event.inputs.wine_version || 'latest' }} (ARM64 WOW64 with FEX-Emu & Vulkan for Termux)
+          tag_name: wine-${{ github.event.inputs.wine_branch || 'staging' }}-${{ github.event.inputs.wine_version || 'latest' }}-arm64-wow64
+          name: Wine ${{ github.event.inputs.wine_branch || 'staging' }} ${{ github.event.inputs.wine_version || 'latest' }} (ARM64 WOW64 with Vulkan & GStreamer for Termux)
           body: |
-            # Wine ${{ github.event.inputs.wine_branch || 'staging' }} ${{ github.event.inputs.wine_version || 'latest' }} - ARM64 WOW64 with FEX-Emu & Vulkan for Termux
+            # Wine ${{ github.event.inputs.wine_branch || 'staging' }} ${{ github.event.inputs.wine_version || 'latest' }} - ARM64 WOW64 with Vulkan & GStreamer for Termux
             
             ## 版本信息
             - **Wine 分支**: ${{ github.event.inputs.wine_branch || 'staging' }}
@@ -1212,22 +1275,20 @@ jobs:
             - **架构**: ARM64 WOW64 (在 ARM64 设备上运行 32 位和 64 位 Windows 应用程序)
             - **平台**: Termux (Android ARM64)
             - **图形 API**: Vulkan 支持已启用
-            - **ARM64EC**: 通过 FEX-Emu 支持 ARM64EC
+            - **多媒体**: 完整 GStreamer 支持
             
-            ## 新特性
-            ✓ 集成 FEX-Emu 支持 ARM64EC
-            ✓ 优化的编译标志 (基于 FEX spec)
+            ## 特性
             ✓ ARM64 原生架构
             ✓ WOW64 支持 (在 ARM64 上运行 32 位和 64 位 Windows 应用程序)
             ✓ Vulkan 图形 API 支持
             ✓ 完整的 GStreamer 支持
             ✓ 中文环境支持
+            ✓ 应用了关键补丁提升兼容性
+            ✓ 针对 ARM64 架构优化编译
             
-            ## FEX-Emu 集成
-            - libarm64ecfex.dll: ARM64EC 仿真支持
-            - libwow64fex.dll: WOW64 仿真支持
-            - 基于 FEX-Emu commit 4afbdd9
-            - 使用 LLVM-MinGW 工具链构建
+            ## FEX-Emu 状态
+            - WOW64 仿真支持已集成
+            - ARM64EC 支持: 当前版本中 ARM64EC 构建失败，已跳过
             
             ## 安装说明
             解压后，将 `${{ env.BUILD_NAME }}` 文件夹放置在 Termux 的合适位置，并设置环境变量。
