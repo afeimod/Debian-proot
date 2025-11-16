@@ -57,6 +57,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: 安装 FEX-Emu 构建依赖
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            llvm \
+            clang \
+            lld \
+            ninja-build \
+            cmake \
+            git \
+            python3 \
+            python3-setuptools \
+            nasm \
+            libfmt-dev \
+            libepoxy-dev \
+            libsdl2-dev \
+            libxxhash-dev \
+            libasound2-dev \
+            libdrm-dev \
+            libglvnd-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libssl-dev \
+            libwayland-dev \
+            zlib1g-dev \
+            catch2
+
       - name: 安装构建依赖
         run: |
           sudo apt update
@@ -222,60 +249,75 @@ jobs:
               libswscale-dev \
               libswscale-dev:armhf"
 
-      - name: 安装系统工具和其他依赖
+      - name: 构建 FEX-Emu
         run: |
-          sudo apt update
-          # 安装必要的系统工具
-          sudo apt install -y \
-            file \
-            zip \
-            unzip \
-            patchelf \
-            meson \
-            nasm \
-            yasm \
-            python3 \
-            python3-pip \
-            python3-setuptools \
-            libc6-dev \
-            libc6-dev-armhf-cross \
-            linux-libc-dev \
-            linux-libc-dev:armhf \
-            libstdc++6 \
-            libstdc++6:armhf \
-            libgcc1 \
-            libgcc1:armhf
-
-          # 安装 Wine 构建可能需要的其他库
-          sudo apt install -y \
-            libkrb5-dev \
-            libkrb5-dev:armhf \
-            libgnutls28-dev \
-            libgnutls28-dev:armhf \
-            libldap2-dev \
-            libldap2-dev:armhf \
-            libgsm1-dev \
-            libgsm1-dev:armhf \
-            libmpg123-dev \
-            libmpg123-dev:armhf \
-            libopenal-dev \
-            libopenal-dev:armhf \
-            libcapi20-dev \
-            libcapi20-dev:armhf \
-            libcups2-dev \
-            libcups2-dev:armhf \
-            libosmesa6-dev \
-            libosmesa6-dev:armhf \
-            libsane-dev \
-            libsane-dev:armhf \
-            libv4l-dev \
-            libv4l-dev:armhf \
-            libgphoto2-dev \
-            libgphoto2-dev:armhf \
-            libusb-1.0-0-dev \
-            libusb-1.0-0-dev:armhf \
-            libpcsclite-dev \
-            libpcsclite-dev:armhf
+          set -e
+          echo "开始构建 FEX-Emu for ARM64..."
+          
+          FEX_BUILD_DIR="/tmp/build_fex"
+          rm -rf "$FEX_BUILD_DIR"
+          mkdir -p "$FEX_BUILD_DIR"
+          cd "$FEX_BUILD_DIR"
+          
+          # 克隆 FEX-Emu 源码
+          git clone https://github.com/FEX-Emu/FEX.git
+          cd FEX
+          git checkout 4afbdd9afb4738b2abbf303493c5b67f58b8ae4c
+          
+          # 下载 llvm-mingw 工具链
+          wget -O llvm-mingw.tar.xz https://github.com/bylaws/llvm-mingw/releases/download/20250920/llvm-mingw-20250920-ucrt-ubuntu-22.04-aarch64.tar.xz
+          tar -xJf llvm-mingw.tar.xz -C /tmp
+          
+          export PATH="/tmp/llvm-mingw-20250920-ucrt-ubuntu-22.04-aarch64/bin:$PATH"
+          export CFLAGS="-O3 -g -pipe -Wall -Wextra"
+          export CXXFLAGS="$CFLAGS"
+          export LDFLAGS="-Wl,--gc-sections -static"
+          
+          # 构建 ARM64EC 版本
+          mkdir build-arm64ec && cd build-arm64ec
+          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+            -GNinja \
+            -DCMAKE_INSTALL_PREFIX=/tmp/fex-install \
+            -DCMAKE_INSTALL_LIBDIR=/tmp/fex-install/lib/wine/aarch64-windows \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=../Data/CMake/toolchain_mingw.cmake \
+            -DENABLE_LTO=False \
+            -DTUNE_CPU=none \
+            -DMINGW_TRIPLE=arm64ec-w64-mingw32 \
+            -DBUILD_TESTING=False \
+            -DENABLE_JEMALLOC_GLIBC_ALLOC=False \
+            ..
+          
+          # 修复 dlltool 命令
+          sed -i 's/arm64ec-w64-mingw32-dlltool/llvm-dlltool -m arm64ec/g' build.ninja
+          ninja
+          cd ..
+          
+          # 构建 WOW64 版本
+          mkdir build-wow64 && cd build-wow64
+          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+            -GNinja \
+            -DCMAKE_INSTALL_PREFIX=/tmp/fex-install \
+            -DCMAKE_INSTALL_LIBDIR=/tmp/fex-install/lib/wine/aarch64-windows \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=../Data/CMake/toolchain_mingw.cmake \
+            -DENABLE_LTO=False \
+            -DTUNE_CPU=none \
+            -DMINGW_TRIPLE=aarch64-w64-mingw32 \
+            -DBUILD_TESTING=False \
+            -DENABLE_JEMALLOC_GLIBC_ALLOC=OFF \
+            ..
+          
+          sed -i 's/aarch64-w64-mingw32-dlltool/llvm-dlltool -m arm64/g' build.ninja
+          ninja
+          cd ..
+          
+          # 安装 FEX-Emu
+          mkdir -p /tmp/fex-install/lib/wine/aarch64-windows
+          cp build-arm64ec/libarm64ecfex.dll /tmp/fex-install/lib/wine/aarch64-windows/
+          cp build-wow64/libwow64fex.dll /tmp/fex-install/lib/wine/aarch64-windows/
+          
+          echo "FEX-Emu 构建完成"
 
       - name: 设置交叉编译环境
         run: |
@@ -318,7 +360,7 @@ jobs:
             echo "分支: ${{ github.event.inputs.proton_branch || 'proton_10.0' }}"
             
             # 设置构建名称
-            BUILD_NAME="proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-arm64-wow64-xuser"
+            BUILD_NAME="proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-arm64-wow64-xuser-fex"
             echo "BUILD_NAME=$BUILD_NAME" >> $GITHUB_ENV
             
             # 设置中文构建环境
@@ -344,17 +386,18 @@ jobs:
             mkdir -p build64
             cd build64
             
-            # 64 位编译标志
-            export CFLAGS="-march=armv8-a+crc+crypto -O2 -pipe -fPIC"
-            export CXXFLAGS="-march=armv8-a+crc+crypto -O2 -pipe -fPIC"
+            # 64 位编译标志 - 根据 FEX spec 优化
+            export CFLAGS="-march=armv8-a+crc+crypto -O3 -g -pipe -Wall -Wextra -fPIC"
+            export CXXFLAGS="-march=armv8-a+crc+crypto -O3 -g -pipe -Wall -Wextra -fPIC"
             export MAKEFLAGS="-j2"
             
-            # 配置 64 位 Wine
+            # 配置 64 位 Wine - 启用 ARM64EC 支持
             ../configure \
               --build=aarch64-linux-gnu \
               --host=aarch64-linux-gnu \
               --prefix=/tmp/wine-install-proton \
               --enable-win64 \
+              --enable-archs=aarch64,aarch64ec \
               --with-x \
               --with-alsa \
               --with-pulse \
@@ -399,8 +442,8 @@ jobs:
             sudo apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
             
             # 32 位编译标志
-            export CFLAGS="-march=armv8-a -O2 -pipe -fPIC"
-            export CXXFLAGS="-march=armv8-a -O2 -pipe -fPIC"
+            export CFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
+            export CXXFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
             export MAKEFLAGS="-j2"
             
             # 配置 32 位 Wine，指向已安装的 64 位版本
@@ -437,6 +480,18 @@ jobs:
             make -j2 install || make -j1 install
             
             echo "ARM64 WOW64 Wine 构建完成"
+
+      - name: 集成 FEX-Emu DLL
+        run: |
+          echo "集成 FEX-Emu DLL 到 Wine 安装目录..."
+          if [ -d "/tmp/wine-install-proton" ] && [ -d "/tmp/fex-install" ]; then
+            mkdir -p /tmp/wine-install-proton/lib/wine/aarch64-windows
+            cp /tmp/fex-install/lib/wine/aarch64-windows/*.dll /tmp/wine-install-proton/lib/wine/aarch64-windows/
+            echo "FEX-Emu DLL 集成完成"
+            ls -la /tmp/wine-install-proton/lib/wine/aarch64-windows/
+          else
+            echo "警告: 无法找到 Wine 或 FEX-Emu 安装目录"
+          fi
 
       - name: 检查安装目录
         run: |
@@ -493,7 +548,7 @@ jobs:
       - name: Upload Proton artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-ARM64-WoW64-xuser
+          name: Proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-ARM64-WoW64-xuser-FEX
           path: |
             ${{ github.workspace }}/*.tar.xz
             ${{ github.workspace }}/checksums.txt
@@ -503,34 +558,33 @@ jobs:
         uses: softprops/action-gh-release@v1
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'proton'
         with:
-          tag_name: proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-arm64-wow64-xuser
-          name: Proton ${{ github.event.inputs.proton_branch || 'proton_10.0' }} (ARM64 WOW64 with Vulkan & GStreamer for Termux - xuser)
+          tag_name: proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-arm64-wow64-xuser-fex
+          name: Proton ${{ github.event.inputs.proton_branch || 'proton_10.0' }} (ARM64 WOW64 with FEX-Emu & Vulkan for Termux - xuser)
           body: |
-            # Proton ${{ github.event.inputs.proton_branch || 'proton_10.0' }} - ARM64 WOW64 with Vulkan & GStreamer for Termux (xuser)
+            # Proton ${{ github.event.inputs.proton_branch || 'proton_10.0' }} - ARM64 WOW64 with FEX-Emu & Vulkan for Termux (xuser)
             
             ## 版本信息
             - **Proton 分支**: ${{ github.event.inputs.proton_branch || 'proton_10.0' }}
             - **架构**: ARM64 WOW64 (在 ARM64 设备上运行 32 位和 64 位 Windows 应用程序)
             - **平台**: Termux (Android ARM64)
             - **图形 API**: Vulkan 支持已启用
-            - **多媒体**: 完整 GStreamer 支持
+            - **ARM64EC**: 通过 FEX-Emu 支持 ARM64EC
             - **用户名**: xuser (已移除 Steam 优化)
             
-            ## 特性
+            ## 新特性
+            ✓ 集成 FEX-Emu 支持 ARM64EC
+            ✓ 优化的编译标志 (基于 FEX spec)
             ✓ ARM64 原生架构
             ✓ WOW64 支持 (在 ARM64 上运行 32 位和 64 位 Windows 应用程序)
             ✓ Vulkan 图形 API 支持
             ✓ 完整的 GStreamer 支持
             ✓ 中文环境支持
-            ✓ 基于 Valve Proton，但移除了 Steam 特定优化
-            ✓ 默认用户名改为 xuser
-            ✓ 针对 ARM64 架构优化编译
             
-            ## 重要变更
-            - 所有对 `steamuser` 的引用已改为 `xuser`
-            - 移除了 Steam 特定的优化和组件
-            - 更适合通用 Windows 应用程序运行
-            - 针对 ARM64 架构优化
+            ## FEX-Emu 集成
+            - libarm64ecfex.dll: ARM64EC 仿真支持
+            - libwow64fex.dll: WOW64 仿真支持
+            - 基于 FEX-Emu commit 4afbdd9
+            - 使用 LLVM-MinGW 工具链构建
             
             ## 安装说明
             解压后，将 `${{ env.BUILD_NAME }}` 文件夹放置在 Termux 的合适位置，并设置环境变量。
@@ -553,6 +607,103 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: 安装 FEX-Emu 构建依赖
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            llvm \
+            clang \
+            lld \
+            ninja-build \
+            cmake \
+            git \
+            python3 \
+            python3-setuptools \
+            nasm \
+            libfmt-dev \
+            libepoxy-dev \
+            libsdl2-dev \
+            libxxhash-dev \
+            libasound2-dev \
+            libdrm-dev \
+            libglvnd-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libssl-dev \
+            libwayland-dev \
+            zlib1g-dev \
+            catch2
+
+      - name: 构建 FEX-Emu
+        run: |
+          set -e
+          echo "开始构建 FEX-Emu for ARM64..."
+          
+          FEX_BUILD_DIR="/tmp/build_fex"
+          rm -rf "$FEX_BUILD_DIR"
+          mkdir -p "$FEX_BUILD_DIR"
+          cd "$FEX_BUILD_DIR"
+          
+          # 克隆 FEX-Emu 源码
+          git clone https://github.com/FEX-Emu/FEX.git
+          cd FEX
+          git checkout 4afbdd9afb4738b2abbf303493c5b67f58b8ae4c
+          
+          # 下载 llvm-mingw 工具链
+          wget -O llvm-mingw.tar.xz https://github.com/bylaws/llvm-mingw/releases/download/20250920/llvm-mingw-20250920-ucrt-ubuntu-22.04-aarch64.tar.xz
+          tar -xJf llvm-mingw.tar.xz -C /tmp
+          
+          export PATH="/tmp/llvm-mingw-20250920-ucrt-ubuntu-22.04-aarch64/bin:$PATH"
+          export CFLAGS="-O3 -g -pipe -Wall -Wextra"
+          export CXXFLAGS="$CFLAGS"
+          export LDFLAGS="-Wl,--gc-sections -static"
+          
+          # 构建 ARM64EC 版本
+          mkdir build-arm64ec && cd build-arm64ec
+          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+            -GNinja \
+            -DCMAKE_INSTALL_PREFIX=/tmp/fex-install \
+            -DCMAKE_INSTALL_LIBDIR=/tmp/fex-install/lib/wine/aarch64-windows \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=../Data/CMake/toolchain_mingw.cmake \
+            -DENABLE_LTO=False \
+            -DTUNE_CPU=none \
+            -DMINGW_TRIPLE=arm64ec-w64-mingw32 \
+            -DBUILD_TESTING=False \
+            -DENABLE_JEMALLOC_GLIBC_ALLOC=False \
+            ..
+          
+          # 修复 dlltool 命令
+          sed -i 's/arm64ec-w64-mingw32-dlltool/llvm-dlltool -m arm64ec/g' build.ninja
+          ninja
+          cd ..
+          
+          # 构建 WOW64 版本
+          mkdir build-wow64 && cd build-wow64
+          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+            -GNinja \
+            -DCMAKE_INSTALL_PREFIX=/tmp/fex-install \
+            -DCMAKE_INSTALL_LIBDIR=/tmp/fex-install/lib/wine/aarch64-windows \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=../Data/CMake/toolchain_mingw.cmake \
+            -DENABLE_LTO=False \
+            -DTUNE_CPU=none \
+            -DMINGW_TRIPLE=aarch64-w64-mingw32 \
+            -DBUILD_TESTING=False \
+            -DENABLE_JEMALLOC_GLIBC_ALLOC=OFF \
+            ..
+          
+          sed -i 's/aarch64-w64-mingw32-dlltool/llvm-dlltool -m arm64/g' build.ninja
+          ninja
+          cd ..
+          
+          # 安装 FEX-Emu
+          mkdir -p /tmp/fex-install/lib/wine/aarch64-windows
+          cp build-arm64ec/libarm64ecfex.dll /tmp/fex-install/lib/wine/aarch64-windows/
+          cp build-wow64/libwow64fex.dll /tmp/fex-install/lib/wine/aarch64-windows/
+          
+          echo "FEX-Emu 构建完成"
+
       - name: 安装构建依赖
         run: |
           sudo apt update
@@ -677,7 +828,7 @@ jobs:
           
           # 根据分支获取 Wine 源码
           if [ "$WINE_BRANCH" = "staging-tkg" ] || [ "$WINE_BRANCH" = "staging-tkg-fsync" ]; then
-            # TKG 系列处理 - 修复目录结构问题
+            # TKG 系列处理
             echo "处理 TKG 系列分支: $WINE_BRANCH"
             
             if [ "$WINE_BRANCH" = "staging-tkg" ]; then
@@ -690,7 +841,6 @@ jobs:
             
             cd "$SOURCE_DIR"
             
-            # 检查对应的版本标签或分支
             if [ "$WINE_VERSION" != "latest" ]; then
               if git checkout "$WINE_VERSION" 2>/dev/null || git checkout "wine-$WINE_VERSION" 2>/dev/null; then
                 echo "成功切换到版本 $WINE_VERSION"
@@ -699,7 +849,6 @@ jobs:
               fi
             fi
             
-            # TKG 版本获取方式
             if [ -f "VERSION" ]; then
               WINE_VERSION_ACTUAL="$(cat VERSION | tail -c +14)"
               echo "从 VERSION 文件获取版本: $WINE_VERSION_ACTUAL"
@@ -709,22 +858,15 @@ jobs:
             fi
             
             COMMIT_HASH=$(git rev-parse --short HEAD)
-            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${WINE_BRANCH}-arm64-wow64"
-            
-            echo "TKG 构建信息:"
-            echo "  - 版本: $WINE_VERSION_ACTUAL"
-            echo "  - 分支: $WINE_BRANCH"
-            echo "  - 提交: $COMMIT_HASH"
-            echo "  - 构建名称: $BUILD_NAME"
+            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${WINE_BRANCH}-arm64-wow64-fex"
             
           elif [ "$WINE_BRANCH" = "staging" ]; then
-            # 原有的 staging 分支处理
+            # staging 分支处理
             echo "处理 Staging 分支"
             git clone --depth=1 https://github.com/wine-mirror/wine.git wine
             SOURCE_DIR="wine"
             cd "$SOURCE_DIR"
             
-            # 关闭 detached HEAD 建议
             git config advice.detachedHead false
             
             if [ "$WINE_VERSION" != "latest" ]; then
@@ -732,74 +874,40 @@ jobs:
             fi
             WINE_VERSION_ACTUAL=$(git describe --tags --abbrev=0 2>/dev/null || echo "$WINE_VERSION")
             COMMIT_HASH=$(git rev-parse --short HEAD)
-            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${COMMIT_HASH}-staging-arm64-wow64"
+            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${COMMIT_HASH}-staging-arm64-wow64-fex"
             
-            # 修复：从 wine-X.Y 格式中提取纯版本号
+            # 应用 staging 补丁
             PURE_VERSION=$(echo "$WINE_VERSION_ACTUAL" | sed 's/^wine-//')
-            echo "提取的纯版本号: $PURE_VERSION"
-            
-            # 使用正确的版本格式：vX.Y 而不是 wine-X.Y
             STAGING_VERSION="v${PURE_VERSION}"
             echo "尝试下载 staging 补丁版本: $STAGING_VERSION"
             
-            # 下载并应用 staging 补丁 - 修复版本格式
             wget -O "wine-staging-${PURE_VERSION}.tar.gz" "https://github.com/wine-staging/wine-staging/archive/refs/tags/${STAGING_VERSION}.tar.gz" || \
             wget -O "wine-staging-${PURE_VERSION}.tar.gz" "https://github.com/wine-staging/wine-staging/archive/refs/tags/v${PURE_VERSION}.tar.gz"
             
             if [ -f "wine-staging-${PURE_VERSION}.tar.gz" ]; then
               tar -xzf "wine-staging-${PURE_VERSION}.tar.gz"
               
-              # 应用 staging 补丁 - 修复目录名检查逻辑
-              echo "查找解压后的 staging 目录..."
-              ls -la
-              
-              # 根据 build-wine-test.yml 的正确逻辑
-              if [ -d "wine-staging-${PURE_VERSION}" ]; then
-                echo "找到目录: wine-staging-${PURE_VERSION}"
-                cd "wine-staging-${PURE_VERSION}/staging"
-                chmod +x patchinstall.py
-                ./patchinstall.py --all --destdir=../../
-                cd "../.."
-              elif [ -d "wine-staging-v${PURE_VERSION}" ]; then
-                echo "找到目录: wine-staging-v${PURE_VERSION}"
-                cd "wine-staging-v${PURE_VERSION}/staging"
-                chmod +x patchinstall.py
-                ./patchinstall.py --all --destdir=../../
-                cd "../.."
-              elif [ -d "wine-staging-${STAGING_VERSION}" ]; then
-                echo "找到目录: wine-staging-${STAGING_VERSION}"
-                cd "wine-staging-${STAGING_VERSION}/staging"
+              STAGING_DIR=$(find . -maxdepth 1 -type d -name "*staging*" | head -1)
+              if [ -n "$STAGING_DIR" ] && [ -d "$STAGING_DIR/staging" ]; then
+                echo "找到 staging 目录: $STAGING_DIR"
+                cd "$STAGING_DIR/staging"
                 chmod +x patchinstall.py
                 ./patchinstall.py --all --destdir=../../
                 cd "../.."
               else
-                echo "警告: 未找到预期的 staging 目录结构，尝试自动查找..."
-                # 尝试查找任何包含 staging 的目录
-                STAGING_DIR=$(find . -maxdepth 1 -type d -name "*staging*" | head -1)
-                if [ -n "$STAGING_DIR" ] && [ -d "$STAGING_DIR/staging" ]; then
-                  echo "找到 staging 目录: $STAGING_DIR"
-                  cd "$STAGING_DIR/staging"
-                  chmod +x patchinstall.py
-                  ./patchinstall.py --all --destdir=../../
-                  cd "../.."
-                else
-                  echo "❌ 错误：无法找到 staging 补丁目录，跳过补丁应用"
-                  echo "当前目录内容:"
-                  ls -la
-                fi
+                echo "❌ 错误：无法找到 staging 补丁目录，跳过补丁应用"
               fi
             else
               echo "警告: 无法下载 staging 补丁，继续构建无补丁版本"
             fi
             
           elif [ "$WINE_BRANCH" = "vanilla" ]; then
-            # 原有的 vanilla 分支处理
+            # vanilla 分支处理
             echo "处理 Vanilla 分支"
             git clone --depth=1 https://github.com/wine-mirror/wine.git wine
             SOURCE_DIR="wine"
             cd "$SOURCE_DIR"
             
-            # 关闭 detached HEAD 建议
             git config advice.detachedHead false
             
             if [ "$WINE_VERSION" != "latest" ]; then
@@ -807,7 +915,7 @@ jobs:
             fi
             WINE_VERSION_ACTUAL=$(git describe --tags --abbrev=0 2>/dev/null || echo "$WINE_VERSION")
             COMMIT_HASH=$(git rev-parse --short HEAD)
-            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${COMMIT_HASH}-vanilla-arm64-wow64"
+            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${COMMIT_HASH}-vanilla-arm64-wow64-fex"
             
           else
             echo "未知的 Wine 分支: $WINE_BRANCH"
@@ -818,8 +926,7 @@ jobs:
           echo "当前源码目录: $(pwd)"
           echo "构建名称: $BUILD_NAME"
           
-          # 根据版本选择修复方式
-          # 从 WINE_VERSION_ACTUAL 中提取纯数字版本号
+          # 应用版本特定的修复
           PURE_VERSION=$(echo "$WINE_VERSION_ACTUAL" | sed 's/^wine-//')
           VERSION_MAJOR=$(echo "$PURE_VERSION" | cut -d. -f1)
           VERSION_MINOR=$(echo "$PURE_VERSION" | cut -d. -f2)
@@ -856,51 +963,62 @@ jobs:
           mkdir -p build-arm64
           cd build-arm64
           
-          # ARM64 专用编译标志 - 优化内存使用
-          export CFLAGS="-march=armv8-a -O1 -pipe -fPIC"
-          export CXXFLAGS="-march=armv8-a -O1 -pipe -fPIC"
-          # 减少并行编译以节省内存
+          # 使用 FEX spec 中的优化编译标志
+          export CFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
+          export CXXFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
           export MAKEFLAGS="-j2"
 
-            ../configure \
-              --build=aarch64-linux-gnu \
-              --host=aarch64-linux-gnu \
-              --prefix=/tmp/wine-install-arm64 \
-              --enable-win64 \
-              --with-x \
-              --with-alsa \
-              --with-pulse \
-              --with-freetype \
-              --with-fontconfig \
-              --with-gstreamer \
-              --with-gettext \
-              --with-sdl \
-              --enable-nls \
-              --disable-winemenubuilder \
-              --disable-win16 \
-              --disable-tests \
-              --without-ldap \
-              --without-capi \
-              --without-oss \
-              --without-cups \
-              --without-dbus \
-              --without-coreaudio \
-              --without-gphoto \
-              --without-osmesa \
-              --without-sane \
-              --without-pcap \
-              --without-pcsclite \
-              --without-udev \
-              --without-unwind \
-              --without-usb \
-              --without-v4l2 \
-              --without-wayland
-            
-            echo "开始编译 ARM64 WOW64 Wine..."
-            # 使用更少的并行作业和更保守的编译策略
-            for target in all install; do
-              make $target -j2 || make $target -j1
-            done
+          ../configure \
+            --build=aarch64-linux-gnu \
+            --host=aarch64-linux-gnu \
+            --prefix=/tmp/wine-install-arm64 \
+            --enable-win64 \
+            --enable-archs=aarch64,aarch64ec \
+            --with-x \
+            --with-alsa \
+            --with-pulse \
+            --with-freetype \
+            --with-fontconfig \
+            --with-gstreamer \
+            --with-gettext \
+            --with-sdl \
+            --enable-nls \
+            --disable-winemenubuilder \
+            --disable-win16 \
+            --disable-tests \
+            --without-ldap \
+            --without-capi \
+            --without-oss \
+            --without-cups \
+            --without-dbus \
+            --without-coreaudio \
+            --without-gphoto \
+            --without-osmesa \
+            --without-sane \
+            --without-pcap \
+            --without-pcsclite \
+            --without-udev \
+            --without-unwind \
+            --without-usb \
+            --without-v4l2 \
+            --without-wayland
+          
+          echo "开始编译 ARM64 WOW64 Wine..."
+          for target in all install; do
+            make $target -j2 || make $target -j1
+          done
+
+      - name: 集成 FEX-Emu DLL
+        run: |
+          echo "集成 FEX-Emu DLL 到 Wine 安装目录..."
+          if [ -d "/tmp/wine-install-arm64" ] && [ -d "/tmp/fex-install" ]; then
+            mkdir -p /tmp/wine-install-arm64/lib/wine/aarch64-windows
+            cp /tmp/fex-install/lib/wine/aarch64-windows/*.dll /tmp/wine-install-arm64/lib/wine/aarch64-windows/
+            echo "FEX-Emu DLL 集成完成"
+            ls -la /tmp/wine-install-arm64/lib/wine/aarch64-windows/
+          else
+            echo "警告: 无法找到 Wine 或 FEX-Emu 安装目录"
+          fi
 
       - name: 检查安装目录
         run: |
@@ -957,7 +1075,7 @@ jobs:
       - name: Upload Wine ARM64 WoW64 artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Wine-${{ github.event.inputs.wine_branch || 'staging' }}-${{ github.event.inputs.wine_version || 'latest' }}-ARM64-WoW64
+          name: Wine-${{ github.event.inputs.wine_branch || 'staging' }}-${{ github.event.inputs.wine_version || 'latest' }}-ARM64-WoW64-FEX
           path: |
             ${{ github.workspace }}/*.tar.xz
             ${{ github.workspace }}/checksums.txt
@@ -967,10 +1085,10 @@ jobs:
         uses: softprops/action-gh-release@v1
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'wine-wow64'
         with:
-          tag_name: wine-${{ github.event.inputs.wine_branch || 'staging' }}-${{ github.event.inputs.wine_version || 'latest' }}-arm64-wow64
-          name: Wine ${{ github.event.inputs.wine_branch || 'staging' }} ${{ github.event.inputs.wine_version || 'latest' }} (ARM64 WOW64 with Vulkan & GStreamer for Termux)
+          tag_name: wine-${{ github.event.inputs.wine_branch || 'staging' }}-${{ github.event.inputs.wine_version || 'latest' }}-arm64-wow64-fex
+          name: Wine ${{ github.event.inputs.wine_branch || 'staging' }} ${{ github.event.inputs.wine_version || 'latest' }} (ARM64 WOW64 with FEX-Emu & Vulkan for Termux)
           body: |
-            # Wine ${{ github.event.inputs.wine_branch || 'staging' }} ${{ github.event.inputs.wine_version || 'latest' }} - ARM64 WOW64 with Vulkan & GStreamer for Termux
+            # Wine ${{ github.event.inputs.wine_branch || 'staging' }} ${{ github.event.inputs.wine_version || 'latest' }} - ARM64 WOW64 with FEX-Emu & Vulkan for Termux
             
             ## 版本信息
             - **Wine 分支**: ${{ github.event.inputs.wine_branch || 'staging' }}
@@ -978,16 +1096,22 @@ jobs:
             - **架构**: ARM64 WOW64 (在 ARM64 设备上运行 32 位和 64 位 Windows 应用程序)
             - **平台**: Termux (Android ARM64)
             - **图形 API**: Vulkan 支持已启用
-            - **多媒体**: 完整 GStreamer 支持
+            - **ARM64EC**: 通过 FEX-Emu 支持 ARM64EC
             
-            ## 特性
+            ## 新特性
+            ✓ 集成 FEX-Emu 支持 ARM64EC
+            ✓ 优化的编译标志 (基于 FEX spec)
             ✓ ARM64 原生架构
             ✓ WOW64 支持 (在 ARM64 上运行 32 位和 64 位 Windows 应用程序)
             ✓ Vulkan 图形 API 支持
             ✓ 完整的 GStreamer 支持
             ✓ 中文环境支持
-            ✓ 应用了关键补丁提升兼容性
-            ✓ 针对 ARM64 架构优化编译
+            
+            ## FEX-Emu 集成
+            - libarm64ecfex.dll: ARM64EC 仿真支持
+            - libwow64fex.dll: WOW64 仿真支持
+            - 基于 FEX-Emu commit 4afbdd9
+            - 使用 LLVM-MinGW 工具链构建
             
             ## 安装说明
             解压后，将 `${{ env.BUILD_NAME }}` 文件夹放置在 Termux 的合适位置，并设置环境变量。
