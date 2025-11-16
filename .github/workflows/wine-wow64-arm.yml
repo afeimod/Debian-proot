@@ -267,161 +267,245 @@ jobs:
 
       - name: 构建 FEX-Emu
         run: |
-          set -e
-          echo "开始构建 FEX-Emu for ARM64..."
-          
-          FEX_BUILD_DIR="/tmp/build_fex"
-          rm -rf "$FEX_BUILD_DIR"
-          mkdir -p "$FEX_BUILD_DIR"
-          cd "$FEX_BUILD_DIR"
-          
-          # 下载 llvm-mingw 工具链
-          wget -O llvm-mingw.tar.xz https://github.com/bylaws/llvm-mingw/releases/download/20250920/llvm-mingw-20250920-ucrt-ubuntu-22.04-aarch64.tar.xz
-          tar -xJf llvm-mingw.tar.xz -C /tmp
-          
-          export PATH="/tmp/llvm-mingw-20250920-ucrt-ubuntu-22.04-aarch64/bin:$PATH"
-          export CFLAGS="-O3 -g -pipe -Wall -Wextra"
-          export CXXFLAGS="$CFLAGS"
-          export LDFLAGS="-Wl,--gc-sections"
-          
-          # 根据 spec 文件构建 FEX-Emu
-          echo "=== 构建 FEX-Emu ==="
-          
-          # 克隆 FEX-Emu 源码
-          git clone https://github.com/FEX-Emu/FEX.git
-          cd FEX
-          git checkout 4afbdd9afb4738b2abbf303493c5b67f58b8ae4c
-          
-          # 应用补丁
-          wget https://github.com/FEX-Emu/FEX/commit/a37def2c22e528477f64296747228400ddc40222.patch -O patch1.patch
-          wget https://github.com/FEX-Emu/FEX/commit/8eaf45414c05c9e7ef6f74a323d95fe7e0d883c1.patch -O patch2.patch
-          wget https://github.com/FEX-Emu/FEX/commit/c326e2d669fd5e9356f6107e188413a449cc1fd7.patch -O patch3.patch
-          
-          git apply patch1.patch || echo "补丁1可能已应用"
-          git apply patch2.patch || echo "补丁2可能已应用"
-          git apply patch3.patch || echo "补丁3可能已应用"
-          
-          # 手动下载外部依赖（根据 spec 文件）
-          mkdir -p External
-          
-          # Catch2
-          wget https://github.com/catchorg/Catch2/archive/b3fb4b9/Catch2-b3fb4b9.tar.gz
-          tar -xzf Catch2-b3fb4b9.tar.gz -C External
-          mv External/Catch2-b3fb4b9 External/Catch2
-          
-          # cpp-optparse
-          wget https://github.com/Sonicadvance1/cpp-optparse/archive/9f94388/cpp-optparse-9f94388.tar.gz
-          tar -xzf cpp-optparse-9f94388.tar.gz -C External
-          mv External/cpp-optparse-9f94388 External/cpp-optparse
-          
-          # Vulkan-Headers
-          wget https://github.com/KhronosGroup/Vulkan-Headers/archive/cacef30/Vulkan-Headers-cacef30.tar.gz
-          tar -xzf Vulkan-Headers-cacef30.tar.gz -C External
-          mv External/Vulkan-Headers-cacef30 External/Vulkan-Headers
-          
-          # drm-headers
-          wget https://github.com/FEX-Emu/kernel/archive/3e49836/kernel-3e49836.tar.gz
-          tar -xzf kernel-3e49836.tar.gz -C External
-          mv External/kernel-3e49836 External/drm-headers
-          
-          # fmt
-          wget https://github.com/fmtlib/fmt/archive/407c905/fmt-407c905.tar.gz
-          tar -xzf fmt-407c905.tar.gz -C External
-          mv External/fmt-407c905 External/fmt
-          
-          # jemalloc
-          wget https://github.com/FEX-Emu/jemalloc/archive/ce24593/jemalloc-ce24593.tar.gz
-          tar -xzf jemalloc-ce24593.tar.gz -C External
-          mv External/jemalloc-ce24593 External/jemalloc
-          
-          # jemalloc_glibc
-          wget https://github.com/FEX-Emu/jemalloc/archive/8436195/jemalloc-8436195.tar.gz
-          tar -xzf jemalloc-8436195.tar.gz -C External
-          mv External/jemalloc-8436195 External/jemalloc_glibc
-          
-          # rpmalloc
-          wget https://github.com/FEX-Emu/rpmalloc/archive/f1b76e1/rpmalloc-f1b76e1.tar.gz
-          tar -xzf rpmalloc-f1b76e1.tar.gz -C External
-          mv External/rpmalloc-f1b76e1 External/rpmalloc
-          
-          # range-v3
-          wget https://github.com/ericniebler/range-v3/archive/ca1388f/range-v3-ca1388f.tar.gz
-          tar -xzf range-v3-ca1388f.tar.gz -C External
-          mv External/range-v3-ca1388f External/range-v3
-          
-          # robin-map
-          wget https://github.com/FEX-Emu/robin-map/archive/d5683d9/robin-map-d5683d9.tar.gz
-          tar -xzf robin-map-d5683d9.tar.gz -C External
-          mv External/robin-map-d5683d9 External/robin-map
-          
-          # tracy
-          wget https://github.com/wolfpld/tracy/archive/650c98e/tracy-650c98e.tar.gz
-          tar -xzf tracy-650c98e.tar.gz -C External
-          mv External/tracy-650c98e External/tracy
-          
-          # vixl
-          wget https://github.com/FEX-Emu/vixl/archive/ed690c9/vixl-ed690c9.tar.gz
-          tar -xzf vixl-ed690c9.tar.gz -C External
-          mv External/vixl-ed690c9 External/vixl
-          
-          # xxhash
-          wget https://github.com/Cyan4973/xxhash/archive/e626a72/xxhash-e626a72.tar.gz
-          tar -xzf xxhash-e626a72.tar.gz -C External
-          mv External/xxhash-e626a72 External/xxhash
-          
-          # 构建 ARM64EC 版本
-          echo "=== 构建 ARM64EC 版本 ==="
-          mkdir build-arm64ec && cd build-arm64ec
-          
-          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
-            -GNinja \
-            -DCMAKE_INSTALL_PREFIX=/tmp/fex-install \
-            -DCMAKE_INSTALL_LIBDIR=/tmp/fex-install/lib/wine/aarch64-windows \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE=../Data/CMake/toolchain_mingw.cmake \
-            -DENABLE_LTO=False \
-            -DTUNE_CPU=none \
-            -DMINGW_TRIPLE=arm64ec-w64-mingw32 \
-            -DBUILD_TESTING=False \
-            -DENABLE_JEMALLOC_GLIBC_ALLOC=False \
-            ..
-          
-          # 修复 dlltool 命令（根据 spec 文件）
-          sed -i 's/arm64ec-w64-mingw32-dlltool/llvm-dlltool -m arm64ec/g' build.ninja
-          ninja
-          
-          # 安装 ARM64EC
-          DESTDIR=/tmp/fex-install ninja install
-          cd ..
-          
-          # 构建 WOW64 版本
-          echo "=== 构建 WOW64 版本 ==="
-          mkdir build-wow64 && cd build-wow64
-          
-          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
-            -GNinja \
-            -DCMAKE_INSTALL_PREFIX=/tmp/fex-install \
-            -DCMAKE_INSTALL_LIBDIR=/tmp/fex-install/lib/wine/aarch64-windows \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE=../Data/CMake/toolchain_mingw.cmake \
-            -DENABLE_LTO=False \
-            -DTUNE_CPU=none \
-            -DMINGW_TRIPLE=aarch64-w64-mingw32 \
-            -DBUILD_TESTING=False \
-            -DENABLE_JEMALLOC_GLIBC_ALLOC=OFF \
-            ..
-          
-          # 修复 dlltool 命令（根据 spec 文件）
-          sed -i 's/aarch64-w64-mingw32-dlltool/llvm-dlltool -m arm64/g' build.ninja
-          ninja
-          
-          # 安装 WOW64
-          DESTDIR=/tmp/fex-install ninja install
-          cd ..
-          
-          echo "FEX-Emu 构建完成"
-          echo "检查安装目录:"
-          find /tmp/fex-install -name "*.dll" -type f
+            set -e
+            echo "开始构建 FEX-Emu for ARM64..."
+            
+            FEX_BUILD_DIR="/tmp/build_fex"
+            rm -rf "$FEX_BUILD_DIR"
+            mkdir -p "$FEX_BUILD_DIR"
+            cd "$FEX_BUILD_DIR"
+            
+            # 下载 llvm-mingw 工具链
+            wget -O llvm-mingw.tar.xz https://github.com/bylaws/llvm-mingw/releases/download/20250920/llvm-mingw-20250920-ucrt-ubuntu-22.04-aarch64.tar.xz
+            tar -xJf llvm-mingw.tar.xz -C /tmp
+            
+            export PATH="/tmp/llvm-mingw-20250920-ucrt-ubuntu-22.04-aarch64/bin:$PATH"
+            export CFLAGS="-O3 -g -pipe -Wall -Wextra"
+            export CXXFLAGS="$CFLAGS"
+            export LDFLAGS="-Wl,--gc-sections"
+            
+            # 根据 spec 文件构建 FEX-Emu
+            echo "=== 构建 FEX-Emu ==="
+            
+            # 克隆 FEX-Emu 源码
+            git clone https://github.com/FEX-Emu/FEX.git
+            cd FEX
+            git checkout 4afbdd9afb4738b2abbf303493c5b67f58b8ae4c
+            
+            # 应用补丁
+            wget https://github.com/FEX-Emu/FEX/commit/a37def2c22e528477f64296747228400ddc40222.patch -O patch1.patch
+            wget https://github.com/FEX-Emu/FEX/commit/8eaf45414c05c9e7ef6f74a323d95fe7e0d883c1.patch -O patch2.patch
+            wget https://github.com/FEX-Emu/FEX/commit/c326e2d669fd5e9356f6107e188413a449cc1fd7.patch -O patch3.patch
+            
+            git apply patch1.patch || echo "补丁1可能已应用"
+            git apply patch2.patch || echo "补丁2可能已应用"
+            git apply patch3.patch || echo "补丁3可能已应用"
+            
+            # 手动下载外部依赖（根据 spec 文件）
+            mkdir -p External
+            
+            # Catch2
+            wget https://github.com/catchorg/Catch2/archive/b3fb4b9.tar.gz -O Catch2-b3fb4b9.tar.gz
+            tar -xzf Catch2-b3fb4b9.tar.gz -C External
+            # 检查实际解压的目录名
+            CATCH_DIR=$(find External -maxdepth 1 -type d -name "Catch2*" | head -1)
+            if [ -n "$CATCH_DIR" ]; then
+              mv "$CATCH_DIR" External/Catch2
+            else
+              echo "错误: 无法找到 Catch2 解压目录"
+              ls -la External/
+              exit 1
+            fi
+            
+            # cpp-optparse
+            wget https://github.com/Sonicadvance1/cpp-optparse/archive/9f94388.tar.gz -O cpp-optparse-9f94388.tar.gz
+            tar -xzf cpp-optparse-9f94388.tar.gz -C External
+            CPP_OPTPARSE_DIR=$(find External -maxdepth 1 -type d -name "cpp-optparse*" | head -1)
+            if [ -n "$CPP_OPTPARSE_DIR" ]; then
+              mv "$CPP_OPTPARSE_DIR" External/cpp-optparse
+            else
+              echo "错误: 无法找到 cpp-optparse 解压目录"
+              exit 1
+            fi
+            
+            # Vulkan-Headers
+            wget https://github.com/KhronosGroup/Vulkan-Headers/archive/cacef30.tar.gz -O Vulkan-Headers-cacef30.tar.gz
+            tar -xzf Vulkan-Headers-cacef30.tar.gz -C External
+            VULKAN_DIR=$(find External -maxdepth 1 -type d -name "Vulkan-Headers*" | head -1)
+            if [ -n "$VULKAN_DIR" ]; then
+              mv "$VULKAN_DIR" External/Vulkan-Headers
+            else
+              echo "错误: 无法找到 Vulkan-Headers 解压目录"
+              exit 1
+            fi
+            
+            # drm-headers
+            wget https://github.com/FEX-Emu/kernel/archive/3e49836.tar.gz -O kernel-3e49836.tar.gz
+            tar -xzf kernel-3e49836.tar.gz -C External
+            KERNEL_DIR=$(find External -maxdepth 1 -type d -name "kernel*" | head -1)
+            if [ -n "$KERNEL_DIR" ]; then
+              mv "$KERNEL_DIR" External/drm-headers
+            else
+              echo "错误: 无法找到 kernel 解压目录"
+              exit 1
+            fi
+            
+            # fmt
+            wget https://github.com/fmtlib/fmt/archive/407c905.tar.gz -O fmt-407c905.tar.gz
+            tar -xzf fmt-407c905.tar.gz -C External
+            FMT_DIR=$(find External -maxdepth 1 -type d -name "fmt*" | head -1)
+            if [ -n "$FMT_DIR" ]; then
+              mv "$FMT_DIR" External/fmt
+            else
+              echo "错误: 无法找到 fmt 解压目录"
+              exit 1
+            fi
+            
+            # jemalloc
+            wget https://github.com/FEX-Emu/jemalloc/archive/ce24593.tar.gz -O jemalloc-ce24593.tar.gz
+            tar -xzf jemalloc-ce24593.tar.gz -C External
+            JEMALLOC_DIR=$(find External -maxdepth 1 -type d -name "jemalloc*" | head -1)
+            if [ -n "$JEMALLOC_DIR" ]; then
+              mv "$JEMALLOC_DIR" External/jemalloc
+            else
+              echo "错误: 无法找到 jemalloc 解压目录"
+              exit 1
+            fi
+            
+            # jemalloc_glibc
+            wget https://github.com/FEX-Emu/jemalloc/archive/8436195.tar.gz -O jemalloc-8436195.tar.gz
+            tar -xzf jemalloc-8436195.tar.gz -C External
+            JEMALLOC_GLIBC_DIR=$(find External -maxdepth 1 -type d -name "jemalloc*" | tail -1)
+            if [ -n "$JEMALLOC_GLIBC_DIR" ] && [ "$JEMALLOC_GLIBC_DIR" != "External/jemalloc" ]; then
+              mv "$JEMALLOC_GLIBC_DIR" External/jemalloc_glibc
+            else
+              echo "错误: 无法找到 jemalloc_glibc 解压目录"
+              exit 1
+            fi
+            
+            # rpmalloc
+            wget https://github.com/FEX-Emu/rpmalloc/archive/f1b76e1.tar.gz -O rpmalloc-f1b76e1.tar.gz
+            tar -xzf rpmalloc-f1b76e1.tar.gz -C External
+            RPMALLOC_DIR=$(find External -maxdepth 1 -type d -name "rpmalloc*" | head -1)
+            if [ -n "$RPMALLOC_DIR" ]; then
+              mv "$RPMALLOC_DIR" External/rpmalloc
+            else
+              echo "错误: 无法找到 rpmalloc 解压目录"
+              exit 1
+            fi
+            
+            # range-v3
+            wget https://github.com/ericniebler/range-v3/archive/ca1388f.tar.gz -O range-v3-ca1388f.tar.gz
+            tar -xzf range-v3-ca1388f.tar.gz -C External
+            RANGE_DIR=$(find External -maxdepth 1 -type d -name "range-v3*" | head -1)
+            if [ -n "$RANGE_DIR" ]; then
+              mv "$RANGE_DIR" External/range-v3
+            else
+              echo "错误: 无法找到 range-v3 解压目录"
+              exit 1
+            fi
+            
+            # robin-map
+            wget https://github.com/FEX-Emu/robin-map/archive/d5683d9.tar.gz -O robin-map-d5683d9.tar.gz
+            tar -xzf robin-map-d5683d9.tar.gz -C External
+            ROBIN_MAP_DIR=$(find External -maxdepth 1 -type d -name "robin-map*" | head -1)
+            if [ -n "$ROBIN_MAP_DIR" ]; then
+              mv "$ROBIN_MAP_DIR" External/robin-map
+            else
+              echo "错误: 无法找到 robin-map 解压目录"
+              exit 1
+            fi
+            
+            # tracy
+            wget https://github.com/wolfpld/tracy/archive/650c98e.tar.gz -O tracy-650c98e.tar.gz
+            tar -xzf tracy-650c98e.tar.gz -C External
+            TRACY_DIR=$(find External -maxdepth 1 -type d -name "tracy*" | head -1)
+            if [ -n "$TRACY_DIR" ]; then
+              mv "$TRACY_DIR" External/tracy
+            else
+              echo "错误: 无法找到 tracy 解压目录"
+              exit 1
+            fi
+            
+            # vixl
+            wget https://github.com/FEX-Emu/vixl/archive/ed690c9.tar.gz -O vixl-ed690c9.tar.gz
+            tar -xzf vixl-ed690c9.tar.gz -C External
+            VIXL_DIR=$(find External -maxdepth 1 -type d -name "vixl*" | head -1)
+            if [ -n "$VIXL_DIR" ]; then
+              mv "$VIXL_DIR" External/vixl
+            else
+              echo "错误: 无法找到 vixl 解压目录"
+              exit 1
+            fi
+            
+            # xxhash
+            wget https://github.com/Cyan4973/xxhash/archive/e626a72.tar.gz -O xxhash-e626a72.tar.gz
+            tar -xzf xxhash-e626a72.tar.gz -C External
+            XXHASH_DIR=$(find External -maxdepth 1 -type d -name "xxhash*" | head -1)
+            if [ -n "$XXHASH_DIR" ]; then
+              mv "$XXHASH_DIR" External/xxhash
+            else
+              echo "错误: 无法找到 xxhash 解压目录"
+              exit 1
+            fi
+            
+            # 检查所有依赖是否都已正确设置
+            echo "检查外部依赖设置:"
+            ls -la External/
+            
+            # 构建 ARM64EC 版本
+            echo "=== 构建 ARM64EC 版本 ==="
+            mkdir build-arm64ec && cd build-arm64ec
+            
+            cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+              -GNinja \
+              -DCMAKE_INSTALL_PREFIX=/tmp/fex-install \
+              -DCMAKE_INSTALL_LIBDIR=/tmp/fex-install/lib/wine/aarch64-windows \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_TOOLCHAIN_FILE=../Data/CMake/toolchain_mingw.cmake \
+              -DENABLE_LTO=False \
+              -DTUNE_CPU=none \
+              -DMINGW_TRIPLE=arm64ec-w64-mingw32 \
+              -DBUILD_TESTING=False \
+              -DENABLE_JEMALLOC_GLIBC_ALLOC=False \
+              ..
+            
+            # 修复 dlltool 命令（根据 spec 文件）
+            sed -i 's/arm64ec-w64-mingw32-dlltool/llvm-dlltool -m arm64ec/g' build.ninja
+            ninja
+            
+            # 安装 ARM64EC
+            DESTDIR=/tmp/fex-install ninja install
+            cd ..
+            
+            # 构建 WOW64 版本
+            echo "=== 构建 WOW64 版本 ==="
+            mkdir build-wow64 && cd build-wow64
+            
+            cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+              -GNinja \
+              -DCMAKE_INSTALL_PREFIX=/tmp/fex-install \
+              -DCMAKE_INSTALL_LIBDIR=/tmp/fex-install/lib/wine/aarch64-windows \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_TOOLCHAIN_FILE=../Data/CMake/toolchain_mingw.cmake \
+              -DENABLE_LTO=False \
+              -DTUNE_CPU=none \
+              -DMINGW_TRIPLE=aarch64-w64-mingw32 \
+              -DBUILD_TESTING=False \
+              -DENABLE_JEMALLOC_GLIBC_ALLOC=OFF \
+              ..
+            
+            # 修复 dlltool 命令（根据 spec 文件）
+            sed -i 's/aarch64-w64-mingw32-dlltool/llvm-dlltool -m arm64/g' build.ninja
+            ninja
+            
+            # 安装 WOW64
+            DESTDIR=/tmp/fex-install ninja install
+            cd ..
+            
+            echo "FEX-Emu 构建完成"
+            echo "检查安装目录:"
+            find /tmp/fex-install -name "*.dll" -type f
 
       - name: 设置交叉编译环境
         run: |
