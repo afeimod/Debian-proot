@@ -69,9 +69,9 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y \
-            llvm \
             clang \
             lld \
+            llvm \
             ninja-build \
             cmake \
             git \
@@ -89,7 +89,8 @@ jobs:
             libxrandr-dev \
             libssl-dev \
             libwayland-dev \
-            zlib1g-dev
+            zlib1g-dev \
+            catch2
 
       - name: 安装构建依赖（修复版本）
         run: |
@@ -103,7 +104,7 @@ jobs:
           sudo dpkg --add-architecture armhf
           sudo apt update
           
-          # 基础构建依赖 - ARM64 专用（使用更新的包名）
+          # 基础构建依赖 - ARM64 专用
           BASE_DEPS="\
             debootstrap \
             perl \
@@ -209,7 +210,7 @@ jobs:
       - name: 安装多媒体和音频依赖
         run: |
             sudo apt update
-            # 安装完整的 GStreamer (64位和32位) - 使用更安全的安装方式
+            # 安装完整的 GStreamer (64位和32位)
             MULTIMEDIA_DEPS="\
               libunwind-dev \
               libunwind-dev:armhf \
@@ -274,54 +275,6 @@ jobs:
           mkdir -p "$FEX_BUILD_DIR"
           cd "$FEX_BUILD_DIR"
           
-          # 克隆 FEX-Emu 源码（使用递归克隆以包含子模块）
-          git clone --recursive https://github.com/FEX-Emu/FEX.git
-          cd FEX
-          git checkout 4afbdd9afb4738b2abbf303493c5b67f58b8ae4c
-          
-          # 确保所有子模块都已正确初始化
-          git submodule update --init --recursive
-          
-          # 手动下载并设置缺失的子模块
-          echo "手动设置缺失的子模块..."
-          
-          # jemalloc
-          if [ ! -d "External/jemalloc" ]; then
-            git clone https://github.com/jemalloc/jemalloc.git External/jemalloc
-            cd External/jemalloc
-            git checkout 5.3.0
-            cd ../..
-          fi
-          
-          # xxhash
-          if [ ! -d "External/xxhash" ]; then
-            git clone https://github.com/Cyan4973/xxHash.git External/xxhash
-            cd External/xxhash
-            git checkout v0.8.2
-            cd ../..
-          fi
-          
-          # fmt
-          if [ ! -d "External/fmt" ]; then
-            git clone https://github.com/fmtlib/fmt.git External/fmt
-            cd External/fmt
-            git checkout 9.1.0
-            cd ../..
-          fi
-          
-          # range-v3
-          if [ ! -d "External/range-v3" ]; then
-            git clone https://github.com/ericniebler/range-v3.git External/range-v3
-            cd External/range-v3
-            git checkout 0.12.0
-            cd ../..
-          fi
-          
-          # cpp-optparse
-          if [ ! -d "Source/Common/cpp-optparse" ]; then
-            git clone https://github.com/Sonicadvance1/cpp-optparse.git Source/Common/cpp-optparse
-          fi
-
           # 下载 llvm-mingw 工具链
           wget -O llvm-mingw.tar.xz https://github.com/bylaws/llvm-mingw/releases/download/20250920/llvm-mingw-20250920-ucrt-ubuntu-22.04-aarch64.tar.xz
           tar -xJf llvm-mingw.tar.xz -C /tmp
@@ -331,30 +284,95 @@ jobs:
           export CXXFLAGS="$CFLAGS"
           export LDFLAGS="-Wl,--gc-sections"
           
-          # 首先只构建 WOW64 版本，因为 ARM64EC 可能有问题
-          echo "=== 构建 WOW64 版本 ==="
-          mkdir build-wow64 && cd build-wow64
-          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
-            -GNinja \
-            -DCMAKE_INSTALL_PREFIX=/tmp/fex-install \
-            -DCMAKE_INSTALL_LIBDIR=/tmp/fex-install/lib/wine/aarch64-windows \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE=../Data/CMake/toolchain_mingw.cmake \
-            -DENABLE_LTO=False \
-            -DTUNE_CPU=none \
-            -DMINGW_TRIPLE=aarch64-w64-mingw32 \
-            -DBUILD_TESTING=False \
-            -DENABLE_JEMALLOC_GLIBC_ALLOC=OFF \
-            ..
+          # 根据 spec 文件构建 FEX-Emu
+          echo "=== 构建 FEX-Emu ==="
           
-          sed -i 's/aarch64-w64-mingw32-dlltool/llvm-dlltool -m arm64/g' build.ninja
-          ninja
-          cd ..
+          # 克隆 FEX-Emu 源码
+          git clone https://github.com/FEX-Emu/FEX.git
+          cd FEX
+          git checkout 4afbdd9afb4738b2abbf303493c5b67f58b8ae4c
           
-          # 尝试构建 ARM64EC 版本，但如果失败则继续
-          echo "=== 尝试构建 ARM64EC 版本 ==="
+          # 应用补丁
+          wget https://github.com/FEX-Emu/FEX/commit/a37def2c22e528477f64296747228400ddc40222.patch -O patch1.patch
+          wget https://github.com/FEX-Emu/FEX/commit/8eaf45414c05c9e7ef6f74a323d95fe7e0d883c1.patch -O patch2.patch
+          wget https://github.com/FEX-Emu/FEX/commit/c326e2d669fd5e9356f6107e188413a449cc1fd7.patch -O patch3.patch
+          
+          git apply patch1.patch || echo "补丁1可能已应用"
+          git apply patch2.patch || echo "补丁2可能已应用"
+          git apply patch3.patch || echo "补丁3可能已应用"
+          
+          # 手动下载外部依赖（根据 spec 文件）
+          mkdir -p External
+          
+          # Catch2
+          wget https://github.com/catchorg/Catch2/archive/b3fb4b9/Catch2-b3fb4b9.tar.gz
+          tar -xzf Catch2-b3fb4b9.tar.gz -C External
+          mv External/Catch2-b3fb4b9 External/Catch2
+          
+          # cpp-optparse
+          wget https://github.com/Sonicadvance1/cpp-optparse/archive/9f94388/cpp-optparse-9f94388.tar.gz
+          tar -xzf cpp-optparse-9f94388.tar.gz -C External
+          mv External/cpp-optparse-9f94388 External/cpp-optparse
+          
+          # Vulkan-Headers
+          wget https://github.com/KhronosGroup/Vulkan-Headers/archive/cacef30/Vulkan-Headers-cacef30.tar.gz
+          tar -xzf Vulkan-Headers-cacef30.tar.gz -C External
+          mv External/Vulkan-Headers-cacef30 External/Vulkan-Headers
+          
+          # drm-headers
+          wget https://github.com/FEX-Emu/kernel/archive/3e49836/kernel-3e49836.tar.gz
+          tar -xzf kernel-3e49836.tar.gz -C External
+          mv External/kernel-3e49836 External/drm-headers
+          
+          # fmt
+          wget https://github.com/fmtlib/fmt/archive/407c905/fmt-407c905.tar.gz
+          tar -xzf fmt-407c905.tar.gz -C External
+          mv External/fmt-407c905 External/fmt
+          
+          # jemalloc
+          wget https://github.com/FEX-Emu/jemalloc/archive/ce24593/jemalloc-ce24593.tar.gz
+          tar -xzf jemalloc-ce24593.tar.gz -C External
+          mv External/jemalloc-ce24593 External/jemalloc
+          
+          # jemalloc_glibc
+          wget https://github.com/FEX-Emu/jemalloc/archive/8436195/jemalloc-8436195.tar.gz
+          tar -xzf jemalloc-8436195.tar.gz -C External
+          mv External/jemalloc-8436195 External/jemalloc_glibc
+          
+          # rpmalloc
+          wget https://github.com/FEX-Emu/rpmalloc/archive/f1b76e1/rpmalloc-f1b76e1.tar.gz
+          tar -xzf rpmalloc-f1b76e1.tar.gz -C External
+          mv External/rpmalloc-f1b76e1 External/rpmalloc
+          
+          # range-v3
+          wget https://github.com/ericniebler/range-v3/archive/ca1388f/range-v3-ca1388f.tar.gz
+          tar -xzf range-v3-ca1388f.tar.gz -C External
+          mv External/range-v3-ca1388f External/range-v3
+          
+          # robin-map
+          wget https://github.com/FEX-Emu/robin-map/archive/d5683d9/robin-map-d5683d9.tar.gz
+          tar -xzf robin-map-d5683d9.tar.gz -C External
+          mv External/robin-map-d5683d9 External/robin-map
+          
+          # tracy
+          wget https://github.com/wolfpld/tracy/archive/650c98e/tracy-650c98e.tar.gz
+          tar -xzf tracy-650c98e.tar.gz -C External
+          mv External/tracy-650c98e External/tracy
+          
+          # vixl
+          wget https://github.com/FEX-Emu/vixl/archive/ed690c9/vixl-ed690c9.tar.gz
+          tar -xzf vixl-ed690c9.tar.gz -C External
+          mv External/vixl-ed690c9 External/vixl
+          
+          # xxhash
+          wget https://github.com/Cyan4973/xxhash/archive/e626a72/xxhash-e626a72.tar.gz
+          tar -xzf xxhash-e626a72.tar.gz -C External
+          mv External/xxhash-e626a72 External/xxhash
+          
+          # 构建 ARM64EC 版本
+          echo "=== 构建 ARM64EC 版本 ==="
           mkdir build-arm64ec && cd build-arm64ec
-          set +e  # 允许 ARM64EC 构建失败
+          
           cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
             -GNinja \
             -DCMAKE_INSTALL_PREFIX=/tmp/fex-install \
@@ -368,37 +386,42 @@ jobs:
             -DENABLE_JEMALLOC_GLIBC_ALLOC=False \
             ..
           
-          if [ $? -eq 0 ]; then
-            # 修复 dlltool 命令
-            sed -i 's/arm64ec-w64-mingw32-dlltool/llvm-dlltool -m arm64ec/g' build.ninja
-            ninja
-          else
-            echo "ARM64EC 配置失败，跳过 ARM64EC 构建"
-          fi
-          set -e  # 恢复错误检查
+          # 修复 dlltool 命令（根据 spec 文件）
+          sed -i 's/arm64ec-w64-mingw32-dlltool/llvm-dlltool -m arm64ec/g' build.ninja
+          ninja
+          
+          # 安装 ARM64EC
+          DESTDIR=/tmp/fex-install ninja install
           cd ..
           
-          # 安装 FEX-Emu
-          mkdir -p /tmp/fex-install/lib/wine/aarch64-windows
+          # 构建 WOW64 版本
+          echo "=== 构建 WOW64 版本 ==="
+          mkdir build-wow64 && cd build-wow64
           
-          # 复制 WOW64 DLL（必须存在）
-          if [ -f "build-wow64/libwow64fex.dll" ]; then
-            cp build-wow64/libwow64fex.dll /tmp/fex-install/lib/wine/aarch64-windows/
-            echo "已复制 libwow64fex.dll"
-          else
-            echo "错误: libwow64fex.dll 不存在"
-            exit 1
-          fi
+          cmake -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+            -GNinja \
+            -DCMAKE_INSTALL_PREFIX=/tmp/fex-install \
+            -DCMAKE_INSTALL_LIBDIR=/tmp/fex-install/lib/wine/aarch64-windows \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=../Data/CMake/toolchain_mingw.cmake \
+            -DENABLE_LTO=False \
+            -DTUNE_CPU=none \
+            -DMINGW_TRIPLE=aarch64-w64-mingw32 \
+            -DBUILD_TESTING=False \
+            -DENABLE_JEMALLOC_GLIBC_ALLOC=OFF \
+            ..
           
-          # 尝试复制 ARM64EC DLL（如果存在）
-          if [ -f "build-arm64ec/libarm64ecfex.dll" ]; then
-            cp build-arm64ec/libarm64ecfex.dll /tmp/fex-install/lib/wine/aarch64-windows/
-            echo "已复制 libarm64ecfex.dll"
-          else
-            echo "警告: libarm64ecfex.dll 不存在，跳过 ARM64EC 支持"
-          fi
+          # 修复 dlltool 命令（根据 spec 文件）
+          sed -i 's/aarch64-w64-mingw32-dlltool/llvm-dlltool -m arm64/g' build.ninja
+          ninja
+          
+          # 安装 WOW64
+          DESTDIR=/tmp/fex-install ninja install
+          cd ..
           
           echo "FEX-Emu 构建完成"
+          echo "检查安装目录:"
+          find /tmp/fex-install -name "*.dll" -type f
 
       - name: 设置交叉编译环境
         run: |
@@ -565,18 +588,45 @@ jobs:
         run: |
           echo "集成 FEX-Emu DLL 到 Wine 安装目录..."
           if [ -d "/tmp/wine-install-proton" ] && [ -d "/tmp/fex-install" ]; then
+            # 创建目标目录
             mkdir -p /tmp/wine-install-proton/lib/wine/aarch64-windows
             
-            # 检查 FEX DLL 是否存在
-            if [ -f "/tmp/fex-install/lib/wine/aarch64-windows/libwow64fex.dll" ]; then
-              cp /tmp/fex-install/lib/wine/aarch64-windows/*.dll /tmp/wine-install-proton/lib/wine/aarch64-windows/
-              echo "FEX-Emu DLL 集成完成"
-              ls -la /tmp/wine-install-proton/lib/wine/aarch64-windows/
+            # 检查 FEX DLL 文件
+            echo "查找 FEX DLL 文件:"
+            find /tmp/fex-install -name "*.dll" -type f
+            
+            # 复制 DLL 文件
+            if [ -f "/tmp/fex-install/lib/wine/aarch64-windows/libarm64ecfex.dll" ]; then
+              cp /tmp/fex-install/lib/wine/aarch64-windows/libarm64ecfex.dll /tmp/wine-install-proton/lib/wine/aarch64-windows/
+              echo "已复制 libarm64ecfex.dll"
             else
-              echo "警告: FEX-Emu DLL 不存在，跳过集成"
+              echo "警告: libarm64ecfex.dll 不存在"
             fi
+            
+            if [ -f "/tmp/fex-install/lib/wine/aarch64-windows/libwow64fex.dll" ]; then
+              cp /tmp/fex-install/lib/wine/aarch64-windows/libwow64fex.dll /tmp/wine-install-proton/lib/wine/aarch64-windows/
+              echo "已复制 libwow64fex.dll"
+            else
+              echo "错误: libwow64fex.dll 不存在"
+              # 检查其他可能的位置
+              ALT_PATH=$(find /tmp/fex-install -name "libwow64fex.dll" -type f | head -1)
+              if [ -n "$ALT_PATH" ]; then
+                echo "在备用位置找到: $ALT_PATH"
+                cp "$ALT_PATH" /tmp/wine-install-proton/lib/wine/aarch64-windows/
+                echo "已从备用位置复制 libwow64fex.dll"
+              else
+                echo "错误: 无法在任何位置找到 libwow64fex.dll"
+                exit 1
+              fi
+            fi
+            
+            echo "FEX-Emu DLL 集成完成"
+            ls -la /tmp/wine-install-proton/lib/wine/aarch64-windows/
           else
             echo "警告: 无法找到 Wine 或 FEX-Emu 安装目录"
+            echo "Wine 目录: /tmp/wine-install-proton"
+            echo "FEX 目录: /tmp/fex-install"
+            ls -la /tmp/ | grep -E "(wine|fex)"
           fi
 
       - name: 检查安装目录
@@ -667,9 +717,11 @@ jobs:
             ✓ 默认用户名改为 xuser
             ✓ 针对 ARM64 架构优化编译
             
-            ## FEX-Emu 状态
-            - WOW64 仿真支持已集成
-            - ARM64EC 支持: 当前版本中 ARM64EC 构建失败，已跳过
+            ## FEX-Emu 集成
+            - libarm64ecfex.dll: ARM64EC 仿真支持
+            - libwow64fex.dll: WOW64 仿真支持
+            - 基于 FEX-Emu commit 4afbdd9
+            - 使用 LLVM-MinGW 工具链构建
             
             ## 重要变更
             - 所有对 `steamuser` 的引用已改为 `xuser`
