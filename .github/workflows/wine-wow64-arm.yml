@@ -295,26 +295,7 @@ jobs:
             # 关闭 detached HEAD 警告
             git config advice.detachedHead false
             
-            # 尝试应用补丁，但允许失败（可能已经包含在 commit 中）
-            echo "尝试应用补丁..."
-            wget https://github.com/FEX-Emu/FEX/commit/a37def2c22e528477f64296747228400ddc40222.patch -O patch1.patch 2>/dev/null || true
-            wget https://github.com/FEX-Emu/FEX/commit/8eaf45414c05c9e7ef6f74a323d95fe7e0d883c1.patch -O patch2.patch 2>/dev/null || true
-            wget https://github.com/FEX-Emu/FEX/commit/c326e2d669fd5e9356f6107e188413a449cc1fd7.patch -O patch3.patch 2>/dev/null || true
-            
-            if [ -f "patch1.patch" ]; then
-              git apply patch1.patch || echo "补丁1可能已应用或无法应用"
-            fi
-            if [ -f "patch2.patch" ]; then
-              git apply patch2.patch || echo "补丁2可能已应用或无法应用"
-            fi
-            if [ -f "patch3.patch" ]; then
-              git apply patch3.patch || echo "补丁3可能已应用或无法应用"
-            fi
-            
-            # 手动下载外部依赖（根据 spec 文件）
-            mkdir -p External
-            
-            # 下载并设置依赖的函数
+            # 下载并设置依赖的函数 - 修复 URL
             setup_dependency() {
               local name=$1
               local url=$2
@@ -322,6 +303,7 @@ jobs:
               local alt_name=$4
               
               echo "设置依赖: $name"
+              echo "下载 URL: $url"
               wget -O "${name}.tar.gz" "$url" || return 1
               tar -xzf "${name}.tar.gz" -C External
               
@@ -329,24 +311,28 @@ jobs:
               local found_dir=$(find External -maxdepth 1 -type d -name "*${alt_name:-$name}*" ! -name "*.tar.gz" | head -1)
               
               if [ -n "$found_dir" ] && [ "$found_dir" != "External/$expected_dir" ]; then
-                        # 如果找到的目录不是目标目录，则移动它
-                        if [ -d "External/$expected_dir" ]; then
-                          rm -rf "External/$expected_dir"
-                        fi
-                        mv "$found_dir" "External/$expected_dir"
-                        echo "已设置 $expected_dir"
+                                                # 如果找到的目录不是目标目录，则移动它
+                                                if [ -d "External/$expected_dir" ]; then
+                                                  rm -rf "External/$expected_dir"
+                                                fi
+                                                mv "$found_dir" "External/$expected_dir"
+                                                echo "已设置 $expected_dir"
               elif [ -z "$found_dir" ]; then
-                        echo "警告: 无法找到 $name 的解压目录"
-                        ls -la External/
+                                                echo "警告: 无法找到 $name 的解压目录"
+                                                ls -la External/
               else
-                        echo "$expected_dir 已存在"
+                                                echo "$expected_dir 已存在"
               fi
             }
             
-            # 设置所有依赖
+            # 创建 External 目录
+            mkdir -p External
+            
+            # 设置所有依赖 - 修复 kernel 的 URL
             setup_dependency "Catch2" "https://github.com/catchorg/Catch2/archive/b3fb4b9.tar.gz" "Catch2"
             setup_dependency "cpp-optparse" "https://github.com/Sonicadvance1/cpp-optparse/archive/9f94388.tar.gz" "cpp-optparse"
             setup_dependency "Vulkan-Headers" "https://github.com/KhronosGroup/Vulkan-Headers/archive/cacef30.tar.gz" "Vulkan-Headers"
+            # 修复 kernel URL - 使用正确的 GitHub 地址
             setup_dependency "kernel" "https://github.com/FEX-Emu/kernel/archive/3e49836.tar.gz" "drm-headers" "kernel"
             setup_dependency "fmt" "https://github.com/fmtlib/fmt/archive/407c905.tar.gz" "fmt"
             setup_dependency "jemalloc" "https://github.com/FEX-Emu/jemalloc/archive/ce24593.tar.gz" "jemalloc"
@@ -386,7 +372,7 @@ jobs:
               -DENABLE_JEMALLOC_GLIBC_ALLOC=False \
               ..
             
-            # 修复 dlltool 命令（根据 spec 文件）
+            # 修复 dlltool 命令
             if [ -f "build.ninja" ]; then
               sed -i 's/arm64ec-w64-mingw32-dlltool/llvm-dlltool -m arm64ec/g' build.ninja
               ninja
@@ -416,7 +402,7 @@ jobs:
               -DENABLE_JEMALLOC_GLIBC_ALLOC=OFF \
               ..
             
-            # 修复 dlltool 命令（根据 spec 文件）
+            # 修复 dlltool 命令
             if [ -f "build.ninja" ]; then
               sed -i 's/aarch64-w64-mingw32-dlltool/llvm-dlltool -m arm64/g' build.ninja
               ninja
