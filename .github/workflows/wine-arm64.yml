@@ -59,15 +59,17 @@ permissions:
 
 jobs:
   build-fex:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     if: github.event.inputs.build_type == 'fex-emu' || (github.event_name == 'schedule' && github.event.schedule == '0 4 10,25 * *')
     
     steps:
-    - name: Checkout repository
+    - name: Checkout FEX repository
       uses: actions/checkout@v4
       with:
+        repository: FEX-Emu/FEX
         ref: ${{ env.COMMIT }}
         submodules: recursive
+        path: fex-source
 
     - name: Install build dependencies
       run: |
@@ -105,6 +107,7 @@ jobs:
 
     - name: Setup external dependencies
       run: |
+        cd fex-source
         mkdir -p External
         # Catch2
         wget https://github.com/catchorg/Catch2/archive/b3fb4b9/Catch2-b3fb4b9.tar.gz
@@ -173,6 +176,7 @@ jobs:
 
     - name: Apply patches
       run: |
+        cd fex-source
         # Apply custom longjump patch
         curl -L ${{ env.FORGEURL }}/commit/a37def2c22e528477f64296747228400ddc40222.patch | git apply
         # Apply async run_one interface patch
@@ -187,6 +191,7 @@ jobs:
         export CXXFLAGS="$CFLAGS"
         export LDFLAGS="${{ env.FEX_LDFLAGS }}"
         
+        cd fex-source
         mkdir build-arm64ec
         cd build-arm64ec
         
@@ -213,6 +218,7 @@ jobs:
         export CXXFLAGS="$CFLAGS"
         export LDFLAGS="${{ env.FEX_LDFLAGS }}"
         
+        cd fex-source
         mkdir build-wow64
         cd build-wow64
         
@@ -236,10 +242,10 @@ jobs:
       run: |
         mkdir -p artifacts
         # Copy built DLLs to artifacts directory
-        cp build-arm64ec/libarm64ecfex.dll artifacts/
-        cp build-wow64/libwow64fex.dll artifacts/
-        cp LICENSE artifacts/
-        cp Readme.md artifacts/
+        cp fex-source/build-arm64ec/libarm64ecfex.dll artifacts/
+        cp fex-source/build-wow64/libwow64fex.dll artifacts/
+        cp fex-source/LICENSE artifacts/
+        cp fex-source/Readme.md artifacts/
 
     - name: Upload FEX artifacts
       uses: actions/upload-artifact@v4
@@ -283,7 +289,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-proton:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     if: github.event.inputs.build_type == 'proton' || (github.event_name == 'schedule' && github.event.schedule == '0 0 1,15 * *')
     timeout-minutes: 180
     
@@ -307,6 +313,8 @@ jobs:
             autoconf \
             flex \
             bison \
+            gcc-aarch64-linux-gnu \
+            g++-aarch64-linux-gnu \
             gcc \
             g++ \
             libx11-dev \
@@ -437,8 +445,13 @@ jobs:
             mkdir -p build-arm64
             cd build-arm64
             
+            # 设置交叉编译环境变量
+            export CC=aarch64-linux-gnu-gcc
+            export CXX=aarch64-linux-gnu-g++
             export CFLAGS="-O3 -pipe -march=armv8-a -mtune=cortex-a76"
             export CXXFLAGS="-O3 -pipe -march=armv8-a -mtune=cortex-a76"
+            export PKG_CONFIG=/usr/bin/aarch64-linux-gnu-pkg-config
+            export PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig
             
             # 添加 GStreamer 库路径到链接器搜索路径
             export LDFLAGS="-Wl,-rpath,/data/data/com.winlator/files/rootfs/usr/lib/gstreamer-1.0 -Wl,-rpath,/data/data/com.winlator/files/rootfs/usr/lib"
@@ -447,7 +460,7 @@ jobs:
             # 配置 ARM64 Proton，启用 Vulkan 和完整 GStreamer 支持，禁用 Steam 特定功能
             ../configure \
               --host=aarch64-linux-gnu \
-              --enable-archs=arm64 \
+              --build=x86_64-linux-gnu \
               --prefix=/tmp/wine-install-proton \
               --with-x \
               --with-vulkan \
@@ -577,7 +590,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-wine-wow64:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     if: github.event.inputs.build_type == 'wine-wow64' || (github.event_name == 'schedule' && github.event.schedule == '0 2 5,20 * *')
     timeout-minutes: 180
     
@@ -601,6 +614,8 @@ jobs:
             autoconf \
             flex \
             bison \
+            gcc-aarch64-linux-gnu \
+            g++-aarch64-linux-gnu \
             gcc \
             g++ \
             libx11-dev \
@@ -885,13 +900,18 @@ jobs:
           mkdir -p build-arm64
           cd build-arm64
           
+          # 设置交叉编译环境变量
+          export CC=aarch64-linux-gnu-gcc
+          export CXX=aarch64-linux-gnu-g++
           export CFLAGS="-O3 -pipe -march=armv8-a -mtune=cortex-a76"
           export CXXFLAGS="-O3 -pipe -march=armv8-a -mtune=cortex-a76"
+          export PKG_CONFIG=/usr/bin/aarch64-linux-gnu-pkg-config
+          export PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig
 
           # 配置 ARM64 Wine，启用 Vulkan 和完整 GStreamer 支持
           ../configure \
             --host=aarch64-linux-gnu \
-            --enable-archs=arm64 \
+            --build=x86_64-linux-gnu \
             --prefix=/tmp/wine-install-arm64 \
             --with-x \
             --with-vulkan \
