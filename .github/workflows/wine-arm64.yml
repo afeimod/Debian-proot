@@ -332,47 +332,97 @@ jobs:
           
           sudo apt install -y $CROSS_DEPS
 
-      - name: 安装多媒体和音频依赖
+      - name: 安装 GStreamer 开发依赖
         run: |
-            sudo apt update
-            # 安装完整的 GStreamer (64位和32位)
-            MULTIMEDIA_DEPS="\
-              libunwind-dev \
-              libunwind-dev:armhf \
-              libgstreamer1.0-dev \
-              libgstreamer1.0-dev:armhf \
-              libgstreamer-plugins-base1.0-dev \
-              libgstreamer-plugins-base1.0-dev:armhf \
-              libgstreamer-plugins-good1.0-dev \
-              libgstreamer-plugins-good1.0-dev:armhf \
-              libgstreamer-plugins-bad1.0-dev \
-              libgstreamer-plugins-bad1.0-dev:armhf \
-              gstreamer1.0-plugins-base \
-              gstreamer1.0-plugins-base:armhf \
-              gstreamer1.0-plugins-good \
-              gstreamer1.0-plugins-good:armhf \
-              gstreamer1.0-plugins-bad \
-              gstreamer1.0-plugins-bad:armhf \
-              gstreamer1.0-plugins-ugly \
-              gstreamer1.0-plugins-ugly:armhf \
-              gstreamer1.0-libav \
-              gstreamer1.0-libav:armhf \
-              gstreamer1.0-tools \
-              libmpg123-dev \
-              libmpg123-dev:armhf \
-              libopenal-dev \
-              libopenal-dev:armhf \
-              libfaad-dev \
-              libfaad-dev:armhf \
-              libflac-dev \
-              libflac-dev:armhf \
-              libvorbis-dev \
-              libvorbis-dev:armhf"
-            
-            for pkg in $MULTIMEDIA_DEPS; do
-              echo "安装多媒体包: $pkg"
-              sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
-            done
+          sudo apt update
+          
+          # 安装完整的 GStreamer 开发文件 (64位和32位)
+          echo "安装 GStreamer 开发依赖..."
+          
+          # 先安装基础包
+          sudo apt install -y \
+            gstreamer1.0-tools \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-base:armhf \
+            gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-good:armhf \
+            gstreamer1.0-plugins-bad \
+            gstreamer1.0-plugins-bad:armhf \
+            gstreamer1.0-plugins-ugly \
+            gstreamer1.0-plugins-ugly:armhf \
+            gstreamer1.0-libav \
+            gstreamer1.0-libav:armhf
+          
+          # 安装开发文件
+          GST_DEV_DEPS="\
+            libgstreamer1.0-dev \
+            libgstreamer1.0-dev:armhf \
+            libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-base1.0-dev:armhf \
+            libgstreamer-plugins-good1.0-dev \
+            libgstreamer-plugins-good1.0-dev:armhf \
+            libgstreamer-plugins-bad1.0-dev \
+            libgstreamer-plugins-bad1.0-dev:armhf"
+          
+          for pkg in $GST_DEV_DEPS; do
+            echo "安装 GStreamer 开发包: $pkg"
+            sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
+          done
+          
+          # 安装多媒体编解码器开发文件
+          CODEC_DEV_DEPS="\
+            libmpg123-dev \
+            libmpg123-dev:armhf \
+            libopenal-dev \
+            libopenal-dev:armhf \
+            libfaad-dev \
+            libfaad-dev:armhf \
+            libflac-dev \
+            libflac-dev:armhf \
+            libvorbis-dev \
+            libvorbis-dev:armhf \
+            libx264-dev \
+            libx264-dev:armhf \
+            libx265-dev \
+            libx265-dev:armhf \
+            libvpx-dev \
+            libvpx-dev:armhf \
+            libtheora-dev \
+            libtheora-dev:armhf \
+            libavcodec-dev \
+            libavcodec-dev:armhf \
+            libavformat-dev \
+            libavformat-dev:armhf \
+            libavutil-dev \
+            libavutil-dev:armhf \
+            libswscale-dev \
+            libswscale-dev:armhf"
+          
+          for pkg in $CODEC_DEV_DEPS; do
+            echo "安装编解码器开发包: $pkg"
+            sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
+          done
+          
+          echo "GStreamer 依赖安装完成"
+
+      - name: 验证 GStreamer 安装
+        run: |
+          echo "验证 GStreamer 开发文件..."
+          
+          # 检查 64 位开发文件
+          echo "检查 64 位 GStreamer 开发文件:"
+          pkg-config --cflags gstreamer-1.0
+          pkg-config --cflags gstreamer-plugins-base-1.0
+          
+          # 检查 32 位开发文件
+          echo "检查 32 位 GStreamer 开发文件:"
+          pkg-config --cflags gstreamer-1.0:armhf
+          pkg-config --cflags gstreamer-plugins-base-1.0:armhf
+          
+          # 检查头文件是否存在
+          echo "检查头文件:"
+          ls -la /usr/include/gstreamer-1.0/gst/ | head -5
+          ls -la /usr/include/arm-linux-gnueabihf/gstreamer-1.0/gst/ | head -5
 
       - name: 设置交叉编译环境
         run: |
@@ -442,9 +492,13 @@ jobs:
             cd build64
             
             # 64 位编译标志
+            export CC=aarch64-linux-gnu-gcc
+            export CXX=aarch64-linux-gnu-g++
             export CFLAGS="-march=armv8-a+crc+crypto -O3 -g -pipe -Wall -Wextra -fPIC"
             export CXXFLAGS="-march=armv8-a+crc+crypto -O3 -g -pipe -Wall -Wextra -fPIC"
             export MAKEFLAGS="-j2"
+            export PKG_CONFIG=/usr/bin/aarch64-linux-gnu-pkg-config
+            export PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig
             
             # 配置 64 位 Wine
             ../configure \
@@ -492,9 +546,13 @@ jobs:
             cd build32
             
             # 32 位编译标志
+            export CC=arm-linux-gnueabihf-gcc
+            export CXX=arm-linux-gnueabihf-g++
             export CFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
             export CXXFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
             export MAKEFLAGS="-j2"
+            export PKG_CONFIG=/usr/bin/arm-linux-gnueabihf-pkg-config
+            export PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig
             
             # 配置 32 位 Wine，指向已安装的 64 位版本
             ../configure \
@@ -506,6 +564,7 @@ jobs:
               --with-pulse \
               --with-freetype \
               --with-fontconfig \
+              --with-gstreamer \
               --disable-winemenubuilder \
               --disable-win16 \
               --disable-tests \
@@ -759,47 +818,97 @@ jobs:
           
           sudo apt install -y $CROSS_DEPS
 
-      - name: 安装多媒体和音频依赖
+      - name: 安装 GStreamer 开发依赖
         run: |
-            sudo apt update
-            # 安装完整的 GStreamer (64位和32位)
-            MULTIMEDIA_DEPS="\
-              libunwind-dev \
-              libunwind-dev:armhf \
-              libgstreamer1.0-dev \
-              libgstreamer1.0-dev:armhf \
-              libgstreamer-plugins-base1.0-dev \
-              libgstreamer-plugins-base1.0-dev:armhf \
-              libgstreamer-plugins-good1.0-dev \
-              libgstreamer-plugins-good1.0-dev:armhf \
-              libgstreamer-plugins-bad1.0-dev \
-              libgstreamer-plugins-bad1.0-dev:armhf \
-              gstreamer1.0-plugins-base \
-              gstreamer1.0-plugins-base:armhf \
-              gstreamer1.0-plugins-good \
-              gstreamer1.0-plugins-good:armhf \
-              gstreamer1.0-plugins-bad \
-              gstreamer1.0-plugins-bad:armhf \
-              gstreamer1.0-plugins-ugly \
-              gstreamer1.0-plugins-ugly:armhf \
-              gstreamer1.0-libav \
-              gstreamer1.0-libav:armhf \
-              gstreamer1.0-tools \
-              libmpg123-dev \
-              libmpg123-dev:armhf \
-              libopenal-dev \
-              libopenal-dev:armhf \
-              libfaad-dev \
-              libfaad-dev:armhf \
-              libflac-dev \
-              libflac-dev:armhf \
-              libvorbis-dev \
-              libvorbis-dev:armhf"
-            
-            for pkg in $MULTIMEDIA_DEPS; do
-              echo "安装多媒体包: $pkg"
-              sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
-            done
+          sudo apt update
+          
+          # 安装完整的 GStreamer 开发文件 (64位和32位)
+          echo "安装 GStreamer 开发依赖..."
+          
+          # 先安装基础包
+          sudo apt install -y \
+            gstreamer1.0-tools \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-base:armhf \
+            gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-good:armhf \
+            gstreamer1.0-plugins-bad \
+            gstreamer1.0-plugins-bad:armhf \
+            gstreamer1.0-plugins-ugly \
+            gstreamer1.0-plugins-ugly:armhf \
+            gstreamer1.0-libav \
+            gstreamer1.0-libav:armhf
+          
+          # 安装开发文件
+          GST_DEV_DEPS="\
+            libgstreamer1.0-dev \
+            libgstreamer1.0-dev:armhf \
+            libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-base1.0-dev:armhf \
+            libgstreamer-plugins-good1.0-dev \
+            libgstreamer-plugins-good1.0-dev:armhf \
+            libgstreamer-plugins-bad1.0-dev \
+            libgstreamer-plugins-bad1.0-dev:armhf"
+          
+          for pkg in $GST_DEV_DEPS; do
+            echo "安装 GStreamer 开发包: $pkg"
+            sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
+          done
+          
+          # 安装多媒体编解码器开发文件
+          CODEC_DEV_DEPS="\
+            libmpg123-dev \
+            libmpg123-dev:armhf \
+            libopenal-dev \
+            libopenal-dev:armhf \
+            libfaad-dev \
+            libfaad-dev:armhf \
+            libflac-dev \
+            libflac-dev:armhf \
+            libvorbis-dev \
+            libvorbis-dev:armhf \
+            libx264-dev \
+            libx264-dev:armhf \
+            libx265-dev \
+            libx265-dev:armhf \
+            libvpx-dev \
+            libvpx-dev:armhf \
+            libtheora-dev \
+            libtheora-dev:armhf \
+            libavcodec-dev \
+            libavcodec-dev:armhf \
+            libavformat-dev \
+            libavformat-dev:armhf \
+            libavutil-dev \
+            libavutil-dev:armhf \
+            libswscale-dev \
+            libswscale-dev:armhf"
+          
+          for pkg in $CODEC_DEV_DEPS; do
+            echo "安装编解码器开发包: $pkg"
+            sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
+          done
+          
+          echo "GStreamer 依赖安装完成"
+
+      - name: 验证 GStreamer 安装
+        run: |
+          echo "验证 GStreamer 开发文件..."
+          
+          # 检查 64 位开发文件
+          echo "检查 64 位 GStreamer 开发文件:"
+          pkg-config --cflags gstreamer-1.0
+          pkg-config --cflags gstreamer-plugins-base-1.0
+          
+          # 检查 32 位开发文件
+          echo "检查 32 位 GStreamer 开发文件:"
+          pkg-config --cflags gstreamer-1.0:armhf
+          pkg-config --cflags gstreamer-plugins-base-1.0:armhf
+          
+          # 检查头文件是否存在
+          echo "检查头文件:"
+          ls -la /usr/include/gstreamer-1.0/gst/ | head -5
+          ls -la /usr/include/arm-linux-gnueabihf/gstreamer-1.0/gst/ | head -5
 
       - name: 设置交叉编译环境
         run: |
@@ -942,9 +1051,13 @@ jobs:
           cd build64
           
           # 64 位编译标志
+          export CC=aarch64-linux-gnu-gcc
+          export CXX=aarch64-linux-gnu-g++
           export CFLAGS="-march=armv8-a+crc+crypto -O3 -g -pipe -Wall -Wextra -fPIC"
           export CXXFLAGS="-march=armv8-a+crc+crypto -O3 -g -pipe -Wall -Wextra -fPIC"
           export MAKEFLAGS="-j2"
+          export PKG_CONFIG=/usr/bin/aarch64-linux-gnu-pkg-config
+          export PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig
           
           # 配置 64 位 Wine
           ../configure \
@@ -992,9 +1105,13 @@ jobs:
           cd build32
           
           # 32 位编译标志
+          export CC=arm-linux-gnueabihf-gcc
+          export CXX=arm-linux-gnueabihf-g++
           export CFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
           export CXXFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
           export MAKEFLAGS="-j2"
+          export PKG_CONFIG=/usr/bin/arm-linux-gnueabihf-pkg-config
+          export PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig
           
           # 配置 32 位 Wine，指向已安装的 64 位版本
           ../configure \
@@ -1006,6 +1123,7 @@ jobs:
             --with-pulse \
             --with-freetype \
             --with-fontconfig \
+            --with-gstreamer \
             --disable-winemenubuilder \
             --disable-win16 \
             --disable-tests \
