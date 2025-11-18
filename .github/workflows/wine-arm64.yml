@@ -405,29 +405,7 @@ jobs:
           
           echo "GStreamer 依赖安装完成"
 
-      - name: 验证 GStreamer 安装并设置 PKG_CONFIG_PATH
-        run: |
-          echo "验证 GStreamer 开发文件..."
-          
-          # 查找 pkgconfig 文件位置
-          echo "查找 GStreamer pkgconfig 文件..."
-          find /usr -name "gstreamer-1.0.pc" 2>/dev/null | head -5
-          find /usr -name "gstreamer-plugins-base-1.0.pc" 2>/dev/null | head -5
-          
-          # 检查 64 位开发文件
-          echo "检查 64 位 GStreamer 开发文件:"
-          PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig" pkg-config --cflags gstreamer-1.0
-          PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig" pkg-config --cflags gstreamer-plugins-base-1.0
-          
-          # 检查 32 位开发文件
-          echo "检查 32 位 GStreamer 开发文件:"
-          PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig" pkg-config --cflags gstreamer-1.0
-          PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig" pkg-config --cflags gstreamer-plugins-base-1.0
-          
-          # 检查头文件是否存在
-          echo "检查头文件:"
-          ls -la /usr/include/gstreamer-1.0/gst/ | head -5
-          ls -la /usr/include/arm-linux-gnueabihf/gstreamer-1.0/gst/ | head -5
+
 
       - name: 设置交叉编译环境
         run: |
@@ -502,13 +480,7 @@ jobs:
             export CFLAGS="-march=armv8-a+crc+crypto -O3 -g -pipe -Wall -Wextra -fPIC"
             export CXXFLAGS="-march=armv8-a+crc+crypto -O3 -g -pipe -Wall -Wextra -fPIC"
             export MAKEFLAGS="-j2"
-            export PKG_CONFIG=/usr/bin/aarch64-linux-gnu-pkg-config
-            export PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig"
             
-            echo "PKG_CONFIG_PATH for 64-bit: $PKG_CONFIG_PATH"
-            echo "测试 GStreamer pkg-config:"
-            pkg-config --cflags gstreamer-1.0
-            pkg-config --cflags gstreamer-plugins-base-1.0
             
             # 配置 64 位 Wine
             ../configure \
@@ -561,13 +533,7 @@ jobs:
             export CFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
             export CXXFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
             export MAKEFLAGS="-j2"
-            export PKG_CONFIG=/usr/bin/arm-linux-gnueabihf-pkg-config
-            export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig"
             
-            echo "PKG_CONFIG_PATH for 32-bit: $PKG_CONFIG_PATH"
-            echo "测试 GStreamer pkg-config:"
-            pkg-config --cflags gstreamer-1.0
-            pkg-config --cflags gstreamer-plugins-base-1.0
             
             # 配置 32 位 Wine，指向已安装的 64 位版本
             ../configure \
@@ -577,9 +543,6 @@ jobs:
               --with-x \
               --with-alsa \
               --with-pulse \
-              --with-freetype \
-              --with-fontconfig \
-              --with-gstreamer \
               --disable-winemenubuilder \
               --disable-win16 \
               --disable-tests \
