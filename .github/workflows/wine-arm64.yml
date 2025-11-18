@@ -449,6 +449,28 @@ jobs:
           PKG_CONFIG_PATH="$PKG_CONFIG_PATH_32" pkg-config --cflags gstreamer-1.0
           PKG_CONFIG_PATH="$PKG_CONFIG_PATH_32" pkg-config --cflags gstreamer-plugins-base-1.0
 
+      - name: 安装 SDL2 开发依赖
+        run: |
+                sudo apt update
+                echo "安装 SDL2 开发文件..."
+    
+                # 安装 SDL2 开发包（64位和32位）
+                sudo apt install -y \
+                  libsdl2-dev \
+                  libsdl2-dev:armhf \
+                  libsdl2-2.0-0 \
+                  libsdl2-2.0-0:armhf \
+                  libsdl2-image-dev \
+                  libsdl2-image-dev:armhf \
+                  libsdl2-ttf-dev \
+                  libsdl2-ttf-dev:armhf \
+                  libsdl2-mixer-dev \
+                  libsdl2-mixer-dev:armhf
+    
+                echo "验证 SDL2 安装..."
+                pkg-config --cflags sdl2
+                pkg-config --libs sdl2
+
       - name: 设置交叉编译环境
         run: |
           # 创建交叉编译工具链符号链接
@@ -967,6 +989,28 @@ jobs:
           echo "检查 32 位 GStreamer 开发文件:"
           PKG_CONFIG_PATH="$PKG_CONFIG_PATH_32" pkg-config --cflags gstreamer-1.0
           PKG_CONFIG_PATH="$PKG_CONFIG_PATH_32" pkg-config --cflags gstreamer-plugins-base-1.0
+
+      - name: 安装 SDL2 开发依赖
+        run: |
+                sudo apt update
+                echo "安装 SDL2 开发文件..."
+    
+                # 安装 SDL2 开发包（64位和32位）
+                sudo apt install -y \
+                  libsdl2-dev \
+                  libsdl2-dev:armhf \
+                  libsdl2-2.0-0 \
+                  libsdl2-2.0-0:armhf \
+                  libsdl2-image-dev \
+                  libsdl2-image-dev:armhf \
+                  libsdl2-ttf-dev \
+                  libsdl2-ttf-dev:armhf \
+                  libsdl2-mixer-dev \
+                  libsdl2-mixer-dev:armhf
+    
+                echo "验证 SDL2 安装..."
+                pkg-config --cflags sdl2
+                pkg-config --libs sdl2
 
       - name: 设置交叉编译环境
         run: |
