@@ -351,6 +351,38 @@ jobs:
             zlib1g-dev:armhf \
             libncurses-dev:armhf
 
+      - name: 修复 32 位 ARM 开发环境
+        run: |
+            echo "修复 32 位 ARM 开发环境..."
+    
+            # 确保基本的 32 位开发库
+            sudo apt update
+            sudo apt install -y \
+              libc6-dev-armhf-cross \
+              libgcc-12-dev-armhf-cross \
+              libstdc++-12-dev-armhf-cross \
+              linux-libc-dev-armhf-cross
+      
+            # 安装关键的 32 位开发库
+            sudo apt install -y \
+              libx11-dev:armhf \
+              libxext-dev:armhf \
+              libxrender-dev:armhf \
+              libxrandr-dev:armhf \
+              libxi-dev:armhf \
+              libfreetype6-dev:armhf \
+              libfontconfig1-dev:armhf \
+              libasound2-dev:armhf \
+              libpulse-dev:armhf \
+              libgl1-mesa-dev:armhf \
+              libgles2-mesa-dev:armhf
+      
+            # 创建必要的符号链接
+            sudo mkdir -p /usr/lib/arm-linux-gnueabihf
+            sudo ln -sf /usr/arm-linux-gnueabihf/lib/* /usr/lib/arm-linux-gnueabihf/ 2>/dev/null || true
+    
+            echo "32 位开发环境修复完成"
+
       - name: 修复交叉编译器配置
         run: |
           echo "修复交叉编译器配置..."
@@ -632,7 +664,7 @@ jobs:
               --without-unwind \
               --without-usb \
               --without-v4l2 \
-              --without-wayland > configure64.log 2>&1
+              --without-wayland
             
             if [ $? -ne 0 ]; then
               echo "64位配置失败，查看日志:"
@@ -705,11 +737,6 @@ jobs:
               --host=arm-linux-gnueabihf \
               --with-wine64=../build64 \
               --with-x \
-              --with-alsa \
-              --with-pulse \
-              --with-freetype \
-              --with-fontconfig \
-              --with-gstreamer \
               --disable-winemenubuilder \
               --disable-win16 \
               --disable-tests \
@@ -728,7 +755,7 @@ jobs:
               --without-unwind \
               --without-usb \
               --without-v4l2 \
-              --without-wayland > configure32.log 2>&1
+              --without-wayland
             
             if [ $? -ne 0 ]; then
               echo "32位配置失败，查看日志:"
