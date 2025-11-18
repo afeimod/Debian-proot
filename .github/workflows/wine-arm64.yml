@@ -329,6 +329,36 @@ jobs:
           
           sudo apt install -y $CROSS_DEPS
 
+      - name: 安装 32 位 ARM 基础库
+        run: |
+          sudo apt update
+          echo "安装 32 位 ARM 基础库和开发工具..."
+          
+          # 安装 32 位 ARM 基础运行库
+          sudo apt install -y \
+            libc6:armhf \
+            libc6-dev:armhf \
+            libgcc-s1:armhf \
+            libstdc++6:armhf \
+            libstdc++-12-dev:armhf \
+            linux-libc-dev:armhf
+            
+          # 安装额外的 32 位开发库
+          sudo apt install -y \
+            libgmp-dev:armhf \
+            libmpfr-dev:armhf \
+            libmpc-dev:armhf \
+            zlib1g-dev:armhf \
+            libncurses-dev:armhf
+            
+          echo "验证 32 位编译器..."
+          arm-linux-gnueabihf-gcc --version
+          echo "测试简单编译..."
+          echo 'int main() { return 0; }' > test.c
+          arm-linux-gnueabihf-gcc -march=armv8-a test.c -o test
+          file test
+          rm test.c test
+
       - name: 安装 GStreamer 开发依赖
         run: |
           sudo apt update
@@ -402,6 +432,28 @@ jobs:
           
           echo "GStreamer 依赖安装完成"
 
+      - name: 安装 SDL2 开发依赖
+        run: |
+          sudo apt update
+          echo "安装 SDL2 开发文件..."
+          
+          # 安装 SDL2 开发包（64位和32位）
+          sudo apt install -y \
+            libsdl2-dev \
+            libsdl2-dev:armhf \
+            libsdl2-2.0-0 \
+            libsdl2-2.0-0:armhf \
+            libsdl2-image-dev \
+            libsdl2-image-dev:armhf \
+            libsdl2-ttf-dev \
+            libsdl2-ttf-dev:armhf \
+            libsdl2-mixer-dev \
+            libsdl2-mixer-dev:armhf
+          
+          echo "验证 SDL2 安装..."
+          pkg-config --cflags sdl2
+          pkg-config --libs sdl2
+
       - name: 修复 GStreamer pkgconfig 问题
         run: |
           echo "修复 GStreamer pkgconfig 问题..."
@@ -448,28 +500,6 @@ jobs:
           echo "检查 32 位 GStreamer 开发文件:"
           PKG_CONFIG_PATH="$PKG_CONFIG_PATH_32" pkg-config --cflags gstreamer-1.0
           PKG_CONFIG_PATH="$PKG_CONFIG_PATH_32" pkg-config --cflags gstreamer-plugins-base-1.0
-
-      - name: 安装 SDL2 开发依赖
-        run: |
-                sudo apt update
-                echo "安装 SDL2 开发文件..."
-    
-                # 安装 SDL2 开发包（64位和32位）
-                sudo apt install -y \
-                  libsdl2-dev \
-                  libsdl2-dev:armhf \
-                  libsdl2-2.0-0 \
-                  libsdl2-2.0-0:armhf \
-                  libsdl2-image-dev \
-                  libsdl2-image-dev:armhf \
-                  libsdl2-ttf-dev \
-                  libsdl2-ttf-dev:armhf \
-                  libsdl2-mixer-dev \
-                  libsdl2-mixer-dev:armhf
-    
-                echo "验证 SDL2 安装..."
-                pkg-config --cflags sdl2
-                pkg-config --libs sdl2
 
       - name: 设置交叉编译环境
         run: |
@@ -523,12 +553,13 @@ jobs:
             cd $BUILD_DIR/proton
             
             # 克隆 Proton 源码
-            git clone https://github.com/afeimod/wine
+            git clone --depth=1 https://github.com/afeimod/wine
             cd wine
             
             # 生成 configure 脚本
             echo "生成 configure 脚本..."
-            ./autogen.sh
+            ./autogen.sh > autogen.log 2>&1 || (cat autogen.log && exit 1)
+            echo "autogen 完成"
             
             # 第一步：构建 64 位 Wine
             echo "=== 构建 64 位 Wine ==="
@@ -545,12 +576,7 @@ jobs:
             # 设置完整的 PKG_CONFIG_PATH
             export PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
             
-            echo "PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
-            echo "测试 GStreamer pkg-config:"
-            pkg-config --cflags gstreamer-1.0 || echo "gstreamer-1.0 未找到"
-            pkg-config --cflags gstreamer-plugins-base-1.0 || echo "gstreamer-plugins-base-1.0 未找到"
-            
-            # 配置 64 位 Wine - 使用原生配置
+            echo "配置 64 位 Wine..."
             ../configure \
               --prefix=/tmp/wine-install-proton \
               --enable-win64 \
@@ -581,10 +607,19 @@ jobs:
               --without-unwind \
               --without-usb \
               --without-v4l2 \
-              --without-wayland
+              --without-wayland > configure64.log 2>&1
+            
+            if [ $? -ne 0 ]; then
+              echo "64位配置失败，查看日志:"
+              cat configure64.log
+              exit 1
+            fi
+            echo "64位配置完成"
             
             echo "编译 64 位 Wine..."
+            # 使用 tee 来限制输出，同时保存完整日志
             make -j2 install > make64.log 2>&1 || (echo "64位编译失败，查看日志..." && tail -100 make64.log && make -j1 install > make64_single.log 2>&1 || (tail -100 make64_single.log && exit 1))
+            echo "64位编译完成"
             
             cd ..
             
@@ -593,23 +628,34 @@ jobs:
             mkdir -p build32
             cd build32
             
-            # 对于 32 位构建，使用交叉编译器
-            export CC=arm-linux-gnueabihf-gcc
-            export CXX=arm-linux-gnueabihf-g++
-            export CFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
-            export CXXFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
+            # 使用修复后的交叉编译环境
+            export CC="arm-linux-gnueabihf-gcc"
+            export CXX="arm-linux-gnueabihf-g++"
+            export AR="arm-linux-gnueabihf-ar"
+            export LD="arm-linux-gnueabihf-ld"
+            export CFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC --sysroot=/usr/arm-linux-gnueabihf"
+            export CXXFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC --sysroot=/usr/arm-linux-gnueabihf"
+            export LDFLAGS="--sysroot=/usr/arm-linux-gnueabihf"
             export MAKEFLAGS="-j2"
             
             # 设置 32 位的 PKG_CONFIG_PATH
             export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
             export PKG_CONFIG="pkg-config --define-variable=libdir=/usr/lib/arm-linux-gnueabihf"
+            export PKG_CONFIG_SYSROOT_DIR="/usr/arm-linux-gnueabihf"
             
-            echo "PKG_CONFIG_PATH for 32-bit: $PKG_CONFIG_PATH"
-            echo "测试 GStreamer pkg-config:"
-            pkg-config --cflags gstreamer-1.0 || echo "gstreamer-1.0 未找到"
-            pkg-config --cflags gstreamer-plugins-base-1.0 || echo "gstreamer-plugins-base-1.0 未找到"
+            echo "测试交叉编译器..."
+            echo 'int main() { return 0; }' > test32.c
+            arm-linux-gnueabihf-gcc -march=armv8-a test32.c -o test32
+            if [ -f "test32" ]; then
+              echo "交叉编译器工作正常"
+              file test32
+              rm test32.c test32
+            else
+              echo "交叉编译器测试失败"
+              exit 1
+            fi
             
-            # 配置 32 位 Wine，指向已安装的 64 位版本
+            echo "配置 32 位 Wine..."
             ../configure \
               --build=arm-linux-gnueabihf \
               --host=arm-linux-gnueabihf \
@@ -638,12 +684,41 @@ jobs:
               --without-unwind \
               --without-usb \
               --without-v4l2 \
-              --without-wayland
+              --without-wayland > configure32.log 2>&1
+            
+            if [ $? -ne 0 ]; then
+              echo "32位配置失败，查看日志:"
+              cat configure32.log
+              # 显示 config.log 获取更多信息
+              if [ -f "config.log" ]; then
+                echo "=== config.log 尾部 ==="
+                tail -100 config.log
+              fi
+              exit 1
+            fi
+            echo "32位配置完成"
             
             echo "编译 32 位 Wine..."
+            # 使用 tee 来限制输出，同时保存完整日志
             make -j2 install > make32.log 2>&1 || (echo "32位编译失败，查看日志..." && tail -100 make32.log && make -j1 install > make32_single.log 2>&1 || (tail -100 make32_single.log && exit 1))
+            echo "32位编译完成"
             
             echo "ARM64 WOW64 Wine 构建完成"
+
+      - name: 上传构建日志（如需要）
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: build-logs
+          path: |
+            $BUILD_DIR/proton/wine/autogen.log
+            $BUILD_DIR/proton/wine/build64/configure64.log
+            $BUILD_DIR/proton/wine/build64/make64.log
+            $BUILD_DIR/proton/wine/build64/make64_single.log
+            $BUILD_DIR/proton/wine/build32/configure32.log
+            $BUILD_DIR/proton/wine/build32/make32.log
+            $BUILD_DIR/proton/wine/build32/make32_single.log
+          retention-days: 7
 
       - name: 准备打包
         run: |
@@ -870,6 +945,36 @@ jobs:
           
           sudo apt install -y $CROSS_DEPS
 
+      - name: 安装 32 位 ARM 基础库
+        run: |
+          sudo apt update
+          echo "安装 32 位 ARM 基础库和开发工具..."
+          
+          # 安装 32 位 ARM 基础运行库
+          sudo apt install -y \
+            libc6:armhf \
+            libc6-dev:armhf \
+            libgcc-s1:armhf \
+            libstdc++6:armhf \
+            libstdc++-12-dev:armhf \
+            linux-libc-dev:armhf
+            
+          # 安装额外的 32 位开发库
+          sudo apt install -y \
+            libgmp-dev:armhf \
+            libmpfr-dev:armhf \
+            libmpc-dev:armhf \
+            zlib1g-dev:armhf \
+            libncurses-dev:armhf
+            
+          echo "验证 32 位编译器..."
+          arm-linux-gnueabihf-gcc --version
+          echo "测试简单编译..."
+          echo 'int main() { return 0; }' > test.c
+          arm-linux-gnueabihf-gcc -march=armv8-a test.c -o test
+          file test
+          rm test.c test
+
       - name: 安装 GStreamer 开发依赖
         run: |
           sudo apt update
@@ -943,6 +1048,28 @@ jobs:
           
           echo "GStreamer 依赖安装完成"
 
+      - name: 安装 SDL2 开发依赖
+        run: |
+          sudo apt update
+          echo "安装 SDL2 开发文件..."
+          
+          # 安装 SDL2 开发包（64位和32位）
+          sudo apt install -y \
+            libsdl2-dev \
+            libsdl2-dev:armhf \
+            libsdl2-2.0-0 \
+            libsdl2-2.0-0:armhf \
+            libsdl2-image-dev \
+            libsdl2-image-dev:armhf \
+            libsdl2-ttf-dev \
+            libsdl2-ttf-dev:armhf \
+            libsdl2-mixer-dev \
+            libsdl2-mixer-dev:armhf
+          
+          echo "验证 SDL2 安装..."
+          pkg-config --cflags sdl2
+          pkg-config --libs sdl2
+
       - name: 修复 GStreamer pkgconfig 问题
         run: |
           echo "修复 GStreamer pkgconfig 问题..."
@@ -989,28 +1116,6 @@ jobs:
           echo "检查 32 位 GStreamer 开发文件:"
           PKG_CONFIG_PATH="$PKG_CONFIG_PATH_32" pkg-config --cflags gstreamer-1.0
           PKG_CONFIG_PATH="$PKG_CONFIG_PATH_32" pkg-config --cflags gstreamer-plugins-base-1.0
-
-      - name: 安装 SDL2 开发依赖
-        run: |
-                sudo apt update
-                echo "安装 SDL2 开发文件..."
-    
-                # 安装 SDL2 开发包（64位和32位）
-                sudo apt install -y \
-                  libsdl2-dev \
-                  libsdl2-dev:armhf \
-                  libsdl2-2.0-0 \
-                  libsdl2-2.0-0:armhf \
-                  libsdl2-image-dev \
-                  libsdl2-image-dev:armhf \
-                  libsdl2-ttf-dev \
-                  libsdl2-ttf-dev:armhf \
-                  libsdl2-mixer-dev \
-                  libsdl2-mixer-dev:armhf
-    
-                echo "验证 SDL2 安装..."
-                pkg-config --cflags sdl2
-                pkg-config --libs sdl2
 
       - name: 设置交叉编译环境
         run: |
@@ -1142,7 +1247,8 @@ jobs:
           
           # 生成 configure 脚本
           echo "生成 configure 脚本..."
-          ./autogen.sh
+          ./autogen.sh > autogen.log 2>&1 || (cat autogen.log && exit 1)
+          echo "autogen 完成"
           
           # 第一步：构建 64 位 Wine
           echo "=== 构建 64 位 Wine ==="
@@ -1159,12 +1265,7 @@ jobs:
           # 设置完整的 PKG_CONFIG_PATH
           export PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
           
-          echo "PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
-          echo "测试 GStreamer pkg-config:"
-          pkg-config --cflags gstreamer-1.0 || echo "gstreamer-1.0 未找到"
-          pkg-config --cflags gstreamer-plugins-base-1.0 || echo "gstreamer-plugins-base-1.0 未找到"
-          
-          # 配置 64 位 Wine - 使用原生配置
+          echo "配置 64 位 Wine..."
           ../configure \
             --prefix=/tmp/wine-install-wow64 \
             --enable-win64 \
@@ -1195,10 +1296,19 @@ jobs:
             --without-unwind \
             --without-usb \
             --without-v4l2 \
-            --without-wayland
+            --without-wayland > configure64.log 2>&1
+          
+          if [ $? -ne 0 ]; then
+            echo "64位配置失败，查看日志:"
+            cat configure64.log
+            exit 1
+          fi
+          echo "64位配置完成"
           
           echo "编译 64 位 Wine..."
+          # 使用 tee 来限制输出，同时保存完整日志
           make -j2 install > make64.log 2>&1 || (echo "64位编译失败，查看日志..." && tail -100 make64.log && make -j1 install > make64_single.log 2>&1 || (tail -100 make64_single.log && exit 1))
+          echo "64位编译完成"
           
           cd ..
           
@@ -1207,23 +1317,34 @@ jobs:
           mkdir -p build32
           cd build32
           
-          # 对于 32 位构建，使用交叉编译器
-          export CC=arm-linux-gnueabihf-gcc
-          export CXX=arm-linux-gnueabihf-g++
-          export CFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
-          export CXXFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
+          # 使用修复后的交叉编译环境
+          export CC="arm-linux-gnueabihf-gcc"
+          export CXX="arm-linux-gnueabihf-g++"
+          export AR="arm-linux-gnueabihf-ar"
+          export LD="arm-linux-gnueabihf-ld"
+          export CFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC --sysroot=/usr/arm-linux-gnueabihf"
+          export CXXFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC --sysroot=/usr/arm-linux-gnueabihf"
+          export LDFLAGS="--sysroot=/usr/arm-linux-gnueabihf"
           export MAKEFLAGS="-j2"
           
           # 设置 32 位的 PKG_CONFIG_PATH
           export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
           export PKG_CONFIG="pkg-config --define-variable=libdir=/usr/lib/arm-linux-gnueabihf"
+          export PKG_CONFIG_SYSROOT_DIR="/usr/arm-linux-gnueabihf"
           
-          echo "PKG_CONFIG_PATH for 32-bit: $PKG_CONFIG_PATH"
-          echo "测试 GStreamer pkg-config:"
-          pkg-config --cflags gstreamer-1.0 || echo "gstreamer-1.0 未找到"
-          pkg-config --cflags gstreamer-plugins-base-1.0 || echo "gstreamer-plugins-base-1.0 未找到"
+          echo "测试交叉编译器..."
+          echo 'int main() { return 0; }' > test32.c
+          arm-linux-gnueabihf-gcc -march=armv8-a test32.c -o test32
+          if [ -f "test32" ]; then
+            echo "交叉编译器工作正常"
+            file test32
+            rm test32.c test32
+          else
+            echo "交叉编译器测试失败"
+            exit 1
+          fi
           
-          # 配置 32 位 Wine，指向已安装的 64 位版本
+          echo "配置 32 位 Wine..."
           ../configure \
             --build=arm-linux-gnueabihf \
             --host=arm-linux-gnueabihf \
@@ -1252,12 +1373,41 @@ jobs:
             --without-unwind \
             --without-usb \
             --without-v4l2 \
-            --without-wayland
+            --without-wayland > configure32.log 2>&1
+          
+          if [ $? -ne 0 ]; then
+            echo "32位配置失败，查看日志:"
+            cat configure32.log
+            # 显示 config.log 获取更多信息
+            if [ -f "config.log" ]; then
+              echo "=== config.log 尾部 ==="
+              tail -100 config.log
+            fi
+            exit 1
+          fi
+          echo "32位配置完成"
           
           echo "编译 32 位 Wine..."
+          # 使用 tee 来限制输出，同时保存完整日志
           make -j2 install > make32.log 2>&1 || (echo "32位编译失败，查看日志..." && tail -100 make32.log && make -j1 install > make32_single.log 2>&1 || (tail -100 make32_single.log && exit 1))
+          echo "32位编译完成"
           
           echo "ARM64 WOW64 Wine 构建完成"
+
+      - name: 上传构建日志（如需要）
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: build-logs
+          path: |
+            $BUILD_DIR/wine-tkg/autogen.log
+            $BUILD_DIR/wine-tkg/build64/configure64.log
+            $BUILD_DIR/wine-tkg/build64/make64.log
+            $BUILD_DIR/wine-tkg/build64/make64_single.log
+            $BUILD_DIR/wine-tkg/build32/configure32.log
+            $BUILD_DIR/wine-tkg/build32/make32.log
+            $BUILD_DIR/wine-tkg/build32/make32_single.log
+          retention-days: 7
 
       - name: 准备打包
         run: |
