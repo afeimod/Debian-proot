@@ -229,6 +229,9 @@ jobs:
           sudo dpkg --add-architecture armhf
           sudo apt update
           
+          # 安装多架构支持
+          sudo apt install -y gcc-multilib g++-multilib
+          
           # 基础构建依赖
           BASE_DEPS="\
             debootstrap \
@@ -321,17 +324,6 @@ jobs:
             sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
           done
 
-          # 安装交叉编译工具链
-          CROSS_DEPS="\
-            gcc-arm-linux-gnueabihf \
-            g++-arm-linux-gnueabihf \
-            binutils-arm-linux-gnueabihf \
-            gcc-aarch64-linux-gnu \
-            g++-aarch64-linux-gnu \
-            binutils-aarch64-linux-gnu"
-          
-          sudo apt install -y $CROSS_DEPS
-
       - name: 安装 GStreamer 开发依赖
         run: |
           sudo apt update
@@ -405,20 +397,29 @@ jobs:
           
           echo "GStreamer 依赖安装完成"
 
-
-
-      - name: 设置交叉编译环境
+      - name: 验证 GStreamer 安装并设置 PKG_CONFIG_PATH
         run: |
-          # 创建交叉编译工具链符号链接
-          sudo ln -sf /usr/bin/aarch64-linux-gnu-gcc /usr/local/bin/aarch64-linux-gnu-gcc
-          sudo ln -sf /usr/bin/aarch64-linux-gnu-g++ /usr/local/bin/aarch64-linux-gnu-g++
-          sudo ln -sf /usr/bin/arm-linux-gnueabihf-gcc /usr/local/bin/arm-linux-gnueabihf-gcc
-          sudo ln -sf /usr/bin/arm-linux-gnueabihf-g++ /usr/local/bin/arm-linux-gnueabihf-g++
+          echo "验证 GStreamer 开发文件..."
           
-          # 验证工具链
-          echo "验证交叉编译工具链:"
-          aarch64-linux-gnu-gcc --version
-          arm-linux-gnueabihf-gcc --version
+          # 查找 pkgconfig 文件位置
+          echo "查找 GStreamer pkgconfig 文件..."
+          find /usr -name "gstreamer-1.0.pc" 2>/dev/null | head -5
+          find /usr -name "gstreamer-plugins-base-1.0.pc" 2>/dev/null | head -5
+          
+          # 检查 64 位开发文件
+          echo "检查 64 位 GStreamer 开发文件:"
+          PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig" pkg-config --cflags gstreamer-1.0
+          PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig" pkg-config --cflags gstreamer-plugins-base-1.0
+          
+          # 检查 32 位开发文件
+          echo "检查 32 位 GStreamer 开发文件:"
+          PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig" pkg-config --cflags gstreamer-1.0
+          PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig" pkg-config --cflags gstreamer-plugins-base-1.0
+          
+          # 检查头文件是否存在
+          echo "检查头文件:"
+          ls -la /usr/include/gstreamer-1.0/gst/ | head -5
+          ls -la /usr/include/arm-linux-gnueabihf/gstreamer-1.0/gst/ | head -5
 
       - name: 设置中文语言环境
         run: |
@@ -474,18 +475,23 @@ jobs:
             mkdir -p build64
             cd build64
             
-            # 64 位编译标志和 PKG_CONFIG_PATH
-            export CC=aarch64-linux-gnu-gcc
-            export CXX=aarch64-linux-gnu-g++
+            # 使用原生编译器而不是交叉编译器
+            export CC=gcc
+            export CXX=g++
             export CFLAGS="-march=armv8-a+crc+crypto -O3 -g -pipe -Wall -Wextra -fPIC"
             export CXXFLAGS="-march=armv8-a+crc+crypto -O3 -g -pipe -Wall -Wextra -fPIC"
             export MAKEFLAGS="-j2"
             
+            # 设置正确的 PKG_CONFIG_PATH
+            export PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
             
-            # 配置 64 位 Wine
+            echo "PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
+            echo "测试 GStreamer pkg-config:"
+            pkg-config --cflags gstreamer-1.0 || echo "gstreamer-1.0 未找到"
+            pkg-config --cflags gstreamer-plugins-base-1.0 || echo "gstreamer-plugins-base-1.0 未找到"
+            
+            # 配置 64 位 Wine - 使用原生配置
             ../configure \
-              --build=aarch64-linux-gnu \
-              --host=aarch64-linux-gnu \
               --prefix=/tmp/wine-install-proton \
               --enable-win64 \
               --with-x \
@@ -527,22 +533,31 @@ jobs:
             mkdir -p build32
             cd build32
             
-            # 32 位编译标志和 PKG_CONFIG_PATH
-            export CC=arm-linux-gnueabihf-gcc
-            export CXX=arm-linux-gnueabihf-g++
+            # 对于 32 位构建，需要安装多架构支持
+            export CC="gcc -m32"
+            export CXX="g++ -m32"
             export CFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
             export CXXFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
             export MAKEFLAGS="-j2"
             
+            # 设置 32 位的 PKG_CONFIG_PATH
+            export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
+            export PKG_CONFIG="pkg-config --define-variable=libdir=/usr/lib/arm-linux-gnueabihf"
+            
+            echo "PKG_CONFIG_PATH for 32-bit: $PKG_CONFIG_PATH"
+            echo "测试 GStreamer pkg-config:"
+            pkg-config --cflags gstreamer-1.0 || echo "gstreamer-1.0 未找到"
+            pkg-config --cflags gstreamer-plugins-base-1.0 || echo "gstreamer-plugins-base-1.0 未找到"
             
             # 配置 32 位 Wine，指向已安装的 64 位版本
             ../configure \
-              --build=arm-linux-gnueabihf \
-              --host=arm-linux-gnueabihf \
               --with-wine64=../build64 \
               --with-x \
               --with-alsa \
               --with-pulse \
+              --with-freetype \
+              --with-fontconfig \
+              --with-gstreamer \
               --disable-winemenubuilder \
               --disable-win16 \
               --disable-tests \
@@ -693,6 +708,9 @@ jobs:
           sudo dpkg --add-architecture armhf
           sudo apt update
           
+          # 安装多架构支持
+          sudo apt install -y gcc-multilib g++-multilib
+          
           # 基础构建依赖
           BASE_DEPS="\
             debootstrap \
@@ -784,17 +802,6 @@ jobs:
             echo "安装包: $pkg"
             sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
           done
-
-          # 安装交叉编译工具链
-          CROSS_DEPS="\
-            gcc-arm-linux-gnueabihf \
-            g++-arm-linux-gnueabihf \
-            binutils-arm-linux-gnueabihf \
-            gcc-aarch64-linux-gnu \
-            g++-aarch64-linux-gnu \
-            binutils-aarch64-linux-gnu"
-          
-          sudo apt install -y $CROSS_DEPS
 
       - name: 安装 GStreamer 开发依赖
         run: |
@@ -892,19 +899,6 @@ jobs:
           echo "检查头文件:"
           ls -la /usr/include/gstreamer-1.0/gst/ | head -5
           ls -la /usr/include/arm-linux-gnueabihf/gstreamer-1.0/gst/ | head -5
-
-      - name: 设置交叉编译环境
-        run: |
-          # 创建交叉编译工具链符号链接
-          sudo ln -sf /usr/bin/aarch64-linux-gnu-gcc /usr/local/bin/aarch64-linux-gnu-gcc
-          sudo ln -sf /usr/bin/aarch64-linux-gnu-g++ /usr/local/bin/aarch64-linux-gnu-g++
-          sudo ln -sf /usr/bin/arm-linux-gnueabihf-gcc /usr/local/bin/arm-linux-gnueabihf-gcc
-          sudo ln -sf /usr/bin/arm-linux-gnueabihf-g++ /usr/local/bin/arm-linux-gnueabihf-g++
-          
-          # 验证工具链
-          echo "验证交叉编译工具链:"
-          aarch64-linux-gnu-gcc --version
-          arm-linux-gnueabihf-gcc --version
 
       - name: 设置中文语言环境
         run: |
@@ -1033,24 +1027,23 @@ jobs:
           mkdir -p build64
           cd build64
           
-          # 64 位编译标志和 PKG_CONFIG_PATH
-          export CC=aarch64-linux-gnu-gcc
-          export CXX=aarch64-linux-gnu-g++
+          # 使用原生编译器而不是交叉编译器
+          export CC=gcc
+          export CXX=g++
           export CFLAGS="-march=armv8-a+crc+crypto -O3 -g -pipe -Wall -Wextra -fPIC"
           export CXXFLAGS="-march=armv8-a+crc+crypto -O3 -g -pipe -Wall -Wextra -fPIC"
           export MAKEFLAGS="-j2"
-          export PKG_CONFIG=/usr/bin/aarch64-linux-gnu-pkg-config
-          export PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig"
           
-          echo "PKG_CONFIG_PATH for 64-bit: $PKG_CONFIG_PATH"
+          # 设置正确的 PKG_CONFIG_PATH
+          export PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
+          
+          echo "PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
           echo "测试 GStreamer pkg-config:"
-          pkg-config --cflags gstreamer-1.0
-          pkg-config --cflags gstreamer-plugins-base-1.0
+          pkg-config --cflags gstreamer-1.0 || echo "gstreamer-1.0 未找到"
+          pkg-config --cflags gstreamer-plugins-base-1.0 || echo "gstreamer-plugins-base-1.0 未找到"
           
-          # 配置 64 位 Wine
+          # 配置 64 位 Wine - 使用原生配置
           ../configure \
-            --build=aarch64-linux-gnu \
-            --host=aarch64-linux-gnu \
             --prefix=/tmp/wine-install-wow64 \
             --enable-win64 \
             --with-x \
@@ -1092,24 +1085,24 @@ jobs:
           mkdir -p build32
           cd build32
           
-          # 32 位编译标志和 PKG_CONFIG_PATH
-          export CC=arm-linux-gnueabihf-gcc
-          export CXX=arm-linux-gnueabihf-g++
+          # 对于 32 位构建，使用多架构支持
+          export CC="gcc -m32"
+          export CXX="g++ -m32"
           export CFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
           export CXXFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
           export MAKEFLAGS="-j2"
-          export PKG_CONFIG=/usr/bin/arm-linux-gnueabihf-pkg-config
-          export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig"
+          
+          # 设置 32 位的 PKG_CONFIG_PATH
+          export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
+          export PKG_CONFIG="pkg-config --define-variable=libdir=/usr/lib/arm-linux-gnueabihf"
           
           echo "PKG_CONFIG_PATH for 32-bit: $PKG_CONFIG_PATH"
           echo "测试 GStreamer pkg-config:"
-          pkg-config --cflags gstreamer-1.0
-          pkg-config --cflags gstreamer-plugins-base-1.0
+          pkg-config --cflags gstreamer-1.0 || echo "gstreamer-1.0 未找到"
+          pkg-config --cflags gstreamer-plugins-base-1.0 || echo "gstreamer-plugins-base-1.0 未找到"
           
           # 配置 32 位 Wine，指向已安装的 64 位版本
           ../configure \
-            --build=arm-linux-gnueabihf \
-            --host=arm-linux-gnueabihf \
             --with-wine64=../build64 \
             --with-x \
             --with-alsa \
