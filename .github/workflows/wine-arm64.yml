@@ -229,9 +229,6 @@ jobs:
           sudo dpkg --add-architecture armhf
           sudo apt update
           
-          # 安装多架构支持
-          sudo apt install -y gcc-multilib g++-multilib
-          
           # 基础构建依赖
           BASE_DEPS="\
             debootstrap \
@@ -323,6 +320,14 @@ jobs:
             echo "安装包: $pkg"
             sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
           done
+
+          # 安装交叉编译工具链（在 ARM64 上编译 32 位 ARM）
+          CROSS_DEPS="\
+            gcc-arm-linux-gnueabihf \
+            g++-arm-linux-gnueabihf \
+            binutils-arm-linux-gnueabihf"
+          
+          sudo apt install -y $CROSS_DEPS
 
       - name: 安装 GStreamer 开发依赖
         run: |
@@ -421,6 +426,16 @@ jobs:
           ls -la /usr/include/gstreamer-1.0/gst/ | head -5
           ls -la /usr/include/arm-linux-gnueabihf/gstreamer-1.0/gst/ | head -5
 
+      - name: 设置交叉编译环境
+        run: |
+          # 创建交叉编译工具链符号链接
+          sudo ln -sf /usr/bin/arm-linux-gnueabihf-gcc /usr/local/bin/arm-linux-gnueabihf-gcc
+          sudo ln -sf /usr/bin/arm-linux-gnueabihf-g++ /usr/local/bin/arm-linux-gnueabihf-g++
+          
+          # 验证工具链
+          echo "验证交叉编译工具链:"
+          arm-linux-gnueabihf-gcc --version
+
       - name: 设置中文语言环境
         run: |
           sudo locale-gen zh_CN.UTF-8
@@ -475,7 +490,7 @@ jobs:
             mkdir -p build64
             cd build64
             
-            # 使用原生编译器而不是交叉编译器
+            # 使用原生编译器
             export CC=gcc
             export CXX=g++
             export CFLAGS="-march=armv8-a+crc+crypto -O3 -g -pipe -Wall -Wextra -fPIC"
@@ -533,9 +548,9 @@ jobs:
             mkdir -p build32
             cd build32
             
-            # 对于 32 位构建，需要安装多架构支持
-            export CC="gcc -m32"
-            export CXX="g++ -m32"
+            # 对于 32 位构建，使用交叉编译器
+            export CC=arm-linux-gnueabihf-gcc
+            export CXX=arm-linux-gnueabihf-g++
             export CFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
             export CXXFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
             export MAKEFLAGS="-j2"
@@ -551,6 +566,8 @@ jobs:
             
             # 配置 32 位 Wine，指向已安装的 64 位版本
             ../configure \
+              --build=arm-linux-gnueabihf \
+              --host=arm-linux-gnueabihf \
               --with-wine64=../build64 \
               --with-x \
               --with-alsa \
@@ -708,9 +725,6 @@ jobs:
           sudo dpkg --add-architecture armhf
           sudo apt update
           
-          # 安装多架构支持
-          sudo apt install -y gcc-multilib g++-multilib
-          
           # 基础构建依赖
           BASE_DEPS="\
             debootstrap \
@@ -802,6 +816,14 @@ jobs:
             echo "安装包: $pkg"
             sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
           done
+
+          # 安装交叉编译工具链（在 ARM64 上编译 32 位 ARM）
+          CROSS_DEPS="\
+            gcc-arm-linux-gnueabihf \
+            g++-arm-linux-gnueabihf \
+            binutils-arm-linux-gnueabihf"
+          
+          sudo apt install -y $CROSS_DEPS
 
       - name: 安装 GStreamer 开发依赖
         run: |
@@ -899,6 +921,16 @@ jobs:
           echo "检查头文件:"
           ls -la /usr/include/gstreamer-1.0/gst/ | head -5
           ls -la /usr/include/arm-linux-gnueabihf/gstreamer-1.0/gst/ | head -5
+
+      - name: 设置交叉编译环境
+        run: |
+          # 创建交叉编译工具链符号链接
+          sudo ln -sf /usr/bin/arm-linux-gnueabihf-gcc /usr/local/bin/arm-linux-gnueabihf-gcc
+          sudo ln -sf /usr/bin/arm-linux-gnueabihf-g++ /usr/local/bin/arm-linux-gnueabihf-g++
+          
+          # 验证工具链
+          echo "验证交叉编译工具链:"
+          arm-linux-gnueabihf-gcc --version
 
       - name: 设置中文语言环境
         run: |
@@ -1027,7 +1059,7 @@ jobs:
           mkdir -p build64
           cd build64
           
-          # 使用原生编译器而不是交叉编译器
+          # 使用原生编译器
           export CC=gcc
           export CXX=g++
           export CFLAGS="-march=armv8-a+crc+crypto -O3 -g -pipe -Wall -Wextra -fPIC"
@@ -1085,9 +1117,9 @@ jobs:
           mkdir -p build32
           cd build32
           
-          # 对于 32 位构建，使用多架构支持
-          export CC="gcc -m32"
-          export CXX="g++ -m32"
+          # 对于 32 位构建，使用交叉编译器
+          export CC=arm-linux-gnueabihf-gcc
+          export CXX=arm-linux-gnueabihf-g++
           export CFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
           export CXXFLAGS="-march=armv8-a -O3 -g -pipe -Wall -Wextra -fPIC"
           export MAKEFLAGS="-j2"
@@ -1103,6 +1135,8 @@ jobs:
           
           # 配置 32 位 Wine，指向已安装的 64 位版本
           ../configure \
+            --build=arm-linux-gnueabihf \
+            --host=arm-linux-gnueabihf \
             --with-wine64=../build64 \
             --with-x \
             --with-alsa \
