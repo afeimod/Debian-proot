@@ -225,9 +225,16 @@ jobs:
           sudo apt --fix-broken install -y
           sudo apt install -f -y
           
-          # 添加 32 位架构支持
-          sudo dpkg --add-architecture armhf
+          # 添加 i386 架构支持
+          sudo dpkg --add-architecture i386
           sudo apt update
+          
+          # 安装交叉编译工具链
+          sudo apt install -y \
+              gcc-i686-linux-gnu \
+              g++-i686-linux-gnu \
+              binutils-i686-linux-gnu \
+              libc6-dev-i386
           
           # 基础构建依赖
           BASE_DEPS="\
@@ -251,67 +258,67 @@ jobs:
             pkg-config \
             libtool \
             libx11-dev \
-            libx11-dev:armhf \
+            libx11-dev:i386 \
             libxext-dev \
-            libxext-dev:armhf \
+            libxext-dev:i386 \
             libxi-dev \
-            libxi-dev:armhf \
+            libxi-dev:i386 \
             libxrandr-dev \
-            libxrandr-dev:armhf \
+            libxrandr-dev:i386 \
             libxcursor-dev \
-            libxcursor-dev:armhf \
+            libxcursor-dev:i386 \
             libxcomposite-dev \
-            libxcomposite-dev:armhf \
+            libxcomposite-dev:i386 \
             libxdamage-dev \
-            libxdamage-dev:armhf \
+            libxdamage-dev:i386 \
             libxfixes-dev \
-            libxfixes-dev:armhf \
+            libxfixes-dev:i386 \
             libxxf86vm-dev \
-            libxxf86vm-dev:armhf \
+            libxxf86vm-dev:i386 \
             libxrender-dev \
-            libxrender-dev:armhf \
+            libxrender-dev:i386 \
             libxinerama-dev \
-            libxinerama-dev:armhf \
+            libxinerama-dev:i386 \
             libgl-dev \
-            libgl-dev:armhf \
+            libgl-dev:i386 \
             libglu-dev \
-            libglu-dev:armhf \
+            libglu-dev:i386 \
             libosmesa6-dev \
-            libosmesa6-dev:armhf \
+            libosmesa6-dev:i386 \
             libfreetype6-dev \
-            libfreetype6-dev:armhf \
+            libfreetype6-dev:i386 \
             libfontconfig1-dev \
-            libfontconfig1-dev:armhf \
+            libfontconfig1-dev:i386 \
             libpcap-dev \
             libdbus-1-dev \
-            libdbus-1-dev:armhf \
+            libdbus-1-dev:i386 \
             libssl-dev \
-            libssl-dev:armhf \
+            libssl-dev:i386 \
             libasound2-dev \
-            libasound2-dev:armhf \
+            libasound2-dev:i386 \
             libpulse-dev \
-            libpulse-dev:armhf \
+            libpulse-dev:i386 \
             libudev-dev \
-            libudev-dev:armhf \
+            libudev-dev:i386 \
             libcups2-dev \
-            libcups2-dev:armhf \
+            libcups2-dev:i386 \
             libjpeg-dev \
-            libjpeg-dev:armhf \
+            libjpeg-dev:i386 \
             libpng-dev \
-            libpng-dev:armhf \
+            libpng-dev:i386 \
             libtiff-dev \
-            libtiff-dev:armhf \
+            libtiff-dev:i386 \
             libxml2-dev \
-            libxml2-dev:armhf \
+            libxml2-dev:i386 \
             libvulkan-dev \
-            libvulkan-dev:armhf \
+            libvulkan-dev:i386 \
             vulkan-tools \
             libvulkan1 \
-            libvulkan1:armhf \
+            libvulkan1:i386 \
             mesa-vulkan-drivers \
             gettext \
             libgettextpo-dev \
-            libgettextpo-dev:armhf \
+            libgettextpo-dev:i386 \
             locales \
             language-pack-zh-hans"
           
@@ -320,101 +327,6 @@ jobs:
             echo "安装包: $pkg"
             sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
           done
-
-          # 安装交叉编译工具链（在 ARM64 上编译 32 位 ARM）
-          CROSS_DEPS="\
-            gcc-arm-linux-gnueabihf \
-            g++-arm-linux-gnueabihf \
-            binutils-arm-linux-gnueabihf \
-            libc6-dev-armhf-cross"
-          
-          sudo apt install -y $CROSS_DEPS
-
-      - name: 安装 32 位 ARM 基础库
-        run: |
-          sudo apt update
-          echo "安装 32 位 ARM 基础库和开发工具..."
-          
-          # 安装 32 位 ARM 基础运行库
-          sudo apt install -y \
-            libc6:armhf \
-            libc6-dev:armhf \
-            libgcc-s1:armhf \
-            libstdc++6:armhf \
-            libstdc++-12-dev:armhf \
-            linux-libc-dev:armhf
-            
-          # 安装额外的 32 位开发库
-          sudo apt install -y \
-            libgmp-dev:armhf \
-            libmpfr-dev:armhf \
-            libmpc-dev:armhf \
-            zlib1g-dev:armhf \
-            libncurses-dev:armhf
-
-      - name: 修复 32 位 ARM 开发环境
-        run: |
-            echo "修复 32 位 ARM 开发环境..."
-    
-            # 确保基本的 32 位开发库
-            sudo apt update
-            sudo apt install -y \
-              libc6-dev-armhf-cross \
-              libgcc-12-dev-armhf-cross \
-              libstdc++-12-dev-armhf-cross \
-              linux-libc-dev-armhf-cross
-      
-            # 安装关键的 32 位开发库
-            sudo apt install -y \
-              libx11-dev:armhf \
-              libxext-dev:armhf \
-              libxrender-dev:armhf \
-              libxrandr-dev:armhf \
-              libxi-dev:armhf \
-              libfreetype6-dev:armhf \
-              libfontconfig1-dev:armhf \
-              libasound2-dev:armhf \
-              libpulse-dev:armhf \
-              libgl1-mesa-dev:armhf \
-              libgles2-mesa-dev:armhf
-      
-            # 创建必要的符号链接
-            sudo mkdir -p /usr/lib/arm-linux-gnueabihf
-            sudo ln -sf /usr/arm-linux-gnueabihf/lib/* /usr/lib/arm-linux-gnueabihf/ 2>/dev/null || true
-    
-            echo "32 位开发环境修复完成"
-
-      - name: 修复交叉编译器配置
-        run: |
-          echo "修复交叉编译器配置..."
-          
-          # 安装额外的 ARM 开发工具
-          sudo apt update
-          sudo apt install -y \
-            gcc-arm-linux-gnueabi \
-            g++-arm-linux-gnueabi \
-            binutils-arm-linux-gnueabi
-          
-          # 创建符号链接
-          sudo ln -sf /usr/bin/arm-linux-gnueabi-gcc /usr/local/bin/arm-linux-gnueabi-gcc
-          sudo ln -sf /usr/bin/arm-linux-gnueabi-g++ /usr/local/bin/arm-linux-gnueabi-g++
-          
-          echo "验证交叉编译器..."
-          echo "arm-linux-gnueabihf-gcc:"
-          arm-linux-gnueabihf-gcc --version
-          
-          # 测试硬浮点编译器的浮点支持
-          echo 'int main() { float f = 1.0; return (int)f; }' > test_float.c
-          if arm-linux-gnueabihf-gcc -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard test_float.c -o test_float; then
-            echo "硬浮点编译器浮点支持验证通过"
-            file test_float
-          else
-            echo "硬浮点编译器浮点支持有问题"
-            # 尝试重新安装
-            sudo apt install -y --reinstall gcc-arm-linux-gnueabihf
-          fi
-          
-          rm -f test_float.c test_float
 
       - name: 安装 GStreamer 开发依赖
         run: |
@@ -427,26 +339,26 @@ jobs:
           sudo apt install -y \
             gstreamer1.0-tools \
             gstreamer1.0-plugins-base \
-            gstreamer1.0-plugins-base:armhf \
+            gstreamer1.0-plugins-base:i386 \
             gstreamer1.0-plugins-good \
-            gstreamer1.0-plugins-good:armhf \
+            gstreamer1.0-plugins-good:i386 \
             gstreamer1.0-plugins-bad \
-            gstreamer1.0-plugins-bad:armhf \
+            gstreamer1.0-plugins-bad:i386 \
             gstreamer1.0-plugins-ugly \
-            gstreamer1.0-plugins-ugly:armhf \
+            gstreamer1.0-plugins-ugly:i386 \
             gstreamer1.0-libav \
-            gstreamer1.0-libav:armhf
+            gstreamer1.0-libav:i386
           
           # 安装开发文件
           GST_DEV_DEPS="\
             libgstreamer1.0-dev \
-            libgstreamer1.0-dev:armhf \
+            libgstreamer1.0-dev:i386 \
             libgstreamer-plugins-base1.0-dev \
-            libgstreamer-plugins-base1.0-dev:armhf \
+            libgstreamer-plugins-base1.0-dev:i386 \
             libgstreamer-plugins-good1.0-dev \
-            libgstreamer-plugins-good1.0-dev:armhf \
+            libgstreamer-plugins-good1.0-dev:i386 \
             libgstreamer-plugins-bad1.0-dev \
-            libgstreamer-plugins-bad1.0-dev:armhf"
+            libgstreamer-plugins-bad1.0-dev:i386"
           
           for pkg in $GST_DEV_DEPS; do
             echo "安装 GStreamer 开发包: $pkg"
@@ -456,31 +368,31 @@ jobs:
           # 安装多媒体编解码器开发文件
           CODEC_DEV_DEPS="\
             libmpg123-dev \
-            libmpg123-dev:armhf \
+            libmpg123-dev:i386 \
             libopenal-dev \
-            libopenal-dev:armhf \
+            libopenal-dev:i386 \
             libfaad-dev \
-            libfaad-dev:armhf \
+            libfaad-dev:i386 \
             libflac-dev \
-            libflac-dev:armhf \
+            libflac-dev:i386 \
             libvorbis-dev \
-            libvorbis-dev:armhf \
+            libvorbis-dev:i386 \
             libx264-dev \
-            libx264-dev:armhf \
+            libx264-dev:i386 \
             libx265-dev \
-            libx265-dev:armhf \
+            libx265-dev:i386 \
             libvpx-dev \
-            libvpx-dev:armhf \
+            libvpx-dev:i386 \
             libtheora-dev \
-            libtheora-dev:armhf \
+            libtheora-dev:i386 \
             libavcodec-dev \
-            libavcodec-dev:armhf \
+            libavcodec-dev:i386 \
             libavformat-dev \
-            libavformat-dev:armhf \
+            libavformat-dev:i386 \
             libavutil-dev \
-            libavutil-dev:armhf \
+            libavutil-dev:i386 \
             libswscale-dev \
-            libswscale-dev:armhf"
+            libswscale-dev:i386"
           
           for pkg in $CODEC_DEV_DEPS; do
             echo "安装编解码器开发包: $pkg"
@@ -497,15 +409,15 @@ jobs:
           # 安装 SDL2 开发包（64位和32位）
           sudo apt install -y \
             libsdl2-dev \
-            libsdl2-dev:armhf \
+            libsdl2-dev:i386 \
             libsdl2-2.0-0 \
-            libsdl2-2.0-0:armhf \
+            libsdl2-2.0-0:i386 \
             libsdl2-image-dev \
-            libsdl2-image-dev:armhf \
+            libsdl2-image-dev:i386 \
             libsdl2-ttf-dev \
-            libsdl2-ttf-dev:armhf \
+            libsdl2-ttf-dev:i386 \
             libsdl2-mixer-dev \
-            libsdl2-mixer-dev:armhf
+            libsdl2-mixer-dev:i386
           
           echo "验证 SDL2 安装..."
           pkg-config --cflags sdl2
@@ -524,7 +436,7 @@ jobs:
             echo "64 位 gstreamer-plugins-base-1.0.pc 不存在，尝试修复..."
             
             # 查找可能的位置
-            ALT_LOCATION=$(find /usr -name "gstreamer-plugins-base-1.0.pc" 2>/dev/null | grep -v arm-linux-gnueabihf | head -1)
+            ALT_LOCATION=$(find /usr -name "gstreamer-plugins-base-1.0.pc" 2>/dev/null | grep -v i386-linux-gnu | head -1)
             if [ -n "$ALT_LOCATION" ]; then
               echo "在其他位置找到: $ALT_LOCATION"
               # 创建符号链接
@@ -548,7 +460,7 @@ jobs:
           
           # 设置完整的 PKG_CONFIG_PATH
           export PKG_CONFIG_PATH_64="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
-          export PKG_CONFIG_PATH_32="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
+          export PKG_CONFIG_PATH_32="/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
           
           echo "检查 64 位 GStreamer 开发文件:"
           PKG_CONFIG_PATH="$PKG_CONFIG_PATH_64" pkg-config --cflags gstreamer-1.0
@@ -561,12 +473,12 @@ jobs:
       - name: 设置交叉编译环境
         run: |
           # 创建交叉编译工具链符号链接
-          sudo ln -sf /usr/bin/arm-linux-gnueabihf-gcc /usr/local/bin/arm-linux-gnueabihf-gcc
-          sudo ln -sf /usr/bin/arm-linux-gnueabihf-g++ /usr/local/bin/arm-linux-gnueabihf-g++
+          sudo ln -sf /usr/bin/i686-linux-gnu-gcc /usr/local/bin/i686-linux-gnu-gcc
+          sudo ln -sf /usr/bin/i686-linux-gnu-g++ /usr/local/bin/i686-linux-gnu-g++
           
           # 验证工具链
           echo "验证交叉编译工具链:"
-          arm-linux-gnueabihf-gcc --version
+          i686-linux-gnu-gcc --version
 
       - name: 设置中文语言环境
         run: |
@@ -618,8 +530,8 @@ jobs:
             ./autogen.sh > autogen.log 2>&1 || (cat autogen.log && exit 1)
             echo "autogen 完成"
             
-            # 第一步：构建 64 位 Wine
-            echo "=== 构建 64 位 Wine ==="
+            # 第一步：构建 64 位 Wine (aarch64-windows)
+            echo "=== 构建 64 位 Wine (aarch64-windows) ==="
             mkdir -p build64
             cd build64
             
@@ -633,7 +545,7 @@ jobs:
             # 设置完整的 PKG_CONFIG_PATH
             export PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
             
-            echo "配置 64 位 Wine..."
+            echo "配置 64 位 Wine (aarch64-windows)..."
             ../configure \
               --prefix=/tmp/wine-install-proton \
               --enable-win64 \
@@ -664,7 +576,7 @@ jobs:
               --without-unwind \
               --without-usb \
               --without-v4l2 \
-              --without-wayland > configure64.log 2>&1
+              --without-wayland
             
             if [ $? -ne 0 ]; then
               echo "64位配置失败，查看日志:"
@@ -673,27 +585,31 @@ jobs:
             fi
             echo "64位配置完成"
             
-            echo "编译 64 位 Wine..."
+            echo "编译 64 位 Wine (aarch64-windows)..."
             # 使用 tee 来限制输出，同时保存完整日志
             make -j2 install > make64.log 2>&1 || (echo "64位编译失败，查看日志..." && tail -100 make64.log && make -j1 install > make64_single.log 2>&1 || (tail -100 make64_single.log && exit 1))
             echo "64位编译完成"
             
             cd ..
             
-            # 第二步：构建 32 位 Wine - 修复交叉编译问题
-            echo "=== 构建 32 位 Wine ==="
+            # 第二步：构建 32 位 Wine (i386-windows)
+            echo "=== 构建 32 位 Wine (i386-windows) ==="
             mkdir -p build32
             cd build32
             
-            # 设置交叉编译环境 - 强制使用硬浮点编译器
-            echo "设置交叉编译环境..."
-            echo "强制使用硬浮点交叉编译器 (arm-linux-gnueabihf)"
-
-            export CC="arm-linux-gnueabihf-gcc"
-            export CXX="arm-linux-gnueabihf-g++"
-            export HOST="arm-linux-gnueabihf"
-            export CFLAGS="-march=armv7-a -mtune=cortex-a53 -mfpu=neon-vfpv4 -mfloat-abi=hard -O3 -g -pipe -Wall -Wextra -fPIC"
-            export CXXFLAGS="-march=armv7-a -mtune=cortex-a53 -mfpu=neon-vfpv4 -mfloat-abi=hard -O3 -g -pipe -Wall -Wextra -fPIC"
+            # 设置交叉编译环境 - 构建i386架构
+            echo "设置交叉编译环境 (i386)..."
+            
+            export CC="i686-linux-gnu-gcc"
+            export CXX="i686-linux-gnu-g++"
+            export HOST="i686-linux-gnu"
+            export CFLAGS="-m32 -O3 -g -pipe -Wall -Wextra -fPIC"
+            export CXXFLAGS="-m32 -O3 -g -pipe -Wall -Wextra -fPIC"
+            export LDFLAGS="-m32 -Wl,--as-needed"
+            
+            # 设置库路径
+            export LIBRARY_PATH="/usr/lib/i686-linux-gnu:$LIBRARY_PATH"
+            export LD_LIBRARY_PATH="/usr/lib/i686-linux-gnu:$LD_LIBRARY_PATH"
 
             export AR="${CC%-gcc}-ar"
             export LD="${CC%-gcc}-ld"
@@ -702,42 +618,35 @@ jobs:
             export MAKEFLAGS="-j2"
 
             # 设置 32 位的 PKG_CONFIG_PATH
-            export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
-            export PKG_CONFIG="pkg-config --define-variable=libdir=/usr/lib/arm-linux-gnueabihf"
+            export PKG_CONFIG_PATH="/usr/lib/i686-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
+            export PKG_CONFIG="pkg-config --define-variable=libdir=/usr/lib/i686-linux-gnu"
 
             echo "使用的编译器: $CC"
             echo "目标平台: $HOST"
             echo "CFLAGS: $CFLAGS"
+            echo "目标架构: i386-windows"
 
             # 验证编译器
-            echo 'int main() { float f = 1.0; return (int)f; }' > float_test.c
-            if $CC $CFLAGS float_test.c -o float_test; then
-                echo "交叉编译器浮点支持验证通过"
-                file float_test
-                rm float_test.c float_test
+            echo 'int main() { return 0; }' > test_i386.c
+            if $CC $CFLAGS $LDFLAGS test_i386.c -o test_i386; then
+                echo "i386交叉编译器验证通过"
+                file test_i386
+                rm test_i386.c test_i386
             else
-                echo "错误: 交叉编译器不支持浮点指令"
-                echo "尝试修复编译器配置..."
-                
-                # 重新安装硬浮点编译器
-                sudo apt update
-                sudo apt install -y --reinstall gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
-                
-                # 再次测试
-                if $CC $CFLAGS float_test.c -o float_test; then
-                    echo "修复后编译器验证通过"
-                    rm float_test.c float_test
-                else
-                    echo "错误: 无法修复交叉编译器"
-                    exit 1
-                fi
+                echo "错误: i386交叉编译器验证失败"
+                exit 1
             fi
 
-            echo "配置 32 位 Wine..."
+            echo "配置 32 位 Wine (i386-windows)..."
             ../configure \
                 --host=$HOST \
                 --with-wine64=../build64 \
                 --with-x \
+                --with-alsa \
+                --with-pulse \
+                --with-freetype \
+                --with-fontconfig \
+                --with-gstreamer \
                 --disable-winemenubuilder \
                 --disable-win16 \
                 --disable-tests \
@@ -758,15 +667,24 @@ jobs:
                 --without-v4l2 \
                 --without-wayland
 
-            
+            if [ $? -ne 0 ]; then
+                echo "32位配置失败，查看日志:"
+                cat configure32.log
+                # 显示 config.log 获取更多信息
+                if [ -f "config.log" ]; then
+                    echo "=== config.log 尾部 ==="
+                    tail -100 config.log
+                fi
+                exit 1
+            fi
             echo "32位配置完成"
             
-            echo "编译 32 位 Wine..."
+            echo "编译 32 位 Wine (i386-windows)..."
             # 使用 tee 来限制输出，同时保存完整日志
             make -j2 install > make32.log 2>&1 || (echo "32位编译失败，查看日志..." && tail -100 make32.log && make -j1 install > make32_single.log 2>&1 || (tail -100 make32_single.log && exit 1))
             echo "32位编译完成"
             
-            echo "ARM64 WOW64 Wine 构建完成"
+            echo "ARM64 WOW64 Wine 构建完成 (aarch64-windows + i386-windows)"
 
       - name: 上传构建日志（如需要）
         uses: actions/upload-artifact@v4
@@ -904,9 +822,16 @@ jobs:
           sudo apt --fix-broken install -y
           sudo apt install -f -y
           
-          # 添加 32 位架构支持
-          sudo dpkg --add-architecture armhf
+          # 添加 i386 架构支持
+          sudo dpkg --add-architecture i386
           sudo apt update
+          
+          # 安装交叉编译工具链
+          sudo apt install -y \
+              gcc-i686-linux-gnu \
+              g++-i686-linux-gnu \
+              binutils-i686-linux-gnu \
+              libc6-dev-i386
           
           # 基础构建依赖
           BASE_DEPS="\
@@ -930,67 +855,67 @@ jobs:
             pkg-config \
             libtool \
             libx11-dev \
-            libx11-dev:armhf \
+            libx11-dev:i386 \
             libxext-dev \
-            libxext-dev:armhf \
+            libxext-dev:i386 \
             libxi-dev \
-            libxi-dev:armhf \
+            libxi-dev:i386 \
             libxrandr-dev \
-            libxrandr-dev:armhf \
+            libxrandr-dev:i386 \
             libxcursor-dev \
-            libxcursor-dev:armhf \
+            libxcursor-dev:i386 \
             libxcomposite-dev \
-            libxcomposite-dev:armhf \
+            libxcomposite-dev:i386 \
             libxdamage-dev \
-            libxdamage-dev:armhf \
+            libxdamage-dev:i386 \
             libxfixes-dev \
-            libxfixes-dev:armhf \
+            libxfixes-dev:i386 \
             libxxf86vm-dev \
-            libxxf86vm-dev:armhf \
+            libxxf86vm-dev:i386 \
             libxrender-dev \
-            libxrender-dev:armhf \
+            libxrender-dev:i386 \
             libxinerama-dev \
-            libxinerama-dev:armhf \
+            libxinerama-dev:i386 \
             libgl-dev \
-            libgl-dev:armhf \
+            libgl-dev:i386 \
             libglu-dev \
-            libglu-dev:armhf \
+            libglu-dev:i386 \
             libosmesa6-dev \
-            libosmesa6-dev:armhf \
+            libosmesa6-dev:i386 \
             libfreetype6-dev \
-            libfreetype6-dev:armhf \
+            libfreetype6-dev:i386 \
             libfontconfig1-dev \
-            libfontconfig1-dev:armhf \
+            libfontconfig1-dev:i386 \
             libpcap-dev \
             libdbus-1-dev \
-            libdbus-1-dev:armhf \
+            libdbus-1-dev:i386 \
             libssl-dev \
-            libssl-dev:armhf \
+            libssl-dev:i386 \
             libasound2-dev \
-            libasound2-dev:armhf \
+            libasound2-dev:i386 \
             libpulse-dev \
-            libpulse-dev:armhf \
+            libpulse-dev:i386 \
             libudev-dev \
-            libudev-dev:armhf \
+            libudev-dev:i386 \
             libcups2-dev \
-            libcups2-dev:armhf \
+            libcups2-dev:i386 \
             libjpeg-dev \
-            libjpeg-dev:armhf \
+            libjpeg-dev:i386 \
             libpng-dev \
-            libpng-dev:armhf \
+            libpng-dev:i386 \
             libtiff-dev \
-            libtiff-dev:armhf \
+            libtiff-dev:i386 \
             libxml2-dev \
-            libxml2-dev:armhf \
+            libxml2-dev:i386 \
             libvulkan-dev \
-            libvulkan-dev:armhf \
+            libvulkan-dev:i386 \
             vulkan-tools \
             libvulkan1 \
-            libvulkan1:armhf \
+            libvulkan1:i386 \
             mesa-vulkan-drivers \
             gettext \
             libgettextpo-dev \
-            libgettextpo-dev:armhf \
+            libgettextpo-dev:i386 \
             locales \
             language-pack-zh-hans"
           
@@ -999,69 +924,6 @@ jobs:
             echo "安装包: $pkg"
             sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
           done
-
-          # 安装交叉编译工具链（在 ARM64 上编译 32 位 ARM）
-          CROSS_DEPS="\
-            gcc-arm-linux-gnueabihf \
-            g++-arm-linux-gnueabihf \
-            binutils-arm-linux-gnueabihf \
-            libc6-dev-armhf-cross"
-          
-          sudo apt install -y $CROSS_DEPS
-
-      - name: 安装 32 位 ARM 基础库
-        run: |
-          sudo apt update
-          echo "安装 32 位 ARM 基础库和开发工具..."
-          
-          # 安装 32 位 ARM 基础运行库
-          sudo apt install -y \
-            libc6:armhf \
-            libc6-dev:armhf \
-            libgcc-s1:armhf \
-            libstdc++6:armhf \
-            libstdc++-12-dev:armhf \
-            linux-libc-dev:armhf
-            
-          # 安装额外的 32 位开发库
-          sudo apt install -y \
-            libgmp-dev:armhf \
-            libmpfr-dev:armhf \
-            libmpc-dev:armhf \
-            zlib1g-dev:armhf \
-            libncurses-dev:armhf
-
-      - name: 修复交叉编译器配置
-        run: |
-          echo "修复交叉编译器配置..."
-          
-          # 安装额外的 ARM 开发工具
-          sudo apt update
-          sudo apt install -y \
-            gcc-arm-linux-gnueabi \
-            g++-arm-linux-gnueabi \
-            binutils-arm-linux-gnueabi
-          
-          # 创建符号链接
-          sudo ln -sf /usr/bin/arm-linux-gnueabi-gcc /usr/local/bin/arm-linux-gnueabi-gcc
-          sudo ln -sf /usr/bin/arm-linux-gnueabi-g++ /usr/local/bin/arm-linux-gnueabi-g++
-          
-          echo "验证交叉编译器..."
-          echo "arm-linux-gnueabihf-gcc:"
-          arm-linux-gnueabihf-gcc --version
-          
-          # 测试硬浮点编译器的浮点支持
-          echo 'int main() { float f = 1.0; return (int)f; }' > test_float.c
-          if arm-linux-gnueabihf-gcc -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard test_float.c -o test_float; then
-            echo "硬浮点编译器浮点支持验证通过"
-            file test_float
-          else
-            echo "硬浮点编译器浮点支持有问题"
-            # 尝试重新安装
-            sudo apt install -y --reinstall gcc-arm-linux-gnueabihf
-          fi
-          
-          rm -f test_float.c test_float
 
       - name: 安装 GStreamer 开发依赖
         run: |
@@ -1074,26 +936,26 @@ jobs:
           sudo apt install -y \
             gstreamer1.0-tools \
             gstreamer1.0-plugins-base \
-            gstreamer1.0-plugins-base:armhf \
+            gstreamer1.0-plugins-base:i386 \
             gstreamer1.0-plugins-good \
-            gstreamer1.0-plugins-good:armhf \
+            gstreamer1.0-plugins-good:i386 \
             gstreamer1.0-plugins-bad \
-            gstreamer1.0-plugins-bad:armhf \
+            gstreamer1.0-plugins-bad:i386 \
             gstreamer1.0-plugins-ugly \
-            gstreamer1.0-plugins-ugly:armhf \
+            gstreamer1.0-plugins-ugly:i386 \
             gstreamer1.0-libav \
-            gstreamer1.0-libav:armhf
+            gstreamer1.0-libav:i386
           
           # 安装开发文件
           GST_DEV_DEPS="\
             libgstreamer1.0-dev \
-            libgstreamer1.0-dev:armhf \
+            libgstreamer1.0-dev:i386 \
             libgstreamer-plugins-base1.0-dev \
-            libgstreamer-plugins-base1.0-dev:armhf \
+            libgstreamer-plugins-base1.0-dev:i386 \
             libgstreamer-plugins-good1.0-dev \
-            libgstreamer-plugins-good1.0-dev:armhf \
+            libgstreamer-plugins-good1.0-dev:i386 \
             libgstreamer-plugins-bad1.0-dev \
-            libgstreamer-plugins-bad1.0-dev:armhf"
+            libgstreamer-plugins-bad1.0-dev:i386"
           
           for pkg in $GST_DEV_DEPS; do
             echo "安装 GStreamer 开发包: $pkg"
@@ -1103,31 +965,31 @@ jobs:
           # 安装多媒体编解码器开发文件
           CODEC_DEV_DEPS="\
             libmpg123-dev \
-            libmpg123-dev:armhf \
+            libmpg123-dev:i386 \
             libopenal-dev \
-            libopenal-dev:armhf \
+            libopenal-dev:i386 \
             libfaad-dev \
-            libfaad-dev:armhf \
+            libfaad-dev:i386 \
             libflac-dev \
-            libflac-dev:armhf \
+            libflac-dev:i386 \
             libvorbis-dev \
-            libvorbis-dev:armhf \
+            libvorbis-dev:i386 \
             libx264-dev \
-            libx264-dev:armhf \
+            libx264-dev:i386 \
             libx265-dev \
-            libx265-dev:armhf \
+            libx265-dev:i386 \
             libvpx-dev \
-            libvpx-dev:armhf \
+            libvpx-dev:i386 \
             libtheora-dev \
-            libtheora-dev:armhf \
+            libtheora-dev:i386 \
             libavcodec-dev \
-            libavcodec-dev:armhf \
+            libavcodec-dev:i386 \
             libavformat-dev \
-            libavformat-dev:armhf \
+            libavformat-dev:i386 \
             libavutil-dev \
-            libavutil-dev:armhf \
+            libavutil-dev:i386 \
             libswscale-dev \
-            libswscale-dev:armhf"
+            libswscale-dev:i386"
           
           for pkg in $CODEC_DEV_DEPS; do
             echo "安装编解码器开发包: $pkg"
@@ -1144,15 +1006,15 @@ jobs:
           # 安装 SDL2 开发包（64位和32位）
           sudo apt install -y \
             libsdl2-dev \
-            libsdl2-dev:armhf \
+            libsdl2-dev:i386 \
             libsdl2-2.0-0 \
-            libsdl2-2.0-0:armhf \
+            libsdl2-2.0-0:i386 \
             libsdl2-image-dev \
-            libsdl2-image-dev:armhf \
+            libsdl2-image-dev:i386 \
             libsdl2-ttf-dev \
-            libsdl2-ttf-dev:armhf \
+            libsdl2-ttf-dev:i386 \
             libsdl2-mixer-dev \
-            libsdl2-mixer-dev:armhf
+            libsdl2-mixer-dev:i386
           
           echo "验证 SDL2 安装..."
           pkg-config --cflags sdl2
@@ -1171,7 +1033,7 @@ jobs:
             echo "64 位 gstreamer-plugins-base-1.0.pc 不存在，尝试修复..."
             
             # 查找可能的位置
-            ALT_LOCATION=$(find /usr -name "gstreamer-plugins-base-1.0.pc" 2>/dev/null | grep -v arm-linux-gnueabihf | head -1)
+            ALT_LOCATION=$(find /usr -name "gstreamer-plugins-base-1.0.pc" 2>/dev/null | grep -v i386-linux-gnu | head -1)
             if [ -n "$ALT_LOCATION" ]; then
               echo "在其他位置找到: $ALT_LOCATION"
               # 创建符号链接
@@ -1195,7 +1057,7 @@ jobs:
           
           # 设置完整的 PKG_CONFIG_PATH
           export PKG_CONFIG_PATH_64="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
-          export PKG_CONFIG_PATH_32="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
+          export PKG_CONFIG_PATH_32="/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
           
           echo "检查 64 位 GStreamer 开发文件:"
           PKG_CONFIG_PATH="$PKG_CONFIG_PATH_64" pkg-config --cflags gstreamer-1.0
@@ -1208,12 +1070,12 @@ jobs:
       - name: 设置交叉编译环境
         run: |
           # 创建交叉编译工具链符号链接
-          sudo ln -sf /usr/bin/arm-linux-gnueabihf-gcc /usr/local/bin/arm-linux-gnueabihf-gcc
-          sudo ln -sf /usr/bin/arm-linux-gnueabihf-g++ /usr/local/bin/arm-linux-gnueabihf-g++
+          sudo ln -sf /usr/bin/i686-linux-gnu-gcc /usr/local/bin/i686-linux-gnu-gcc
+          sudo ln -sf /usr/bin/i686-linux-gnu-g++ /usr/local/bin/i686-linux-gnu-g++
           
           # 验证工具链
           echo "验证交叉编译工具链:"
-          arm-linux-gnueabihf-gcc --version
+          i686-linux-gnu-gcc --version
 
       - name: 设置中文语言环境
         run: |
@@ -1338,8 +1200,8 @@ jobs:
           ./autogen.sh > autogen.log 2>&1 || (cat autogen.log && exit 1)
           echo "autogen 完成"
           
-          # 第一步：构建 64 位 Wine
-          echo "=== 构建 64 位 Wine ==="
+          # 第一步：构建 64 位 Wine (aarch64-windows)
+          echo "=== 构建 64 位 Wine (aarch64-windows) ==="
           mkdir -p build64
           cd build64
           
@@ -1353,7 +1215,7 @@ jobs:
           # 设置完整的 PKG_CONFIG_PATH
           export PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
           
-          echo "配置 64 位 Wine..."
+          echo "配置 64 位 Wine (aarch64-windows)..."
           ../configure \
             --prefix=/tmp/wine-install-wow64 \
             --enable-win64 \
@@ -1393,27 +1255,31 @@ jobs:
           fi
           echo "64位配置完成"
           
-          echo "编译 64 位 Wine..."
+          echo "编译 64 位 Wine (aarch64-windows)..."
           # 使用 tee 来限制输出，同时保存完整日志
           make -j2 install > make64.log 2>&1 || (echo "64位编译失败，查看日志..." && tail -100 make64.log && make -j1 install > make64_single.log 2>&1 || (tail -100 make64_single.log && exit 1))
           echo "64位编译完成"
           
           cd ..
           
-          # 第二步：构建 32 位 Wine - 修复交叉编译问题
-          echo "=== 构建 32 位 Wine ==="
+          # 第二步：构建 32 位 Wine (i386-windows)
+          echo "=== 构建 32 位 Wine (i386-windows) ==="
           mkdir -p build32
           cd build32
           
-          # 设置交叉编译环境 - 强制使用硬浮点编译器
-          echo "设置交叉编译环境..."
-          echo "强制使用硬浮点交叉编译器 (arm-linux-gnueabihf)"
-
-          export CC="arm-linux-gnueabihf-gcc"
-          export CXX="arm-linux-gnueabihf-g++"
-          export HOST="arm-linux-gnueabihf"
-          export CFLAGS="-march=armv7-a -mtune=cortex-a53 -mfpu=neon-vfpv4 -mfloat-abi=hard -O3 -g -pipe -Wall -Wextra -fPIC"
-          export CXXFLAGS="-march=armv7-a -mtune=cortex-a53 -mfpu=neon-vfpv4 -mfloat-abi=hard -O3 -g -pipe -Wall -Wextra -fPIC"
+          # 设置交叉编译环境 - 构建i386架构
+          echo "设置交叉编译环境 (i386)..."
+          
+          export CC="i686-linux-gnu-gcc"
+          export CXX="i686-linux-gnu-g++"
+          export HOST="i686-linux-gnu"
+          export CFLAGS="-m32 -O3 -g -pipe -Wall -Wextra -fPIC"
+          export CXXFLAGS="-m32 -O3 -g -pipe -Wall -Wextra -fPIC"
+          export LDFLAGS="-m32 -Wl,--as-needed"
+          
+          # 设置库路径
+          export LIBRARY_PATH="/usr/lib/i686-linux-gnu:$LIBRARY_PATH"
+          export LD_LIBRARY_PATH="/usr/lib/i686-linux-gnu:$LD_LIBRARY_PATH"
 
           export AR="${CC%-gcc}-ar"
           export LD="${CC%-gcc}-ld"
@@ -1422,38 +1288,26 @@ jobs:
           export MAKEFLAGS="-j2"
 
           # 设置 32 位的 PKG_CONFIG_PATH
-          export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
-          export PKG_CONFIG="pkg-config --define-variable=libdir=/usr/lib/arm-linux-gnueabihf"
+          export PKG_CONFIG_PATH="/usr/lib/i686-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
+          export PKG_CONFIG="pkg-config --define-variable=libdir=/usr/lib/i686-linux-gnu"
 
           echo "使用的编译器: $CC"
           echo "目标平台: $HOST"
           echo "CFLAGS: $CFLAGS"
+          echo "目标架构: i386-windows"
 
           # 验证编译器
-          echo 'int main() { float f = 1.0; return (int)f; }' > float_test.c
-          if $CC $CFLAGS float_test.c -o float_test; then
-              echo "交叉编译器浮点支持验证通过"
-              file float_test
-              rm float_test.c float_test
+          echo 'int main() { return 0; }' > test_i386.c
+          if $CC $CFLAGS $LDFLAGS test_i386.c -o test_i386; then
+              echo "i386交叉编译器验证通过"
+              file test_i386
+              rm test_i386.c test_i386
           else
-              echo "错误: 交叉编译器不支持浮点指令"
-              echo "尝试修复编译器配置..."
-              
-              # 重新安装硬浮点编译器
-              sudo apt update
-              sudo apt install -y --reinstall gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
-              
-              # 再次测试
-              if $CC $CFLAGS float_test.c -o float_test; then
-                  echo "修复后编译器验证通过"
-                  rm float_test.c float_test
-              else
-                  echo "错误: 无法修复交叉编译器"
-                  exit 1
-              fi
+              echo "错误: i386交叉编译器验证失败"
+              exit 1
           fi
 
-          echo "配置 32 位 Wine..."
+          echo "配置 32 位 Wine (i386-windows)..."
           ../configure \
               --host=$HOST \
               --with-wine64=../build64 \
@@ -1495,12 +1349,12 @@ jobs:
           fi
           echo "32位配置完成"
           
-          echo "编译 32 位 Wine..."
+          echo "编译 32 位 Wine (i386-windows)..."
           # 使用 tee 来限制输出，同时保存完整日志
           make -j2 install > make32.log 2>&1 || (echo "32位编译失败，查看日志..." && tail -100 make32.log && make -j1 install > make32_single.log 2>&1 || (tail -100 make32_single.log && exit 1))
           echo "32位编译完成"
           
-          echo "ARM64 WOW64 Wine 构建完成"
+          echo "ARM64 WOW64 Wine 构建完成 (aarch64-windows + i386-windows)"
 
       - name: 上传构建日志（如需要）
         uses: actions/upload-artifact@v4
