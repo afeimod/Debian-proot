@@ -225,17 +225,6 @@ jobs:
           sudo apt --fix-broken install -y
           sudo apt install -f -y
           
-          # 添加 i386 架构支持
-          sudo dpkg --add-architecture i386
-          sudo apt update
-          
-          # 安装交叉编译工具链
-          sudo apt install -y \
-              gcc-i686-linux-gnu \
-              g++-i686-linux-gnu \
-              binutils-i686-linux-gnu \
-              libc6-dev-i386
-          
           # 基础构建依赖
           BASE_DEPS="\
             debootstrap \
@@ -258,67 +247,38 @@ jobs:
             pkg-config \
             libtool \
             libx11-dev \
-            libx11-dev:i386 \
             libxext-dev \
-            libxext-dev:i386 \
             libxi-dev \
-            libxi-dev:i386 \
             libxrandr-dev \
-            libxrandr-dev:i386 \
             libxcursor-dev \
-            libxcursor-dev:i386 \
             libxcomposite-dev \
-            libxcomposite-dev:i386 \
             libxdamage-dev \
-            libxdamage-dev:i386 \
             libxfixes-dev \
-            libxfixes-dev:i386 \
             libxxf86vm-dev \
-            libxxf86vm-dev:i386 \
             libxrender-dev \
-            libxrender-dev:i386 \
             libxinerama-dev \
-            libxinerama-dev:i386 \
             libgl-dev \
-            libgl-dev:i386 \
             libglu-dev \
-            libglu-dev:i386 \
             libosmesa6-dev \
-            libosmesa6-dev:i386 \
             libfreetype6-dev \
-            libfreetype6-dev:i386 \
             libfontconfig1-dev \
-            libfontconfig1-dev:i386 \
             libpcap-dev \
             libdbus-1-dev \
-            libdbus-1-dev:i386 \
             libssl-dev \
-            libssl-dev:i386 \
             libasound2-dev \
-            libasound2-dev:i386 \
             libpulse-dev \
-            libpulse-dev:i386 \
             libudev-dev \
-            libudev-dev:i386 \
             libcups2-dev \
-            libcups2-dev:i386 \
             libjpeg-dev \
-            libjpeg-dev:i386 \
             libpng-dev \
-            libpng-dev:i386 \
             libtiff-dev \
-            libtiff-dev:i386 \
             libxml2-dev \
-            libxml2-dev:i386 \
             libvulkan-dev \
-            libvulkan-dev:i386 \
             vulkan-tools \
             libvulkan1 \
-            libvulkan1:i386 \
             mesa-vulkan-drivers \
             gettext \
             libgettextpo-dev \
-            libgettextpo-dev:i386 \
             locales \
             language-pack-zh-hans"
           
@@ -328,37 +288,46 @@ jobs:
             sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
           done
 
+      - name: 安装交叉编译工具链
+        run: |
+          sudo apt update
+          echo "安装交叉编译工具链..."
+          
+          # 安装必要的交叉编译工具
+          sudo apt install -y \
+            gcc-aarch64-linux-gnu \
+            g++-aarch64-linux-gnu \
+            binutils-aarch64-linux-gnu \
+            gcc-arm-linux-gnueabihf \
+            g++-arm-linux-gnueabihf \
+            binutils-arm-linux-gnueabihf
+          
+          echo "交叉编译器安装完成:"
+          aarch64-linux-gnu-gcc --version
+          arm-linux-gnueabihf-gcc --version
+
       - name: 安装 GStreamer 开发依赖
         run: |
           sudo apt update
           
-          # 安装完整的 GStreamer 开发文件 (64位和32位)
+          # 安装完整的 GStreamer 开发文件
           echo "安装 GStreamer 开发依赖..."
           
           # 先安装基础包
           sudo apt install -y \
             gstreamer1.0-tools \
             gstreamer1.0-plugins-base \
-            gstreamer1.0-plugins-base:i386 \
             gstreamer1.0-plugins-good \
-            gstreamer1.0-plugins-good:i386 \
             gstreamer1.0-plugins-bad \
-            gstreamer1.0-plugins-bad:i386 \
             gstreamer1.0-plugins-ugly \
-            gstreamer1.0-plugins-ugly:i386 \
-            gstreamer1.0-libav \
-            gstreamer1.0-libav:i386
+            gstreamer1.0-libav
           
           # 安装开发文件
           GST_DEV_DEPS="\
             libgstreamer1.0-dev \
-            libgstreamer1.0-dev:i386 \
             libgstreamer-plugins-base1.0-dev \
-            libgstreamer-plugins-base1.0-dev:i386 \
             libgstreamer-plugins-good1.0-dev \
-            libgstreamer-plugins-good1.0-dev:i386 \
-            libgstreamer-plugins-bad1.0-dev \
-            libgstreamer-plugins-bad1.0-dev:i386"
+            libgstreamer-plugins-bad1.0-dev"
           
           for pkg in $GST_DEV_DEPS; do
             echo "安装 GStreamer 开发包: $pkg"
@@ -368,31 +337,18 @@ jobs:
           # 安装多媒体编解码器开发文件
           CODEC_DEV_DEPS="\
             libmpg123-dev \
-            libmpg123-dev:i386 \
             libopenal-dev \
-            libopenal-dev:i386 \
             libfaad-dev \
-            libfaad-dev:i386 \
             libflac-dev \
-            libflac-dev:i386 \
             libvorbis-dev \
-            libvorbis-dev:i386 \
             libx264-dev \
-            libx264-dev:i386 \
             libx265-dev \
-            libx265-dev:i386 \
             libvpx-dev \
-            libvpx-dev:i386 \
             libtheora-dev \
-            libtheora-dev:i386 \
             libavcodec-dev \
-            libavcodec-dev:i386 \
             libavformat-dev \
-            libavformat-dev:i386 \
             libavutil-dev \
-            libavutil-dev:i386 \
-            libswscale-dev \
-            libswscale-dev:i386"
+            libswscale-dev"
           
           for pkg in $CODEC_DEV_DEPS; do
             echo "安装编解码器开发包: $pkg"
@@ -406,18 +362,13 @@ jobs:
           sudo apt update
           echo "安装 SDL2 开发文件..."
           
-          # 安装 SDL2 开发包（64位和32位）
+          # 安装 SDL2 开发包
           sudo apt install -y \
             libsdl2-dev \
-            libsdl2-dev:i386 \
             libsdl2-2.0-0 \
-            libsdl2-2.0-0:i386 \
             libsdl2-image-dev \
-            libsdl2-image-dev:i386 \
             libsdl2-ttf-dev \
-            libsdl2-ttf-dev:i386 \
-            libsdl2-mixer-dev \
-            libsdl2-mixer-dev:i386
+            libsdl2-mixer-dev
           
           echo "验证 SDL2 安装..."
           pkg-config --cflags sdl2
@@ -436,7 +387,7 @@ jobs:
             echo "64 位 gstreamer-plugins-base-1.0.pc 不存在，尝试修复..."
             
             # 查找可能的位置
-            ALT_LOCATION=$(find /usr -name "gstreamer-plugins-base-1.0.pc" 2>/dev/null | grep -v i386-linux-gnu | head -1)
+            ALT_LOCATION=$(find /usr -name "gstreamer-plugins-base-1.0.pc" 2>/dev/null | head -1)
             if [ -n "$ALT_LOCATION" ]; then
               echo "在其他位置找到: $ALT_LOCATION"
               # 创建符号链接
@@ -444,7 +395,7 @@ jobs:
               sudo ln -sf "$ALT_LOCATION" "/usr/lib/aarch64-linux-gnu/pkgconfig/gstreamer-plugins-base-1.0.pc"
               echo "已创建符号链接"
             else
-              echo "错误: 无法找到 64 位 gstreamer-plugins-base-1.0.pc 文件"
+              echo "错误: 无法找到 gstreamer-plugins-base-1.0.pc 文件"
               # 尝试重新安装包
               sudo apt install --reinstall -y libgstreamer-plugins-base1.0-dev
             fi
@@ -460,25 +411,10 @@ jobs:
           
           # 设置完整的 PKG_CONFIG_PATH
           export PKG_CONFIG_PATH_64="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
-          export PKG_CONFIG_PATH_32="/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
           
           echo "检查 64 位 GStreamer 开发文件:"
           PKG_CONFIG_PATH="$PKG_CONFIG_PATH_64" pkg-config --cflags gstreamer-1.0
           PKG_CONFIG_PATH="$PKG_CONFIG_PATH_64" pkg-config --cflags gstreamer-plugins-base-1.0
-          
-          echo "检查 32 位 GStreamer 开发文件:"
-          PKG_CONFIG_PATH="$PKG_CONFIG_PATH_32" pkg-config --cflags gstreamer-1.0
-          PKG_CONFIG_PATH="$PKG_CONFIG_PATH_32" pkg-config --cflags gstreamer-plugins-base-1.0
-
-      - name: 设置交叉编译环境
-        run: |
-          # 创建交叉编译工具链符号链接
-          sudo ln -sf /usr/bin/i686-linux-gnu-gcc /usr/local/bin/i686-linux-gnu-gcc
-          sudo ln -sf /usr/bin/i686-linux-gnu-g++ /usr/local/bin/i686-linux-gnu-g++
-          
-          # 验证工具链
-          echo "验证交叉编译工具链:"
-          i686-linux-gnu-gcc --version
 
       - name: 设置中文语言环境
         run: |
@@ -576,7 +512,7 @@ jobs:
               --without-unwind \
               --without-usb \
               --without-v4l2 \
-              --without-wayland
+              --without-wayland > configure64.log 2>&1
             
             if [ $? -ne 0 ]; then
               echo "64位配置失败，查看日志:"
@@ -592,7 +528,7 @@ jobs:
             
             cd ..
             
-            # 第二步：构建 32 位 Wine (i386-windows)
+            # 第二步：构建 32 位 Wine (i386-windows) - 使用交叉编译
             echo "=== 构建 32 位 Wine (i386-windows) ==="
             mkdir -p build32
             cd build32
@@ -600,26 +536,22 @@ jobs:
             # 设置交叉编译环境 - 构建i386架构
             echo "设置交叉编译环境 (i386)..."
             
-            export CC="i686-linux-gnu-gcc"
-            export CXX="i686-linux-gnu-g++"
-            export HOST="i686-linux-gnu"
-            export CFLAGS="-m32 -O3 -g -pipe -Wall -Wextra -fPIC"
-            export CXXFLAGS="-m32 -O3 -g -pipe -Wall -Wextra -fPIC"
-            export LDFLAGS="-m32 -Wl,--as-needed"
+            # 这里我们使用 mingw-w64 工具链来构建 Windows 目标
+            # 安装 mingw-w64 交叉编译器
+            sudo apt install -y mingw-w64
             
-            # 设置库路径
-            export LIBRARY_PATH="/usr/lib/i686-linux-gnu:$LIBRARY_PATH"
-            export LD_LIBRARY_PATH="/usr/lib/i686-linux-gnu:$LD_LIBRARY_PATH"
-
+            export CC="i686-w64-mingw32-gcc"
+            export CXX="i686-w64-mingw32-g++"
+            export HOST="i686-w64-mingw32"
+            export CFLAGS="-O2 -g -pipe -Wall -Wextra"
+            export CXXFLAGS="-O2 -g -pipe -Wall -Wextra"
+            export LDFLAGS=""
+            
             export AR="${CC%-gcc}-ar"
             export LD="${CC%-gcc}-ld"
             export RANLIB="${CC%-gcc}-ranlib"
             export STRIP="${CC%-gcc}-strip"
             export MAKEFLAGS="-j2"
-
-            # 设置 32 位的 PKG_CONFIG_PATH
-            export PKG_CONFIG_PATH="/usr/lib/i686-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
-            export PKG_CONFIG="pkg-config --define-variable=libdir=/usr/lib/i686-linux-gnu"
 
             echo "使用的编译器: $CC"
             echo "目标平台: $HOST"
@@ -628,10 +560,10 @@ jobs:
 
             # 验证编译器
             echo 'int main() { return 0; }' > test_i386.c
-            if $CC $CFLAGS $LDFLAGS test_i386.c -o test_i386; then
+            if $CC $CFLAGS $LDFLAGS test_i386.c -o test_i386.exe; then
                 echo "i386交叉编译器验证通过"
-                file test_i386
-                rm test_i386.c test_i386
+                file test_i386.exe
+                rm test_i386.c test_i386.exe
             else
                 echo "错误: i386交叉编译器验证失败"
                 exit 1
@@ -641,15 +573,15 @@ jobs:
             ../configure \
                 --host=$HOST \
                 --with-wine64=../build64 \
-                --with-x \
-                --with-alsa \
-                --with-pulse \
-                --with-freetype \
-                --with-fontconfig \
-                --with-gstreamer \
                 --disable-winemenubuilder \
                 --disable-win16 \
                 --disable-tests \
+                --without-x \
+                --without-alsa \
+                --without-pulse \
+                --without-freetype \
+                --without-fontconfig \
+                --without-gstreamer \
                 --without-ldap \
                 --without-capi \
                 --without-oss \
@@ -665,7 +597,7 @@ jobs:
                 --without-unwind \
                 --without-usb \
                 --without-v4l2 \
-                --without-wayland
+                --without-wayland > configure32.log 2>&1
 
             if [ $? -ne 0 ]; then
                 echo "32位配置失败，查看日志:"
@@ -822,17 +754,6 @@ jobs:
           sudo apt --fix-broken install -y
           sudo apt install -f -y
           
-          # 添加 i386 架构支持
-          sudo dpkg --add-architecture i386
-          sudo apt update
-          
-          # 安装交叉编译工具链
-          sudo apt install -y \
-              gcc-i686-linux-gnu \
-              g++-i686-linux-gnu \
-              binutils-i686-linux-gnu \
-              libc6-dev-i386
-          
           # 基础构建依赖
           BASE_DEPS="\
             debootstrap \
@@ -855,67 +776,38 @@ jobs:
             pkg-config \
             libtool \
             libx11-dev \
-            libx11-dev:i386 \
             libxext-dev \
-            libxext-dev:i386 \
             libxi-dev \
-            libxi-dev:i386 \
             libxrandr-dev \
-            libxrandr-dev:i386 \
             libxcursor-dev \
-            libxcursor-dev:i386 \
             libxcomposite-dev \
-            libxcomposite-dev:i386 \
             libxdamage-dev \
-            libxdamage-dev:i386 \
             libxfixes-dev \
-            libxfixes-dev:i386 \
             libxxf86vm-dev \
-            libxxf86vm-dev:i386 \
             libxrender-dev \
-            libxrender-dev:i386 \
             libxinerama-dev \
-            libxinerama-dev:i386 \
             libgl-dev \
-            libgl-dev:i386 \
             libglu-dev \
-            libglu-dev:i386 \
             libosmesa6-dev \
-            libosmesa6-dev:i386 \
             libfreetype6-dev \
-            libfreetype6-dev:i386 \
             libfontconfig1-dev \
-            libfontconfig1-dev:i386 \
             libpcap-dev \
             libdbus-1-dev \
-            libdbus-1-dev:i386 \
             libssl-dev \
-            libssl-dev:i386 \
             libasound2-dev \
-            libasound2-dev:i386 \
             libpulse-dev \
-            libpulse-dev:i386 \
             libudev-dev \
-            libudev-dev:i386 \
             libcups2-dev \
-            libcups2-dev:i386 \
             libjpeg-dev \
-            libjpeg-dev:i386 \
             libpng-dev \
-            libpng-dev:i386 \
             libtiff-dev \
-            libtiff-dev:i386 \
             libxml2-dev \
-            libxml2-dev:i386 \
             libvulkan-dev \
-            libvulkan-dev:i386 \
             vulkan-tools \
             libvulkan1 \
-            libvulkan1:i386 \
             mesa-vulkan-drivers \
             gettext \
             libgettextpo-dev \
-            libgettextpo-dev:i386 \
             locales \
             language-pack-zh-hans"
           
@@ -925,37 +817,40 @@ jobs:
             sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
           done
 
+      - name: 安装交叉编译工具链
+        run: |
+          sudo apt update
+          echo "安装交叉编译工具链..."
+          
+          # 安装 mingw-w64 用于交叉编译 Windows 目标
+          sudo apt install -y mingw-w64
+          
+          echo "交叉编译器安装完成:"
+          i686-w64-mingw32-gcc --version
+          x86_64-w64-mingw32-gcc --version
+
       - name: 安装 GStreamer 开发依赖
         run: |
           sudo apt update
           
-          # 安装完整的 GStreamer 开发文件 (64位和32位)
+          # 安装完整的 GStreamer 开发文件
           echo "安装 GStreamer 开发依赖..."
           
           # 先安装基础包
           sudo apt install -y \
             gstreamer1.0-tools \
             gstreamer1.0-plugins-base \
-            gstreamer1.0-plugins-base:i386 \
             gstreamer1.0-plugins-good \
-            gstreamer1.0-plugins-good:i386 \
             gstreamer1.0-plugins-bad \
-            gstreamer1.0-plugins-bad:i386 \
             gstreamer1.0-plugins-ugly \
-            gstreamer1.0-plugins-ugly:i386 \
-            gstreamer1.0-libav \
-            gstreamer1.0-libav:i386
+            gstreamer1.0-libav
           
           # 安装开发文件
           GST_DEV_DEPS="\
             libgstreamer1.0-dev \
-            libgstreamer1.0-dev:i386 \
             libgstreamer-plugins-base1.0-dev \
-            libgstreamer-plugins-base1.0-dev:i386 \
             libgstreamer-plugins-good1.0-dev \
-            libgstreamer-plugins-good1.0-dev:i386 \
-            libgstreamer-plugins-bad1.0-dev \
-            libgstreamer-plugins-bad1.0-dev:i386"
+            libgstreamer-plugins-bad1.0-dev"
           
           for pkg in $GST_DEV_DEPS; do
             echo "安装 GStreamer 开发包: $pkg"
@@ -965,31 +860,18 @@ jobs:
           # 安装多媒体编解码器开发文件
           CODEC_DEV_DEPS="\
             libmpg123-dev \
-            libmpg123-dev:i386 \
             libopenal-dev \
-            libopenal-dev:i386 \
             libfaad-dev \
-            libfaad-dev:i386 \
             libflac-dev \
-            libflac-dev:i386 \
             libvorbis-dev \
-            libvorbis-dev:i386 \
             libx264-dev \
-            libx264-dev:i386 \
             libx265-dev \
-            libx265-dev:i386 \
             libvpx-dev \
-            libvpx-dev:i386 \
             libtheora-dev \
-            libtheora-dev:i386 \
             libavcodec-dev \
-            libavcodec-dev:i386 \
             libavformat-dev \
-            libavformat-dev:i386 \
             libavutil-dev \
-            libavutil-dev:i386 \
-            libswscale-dev \
-            libswscale-dev:i386"
+            libswscale-dev"
           
           for pkg in $CODEC_DEV_DEPS; do
             echo "安装编解码器开发包: $pkg"
@@ -1003,18 +885,13 @@ jobs:
           sudo apt update
           echo "安装 SDL2 开发文件..."
           
-          # 安装 SDL2 开发包（64位和32位）
+          # 安装 SDL2 开发包
           sudo apt install -y \
             libsdl2-dev \
-            libsdl2-dev:i386 \
             libsdl2-2.0-0 \
-            libsdl2-2.0-0:i386 \
             libsdl2-image-dev \
-            libsdl2-image-dev:i386 \
             libsdl2-ttf-dev \
-            libsdl2-ttf-dev:i386 \
-            libsdl2-mixer-dev \
-            libsdl2-mixer-dev:i386
+            libsdl2-mixer-dev
           
           echo "验证 SDL2 安装..."
           pkg-config --cflags sdl2
@@ -1033,7 +910,7 @@ jobs:
             echo "64 位 gstreamer-plugins-base-1.0.pc 不存在，尝试修复..."
             
             # 查找可能的位置
-            ALT_LOCATION=$(find /usr -name "gstreamer-plugins-base-1.0.pc" 2>/dev/null | grep -v i386-linux-gnu | head -1)
+            ALT_LOCATION=$(find /usr -name "gstreamer-plugins-base-1.0.pc" 2>/dev/null | head -1)
             if [ -n "$ALT_LOCATION" ]; then
               echo "在其他位置找到: $ALT_LOCATION"
               # 创建符号链接
@@ -1041,7 +918,7 @@ jobs:
               sudo ln -sf "$ALT_LOCATION" "/usr/lib/aarch64-linux-gnu/pkgconfig/gstreamer-plugins-base-1.0.pc"
               echo "已创建符号链接"
             else
-              echo "错误: 无法找到 64 位 gstreamer-plugins-base-1.0.pc 文件"
+              echo "错误: 无法找到 gstreamer-plugins-base-1.0.pc 文件"
               # 尝试重新安装包
               sudo apt install --reinstall -y libgstreamer-plugins-base1.0-dev
             fi
@@ -1057,25 +934,10 @@ jobs:
           
           # 设置完整的 PKG_CONFIG_PATH
           export PKG_CONFIG_PATH_64="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
-          export PKG_CONFIG_PATH_32="/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
           
           echo "检查 64 位 GStreamer 开发文件:"
           PKG_CONFIG_PATH="$PKG_CONFIG_PATH_64" pkg-config --cflags gstreamer-1.0
           PKG_CONFIG_PATH="$PKG_CONFIG_PATH_64" pkg-config --cflags gstreamer-plugins-base-1.0
-          
-          echo "检查 32 位 GStreamer 开发文件:"
-          PKG_CONFIG_PATH="$PKG_CONFIG_PATH_32" pkg-config --cflags gstreamer-1.0
-          PKG_CONFIG_PATH="$PKG_CONFIG_PATH_32" pkg-config --cflags gstreamer-plugins-base-1.0
-
-      - name: 设置交叉编译环境
-        run: |
-          # 创建交叉编译工具链符号链接
-          sudo ln -sf /usr/bin/i686-linux-gnu-gcc /usr/local/bin/i686-linux-gnu-gcc
-          sudo ln -sf /usr/bin/i686-linux-gnu-g++ /usr/local/bin/i686-linux-gnu-g++
-          
-          # 验证工具链
-          echo "验证交叉编译工具链:"
-          i686-linux-gnu-gcc --version
 
       - name: 设置中文语言环境
         run: |
@@ -1262,7 +1124,7 @@ jobs:
           
           cd ..
           
-          # 第二步：构建 32 位 Wine (i386-windows)
+          # 第二步：构建 32 位 Wine (i386-windows) - 使用交叉编译
           echo "=== 构建 32 位 Wine (i386-windows) ==="
           mkdir -p build32
           cd build32
@@ -1270,26 +1132,18 @@ jobs:
           # 设置交叉编译环境 - 构建i386架构
           echo "设置交叉编译环境 (i386)..."
           
-          export CC="i686-linux-gnu-gcc"
-          export CXX="i686-linux-gnu-g++"
-          export HOST="i686-linux-gnu"
-          export CFLAGS="-m32 -O3 -g -pipe -Wall -Wextra -fPIC"
-          export CXXFLAGS="-m32 -O3 -g -pipe -Wall -Wextra -fPIC"
-          export LDFLAGS="-m32 -Wl,--as-needed"
+          export CC="i686-w64-mingw32-gcc"
+          export CXX="i686-w64-mingw32-g++"
+          export HOST="i686-w64-mingw32"
+          export CFLAGS="-O2 -g -pipe -Wall -Wextra"
+          export CXXFLAGS="-O2 -g -pipe -Wall -Wextra"
+          export LDFLAGS=""
           
-          # 设置库路径
-          export LIBRARY_PATH="/usr/lib/i686-linux-gnu:$LIBRARY_PATH"
-          export LD_LIBRARY_PATH="/usr/lib/i686-linux-gnu:$LD_LIBRARY_PATH"
-
           export AR="${CC%-gcc}-ar"
           export LD="${CC%-gcc}-ld"
           export RANLIB="${CC%-gcc}-ranlib"
           export STRIP="${CC%-gcc}-strip"
           export MAKEFLAGS="-j2"
-
-          # 设置 32 位的 PKG_CONFIG_PATH
-          export PKG_CONFIG_PATH="/usr/lib/i686-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
-          export PKG_CONFIG="pkg-config --define-variable=libdir=/usr/lib/i686-linux-gnu"
 
           echo "使用的编译器: $CC"
           echo "目标平台: $HOST"
@@ -1298,10 +1152,10 @@ jobs:
 
           # 验证编译器
           echo 'int main() { return 0; }' > test_i386.c
-          if $CC $CFLAGS $LDFLAGS test_i386.c -o test_i386; then
+          if $CC $CFLAGS $LDFLAGS test_i386.c -o test_i386.exe; then
               echo "i386交叉编译器验证通过"
-              file test_i386
-              rm test_i386.c test_i386
+              file test_i386.exe
+              rm test_i386.c test_i386.exe
           else
               echo "错误: i386交叉编译器验证失败"
               exit 1
@@ -1311,15 +1165,15 @@ jobs:
           ../configure \
               --host=$HOST \
               --with-wine64=../build64 \
-              --with-x \
-              --with-alsa \
-              --with-pulse \
-              --with-freetype \
-              --with-fontconfig \
-              --with-gstreamer \
               --disable-winemenubuilder \
               --disable-win16 \
               --disable-tests \
+              --without-x \
+              --without-alsa \
+              --without-pulse \
+              --without-freetype \
+              --without-fontconfig \
+              --without-gstreamer \
               --without-ldap \
               --without-capi \
               --without-oss \
