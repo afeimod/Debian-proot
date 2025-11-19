@@ -325,7 +325,8 @@ jobs:
           CROSS_DEPS="\
             gcc-arm-linux-gnueabihf \
             g++-arm-linux-gnueabihf \
-            binutils-arm-linux-gnueabihf"
+            binutils-arm-linux-gnueabihf \
+            libc6-dev-armhf-cross"
           
           sudo apt install -y $CROSS_DEPS
 
@@ -398,23 +399,22 @@ jobs:
           sudo ln -sf /usr/bin/arm-linux-gnueabi-gcc /usr/local/bin/arm-linux-gnueabi-gcc
           sudo ln -sf /usr/bin/arm-linux-gnueabi-g++ /usr/local/bin/arm-linux-gnueabi-g++
           
-          echo "验证两种交叉编译器..."
+          echo "验证交叉编译器..."
           echo "arm-linux-gnueabihf-gcc:"
           arm-linux-gnueabihf-gcc --version
-          echo "arm-linux-gnueabi-gcc:"
-          arm-linux-gnueabi-gcc --version
           
-          # 测试两种编译器的兼容性
-          echo 'int main() { return 0; }' > test_soft.c
-          echo 'int main() { float f = 1.0; return (int)f; }' > test_hard.c
+          # 测试硬浮点编译器的浮点支持
+          echo 'int main() { float f = 1.0; return (int)f; }' > test_float.c
+          if arm-linux-gnueabihf-gcc -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard test_float.c -o test_float; then
+            echo "硬浮点编译器浮点支持验证通过"
+            file test_float
+          else
+            echo "硬浮点编译器浮点支持有问题"
+            # 尝试重新安装
+            sudo apt install -y --reinstall gcc-arm-linux-gnueabihf
+          fi
           
-          echo "测试软浮点编译器..."
-          arm-linux-gnueabi-gcc test_soft.c -o test_soft && echo "软浮点编译器工作正常" && file test_soft
-          
-          echo "测试硬浮点编译器..."
-          arm-linux-gnueabihf-gcc -march=armv7-a test_hard.c -o test_hard && echo "硬浮点编译器工作正常" && file test_hard || echo "硬浮点编译器有问题，将使用软浮点"
-          
-          rm -f test_soft.c test_soft test_hard.c test_hard
+          rm -f test_float.c test_float
 
       - name: 安装 GStreamer 开发依赖
         run: |
@@ -685,84 +685,79 @@ jobs:
             mkdir -p build32
             cd build32
             
-            # 设置交叉编译环境
+            # 设置交叉编译环境 - 强制使用硬浮点编译器
             echo "设置交叉编译环境..."
-            
-            # 测试并选择合适的交叉编译器
-            echo "测试交叉编译器兼容性..."
-            echo 'int main() { return 0; }' > test_simple.c
-            
-            # 先尝试硬浮点编译器
-            if arm-linux-gnueabihf-gcc -march=armv7-a test_simple.c -o test_simple 2>/dev/null; then
-              echo "使用硬浮点交叉编译器 (arm-linux-gnueabihf)"
-              export CC="arm-linux-gnueabihf-gcc"
-              export CXX="arm-linux-gnueabihf-g++"
-              export HOST="arm-linux-gnueabihf"
-              export CFLAGS="-march=armv7-a -mtune=cortex-a53 -O3 -g -pipe -Wall -Wextra -fPIC"
-              export CXXFLAGS="-march=armv7-a -mtune=cortex-a53 -O3 -g -pipe -Wall -Wextra -fPIC"
-            else
-              echo "尝试软浮点编译器 (arm-linux-gnueabi)"
-              export CC="arm-linux-gnueabi-gcc"
-              export CXX="arm-linux-gnueabi-g++"
-              export HOST="arm-linux-gnueabi"
-              export CFLAGS="-march=armv7-a -mtune=cortex-a53 -O3 -g -pipe -Wall -Wextra -fPIC"
-              export CXXFLAGS="-march=armv7-a -mtune=cortex-a53 -O3 -g -pipe -Wall -Wextra -fPIC"
-            fi
-            
-            rm -f test_simple.c test_simple
-            
+            echo "强制使用硬浮点交叉编译器 (arm-linux-gnueabihf)"
+
+            export CC="arm-linux-gnueabihf-gcc"
+            export CXX="arm-linux-gnueabihf-g++"
+            export HOST="arm-linux-gnueabihf"
+            export CFLAGS="-march=armv7-a -mtune=cortex-a53 -mfpu=neon-vfpv4 -mfloat-abi=hard -O3 -g -pipe -Wall -Wextra -fPIC"
+            export CXXFLAGS="-march=armv7-a -mtune=cortex-a53 -mfpu=neon-vfpv4 -mfloat-abi=hard -O3 -g -pipe -Wall -Wextra -fPIC"
+
             export AR="${CC%-gcc}-ar"
             export LD="${CC%-gcc}-ld"
             export RANLIB="${CC%-gcc}-ranlib"
             export STRIP="${CC%-gcc}-strip"
             export MAKEFLAGS="-j2"
-            
+
             # 设置 32 位的 PKG_CONFIG_PATH
             export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
             export PKG_CONFIG="pkg-config --define-variable=libdir=/usr/lib/arm-linux-gnueabihf"
-            
-            echo "最终使用的编译器: $CC"
+
+            echo "使用的编译器: $CC"
             echo "目标平台: $HOST"
             echo "CFLAGS: $CFLAGS"
-            
-            # 验证选择的编译器
-            echo 'int main() { return 0; }' > final_test.c
-            $CC $CFLAGS final_test.c -o final_test
-            if [ -f "final_test" ]; then
-              echo "交叉编译器验证通过"
-              file final_test
-              rm final_test.c final_test
+
+            # 验证编译器
+            echo 'int main() { float f = 1.0; return (int)f; }' > float_test.c
+            if $CC $CFLAGS float_test.c -o float_test; then
+                echo "交叉编译器浮点支持验证通过"
+                file float_test
+                rm float_test.c float_test
             else
-              echo "交叉编译器验证失败"
-              exit 1
+                echo "错误: 交叉编译器不支持浮点指令"
+                echo "尝试修复编译器配置..."
+                
+                # 重新安装硬浮点编译器
+                sudo apt update
+                sudo apt install -y --reinstall gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+                
+                # 再次测试
+                if $CC $CFLAGS float_test.c -o float_test; then
+                    echo "修复后编译器验证通过"
+                    rm float_test.c float_test
+                else
+                    echo "错误: 无法修复交叉编译器"
+                    exit 1
+                fi
             fi
-            
+
             echo "配置 32 位 Wine..."
             ../configure \
-              --build=arm-linux-gnueabihf \
-              --host=$HOST \
-              --with-wine64=../build64 \
-              --with-x \
-              --disable-winemenubuilder \
-              --disable-win16 \
-              --disable-tests \
-              --without-ldap \
-              --without-capi \
-              --without-oss \
-              --without-cups \
-              --without-dbus \
-              --without-coreaudio \
-              --without-gphoto \
-              --without-osmesa \
-              --without-sane \
-              --without-pcap \
-              --without-pcsclite \
-              --without-udev \
-              --without-unwind \
-              --without-usb \
-              --without-v4l2 \
-              --without-wayland
-            
+                --host=$HOST \
+                --with-wine64=../build64 \
+                --with-x \
+                --disable-winemenubuilder \
+                --disable-win16 \
+                --disable-tests \
+                --without-ldap \
+                --without-capi \
+                --without-oss \
+                --without-cups \
+                --without-dbus \
+                --without-coreaudio \
+                --without-gphoto \
+                --without-osmesa \
+                --without-sane \
+                --without-pcap \
+                --without-pcsclite \
+                --without-udev \
+                --without-unwind \
+                --without-usb \
+                --without-v4l2 \
+                --without-wayland
+
             
             echo "32位配置完成"
             
@@ -1009,7 +1004,8 @@ jobs:
           CROSS_DEPS="\
             gcc-arm-linux-gnueabihf \
             g++-arm-linux-gnueabihf \
-            binutils-arm-linux-gnueabihf"
+            binutils-arm-linux-gnueabihf \
+            libc6-dev-armhf-cross"
           
           sudo apt install -y $CROSS_DEPS
 
@@ -1050,23 +1046,22 @@ jobs:
           sudo ln -sf /usr/bin/arm-linux-gnueabi-gcc /usr/local/bin/arm-linux-gnueabi-gcc
           sudo ln -sf /usr/bin/arm-linux-gnueabi-g++ /usr/local/bin/arm-linux-gnueabi-g++
           
-          echo "验证两种交叉编译器..."
+          echo "验证交叉编译器..."
           echo "arm-linux-gnueabihf-gcc:"
           arm-linux-gnueabihf-gcc --version
-          echo "arm-linux-gnueabi-gcc:"
-          arm-linux-gnueabi-gcc --version
           
-          # 测试两种编译器的兼容性
-          echo 'int main() { return 0; }' > test_soft.c
-          echo 'int main() { float f = 1.0; return (int)f; }' > test_hard.c
+          # 测试硬浮点编译器的浮点支持
+          echo 'int main() { float f = 1.0; return (int)f; }' > test_float.c
+          if arm-linux-gnueabihf-gcc -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard test_float.c -o test_float; then
+            echo "硬浮点编译器浮点支持验证通过"
+            file test_float
+          else
+            echo "硬浮点编译器浮点支持有问题"
+            # 尝试重新安装
+            sudo apt install -y --reinstall gcc-arm-linux-gnueabihf
+          fi
           
-          echo "测试软浮点编译器..."
-          arm-linux-gnueabi-gcc test_soft.c -o test_soft && echo "软浮点编译器工作正常" && file test_soft
-          
-          echo "测试硬浮点编译器..."
-          arm-linux-gnueabihf-gcc -march=armv7-a test_hard.c -o test_hard && echo "硬浮点编译器工作正常" && file test_hard || echo "硬浮点编译器有问题，将使用软浮点"
-          
-          rm -f test_soft.c test_soft test_hard.c test_hard
+          rm -f test_float.c test_float
 
       - name: 安装 GStreamer 开发依赖
         run: |
@@ -1410,98 +1405,93 @@ jobs:
           mkdir -p build32
           cd build32
           
-          # 设置交叉编译环境
+          # 设置交叉编译环境 - 强制使用硬浮点编译器
           echo "设置交叉编译环境..."
-          
-          # 测试并选择合适的交叉编译器
-          echo "测试交叉编译器兼容性..."
-          echo 'int main() { return 0; }' > test_simple.c
-          
-          # 先尝试硬浮点编译器
-          if arm-linux-gnueabihf-gcc -march=armv7-a test_simple.c -o test_simple 2>/dev/null; then
-            echo "使用硬浮点交叉编译器 (arm-linux-gnueabihf)"
-            export CC="arm-linux-gnueabihf-gcc"
-            export CXX="arm-linux-gnueabihf-g++"
-            export HOST="arm-linux-gnueabihf"
-            export CFLAGS="-march=armv7-a -mtune=cortex-a53 -O3 -g -pipe -Wall -Wextra -fPIC"
-            export CXXFLAGS="-march=armv7-a -mtune=cortex-a53 -O3 -g -pipe -Wall -Wextra -fPIC"
-          else
-            echo "尝试软浮点编译器 (arm-linux-gnueabi)"
-            export CC="arm-linux-gnueabi-gcc"
-            export CXX="arm-linux-gnueabi-g++"
-            export HOST="arm-linux-gnueabi"
-            export CFLAGS="-march=armv7-a -mtune=cortex-a53 -O3 -g -pipe -Wall -Wextra -fPIC"
-            export CXXFLAGS="-march=armv7-a -mtune=cortex-a53 -O3 -g -pipe -Wall -Wextra -fPIC"
-          fi
-          
-          rm -f test_simple.c test_simple
-          
+          echo "强制使用硬浮点交叉编译器 (arm-linux-gnueabihf)"
+
+          export CC="arm-linux-gnueabihf-gcc"
+          export CXX="arm-linux-gnueabihf-g++"
+          export HOST="arm-linux-gnueabihf"
+          export CFLAGS="-march=armv7-a -mtune=cortex-a53 -mfpu=neon-vfpv4 -mfloat-abi=hard -O3 -g -pipe -Wall -Wextra -fPIC"
+          export CXXFLAGS="-march=armv7-a -mtune=cortex-a53 -mfpu=neon-vfpv4 -mfloat-abi=hard -O3 -g -pipe -Wall -Wextra -fPIC"
+
           export AR="${CC%-gcc}-ar"
           export LD="${CC%-gcc}-ld"
           export RANLIB="${CC%-gcc}-ranlib"
           export STRIP="${CC%-gcc}-strip"
           export MAKEFLAGS="-j2"
-          
+
           # 设置 32 位的 PKG_CONFIG_PATH
           export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig"
           export PKG_CONFIG="pkg-config --define-variable=libdir=/usr/lib/arm-linux-gnueabihf"
-          
-          echo "最终使用的编译器: $CC"
+
+          echo "使用的编译器: $CC"
           echo "目标平台: $HOST"
           echo "CFLAGS: $CFLAGS"
-          
-          # 验证选择的编译器
-          echo 'int main() { return 0; }' > final_test.c
-          $CC $CFLAGS final_test.c -o final_test
-          if [ -f "final_test" ]; then
-            echo "交叉编译器验证通过"
-            file final_test
-            rm final_test.c final_test
+
+          # 验证编译器
+          echo 'int main() { float f = 1.0; return (int)f; }' > float_test.c
+          if $CC $CFLAGS float_test.c -o float_test; then
+              echo "交叉编译器浮点支持验证通过"
+              file float_test
+              rm float_test.c float_test
           else
-            echo "交叉编译器验证失败"
-            exit 1
+              echo "错误: 交叉编译器不支持浮点指令"
+              echo "尝试修复编译器配置..."
+              
+              # 重新安装硬浮点编译器
+              sudo apt update
+              sudo apt install -y --reinstall gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+              
+              # 再次测试
+              if $CC $CFLAGS float_test.c -o float_test; then
+                  echo "修复后编译器验证通过"
+                  rm float_test.c float_test
+              else
+                  echo "错误: 无法修复交叉编译器"
+                  exit 1
+              fi
           fi
-          
+
           echo "配置 32 位 Wine..."
           ../configure \
-            --build=x86_64-pc-linux-gnu \
-            --host=$HOST \
-            --with-wine64=../build64 \
-            --with-x \
-            --with-alsa \
-            --with-pulse \
-            --with-freetype \
-            --with-fontconfig \
-            --with-gstreamer \
-            --disable-winemenubuilder \
-            --disable-win16 \
-            --disable-tests \
-            --without-ldap \
-            --without-capi \
-            --without-oss \
-            --without-cups \
-            --without-dbus \
-            --without-coreaudio \
-            --without-gphoto \
-            --without-osmesa \
-            --without-sane \
-            --without-pcap \
-            --without-pcsclite \
-            --without-udev \
-            --without-unwind \
-            --without-usb \
-            --without-v4l2 \
-            --without-wayland > configure32.log 2>&1
-          
+              --host=$HOST \
+              --with-wine64=../build64 \
+              --with-x \
+              --with-alsa \
+              --with-pulse \
+              --with-freetype \
+              --with-fontconfig \
+              --with-gstreamer \
+              --disable-winemenubuilder \
+              --disable-win16 \
+              --disable-tests \
+              --without-ldap \
+              --without-capi \
+              --without-oss \
+              --without-cups \
+              --without-dbus \
+              --without-coreaudio \
+              --without-gphoto \
+              --without-osmesa \
+              --without-sane \
+              --without-pcap \
+              --without-pcsclite \
+              --without-udev \
+              --without-unwind \
+              --without-usb \
+              --without-v4l2 \
+              --without-wayland > configure32.log 2>&1
+
           if [ $? -ne 0 ]; then
-            echo "32位配置失败，查看日志:"
-            cat configure32.log
-            # 显示 config.log 获取更多信息
-            if [ -f "config.log" ]; then
-              echo "=== config.log 尾部 ==="
-              tail -100 config.log
-            fi
-            exit 1
+              echo "32位配置失败，查看日志:"
+              cat configure32.log
+              # 显示 config.log 获取更多信息
+              if [ -f "config.log" ]; then
+                  echo "=== config.log 尾部 ==="
+                  tail -100 config.log
+              fi
+              exit 1
           fi
           echo "32位配置完成"
           
