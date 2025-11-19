@@ -664,7 +664,7 @@ jobs:
               --without-unwind \
               --without-usb \
               --without-v4l2 \
-              --without-wayland
+              --without-wayland > configure64.log 2>&1
             
             if [ $? -ne 0 ]; then
               echo "64位配置失败，查看日志:"
@@ -680,27 +680,31 @@ jobs:
             
             cd ..
             
-            # 第二步：构建 32 位 Wine
+            # 第二步：构建 32 位 Wine - 修复交叉编译问题
             echo "=== 构建 32 位 Wine ==="
             mkdir -p build32
             cd build32
+            
+            # 设置交叉编译环境
+            echo "设置交叉编译环境..."
             
             # 测试并选择合适的交叉编译器
             echo "测试交叉编译器兼容性..."
             echo 'int main() { return 0; }' > test_simple.c
             
-            # 先尝试软浮点编译器
-            if arm-linux-gnueabi-gcc test_simple.c -o test_simple 2>/dev/null; then
-              echo "使用软浮点交叉编译器 (arm-linux-gnueabi)"
-              export CC="arm-linux-gnueabi-gcc"
-              export CXX="arm-linux-gnueabi-g++"
+            # 先尝试硬浮点编译器
+            if arm-linux-gnueabihf-gcc -march=armv7-a test_simple.c -o test_simple 2>/dev/null; then
+              echo "使用硬浮点交叉编译器 (arm-linux-gnueabihf)"
+              export CC="arm-linux-gnueabihf-gcc"
+              export CXX="arm-linux-gnueabihf-g++"
+              export HOST="arm-linux-gnueabihf"
               export CFLAGS="-march=armv7-a -mtune=cortex-a53 -O3 -g -pipe -Wall -Wextra -fPIC"
               export CXXFLAGS="-march=armv7-a -mtune=cortex-a53 -O3 -g -pipe -Wall -Wextra -fPIC"
             else
-              echo "尝试硬浮点编译器 (arm-linux-gnueabihf)"
-              export CC="arm-linux-gnueabihf-gcc"
-              export CXX="arm-linux-gnueabihf-g++"
-              # 使用更兼容的 ARMv7 架构标志
+              echo "尝试软浮点编译器 (arm-linux-gnueabi)"
+              export CC="arm-linux-gnueabi-gcc"
+              export CXX="arm-linux-gnueabi-g++"
+              export HOST="arm-linux-gnueabi"
               export CFLAGS="-march=armv7-a -mtune=cortex-a53 -O3 -g -pipe -Wall -Wextra -fPIC"
               export CXXFLAGS="-march=armv7-a -mtune=cortex-a53 -O3 -g -pipe -Wall -Wextra -fPIC"
             fi
@@ -710,6 +714,7 @@ jobs:
             export AR="${CC%-gcc}-ar"
             export LD="${CC%-gcc}-ld"
             export RANLIB="${CC%-gcc}-ranlib"
+            export STRIP="${CC%-gcc}-strip"
             export MAKEFLAGS="-j2"
             
             # 设置 32 位的 PKG_CONFIG_PATH
@@ -717,11 +722,12 @@ jobs:
             export PKG_CONFIG="pkg-config --define-variable=libdir=/usr/lib/arm-linux-gnueabihf"
             
             echo "最终使用的编译器: $CC"
+            echo "目标平台: $HOST"
             echo "CFLAGS: $CFLAGS"
             
             # 验证选择的编译器
             echo 'int main() { return 0; }' > final_test.c
-            $CC final_test.c -o final_test
+            $CC $CFLAGS final_test.c -o final_test
             if [ -f "final_test" ]; then
               echo "交叉编译器验证通过"
               file final_test
@@ -733,8 +739,8 @@ jobs:
             
             echo "配置 32 位 Wine..."
             ../configure \
-              --build=arm-linux-gnueabihf \
-              --host=arm-linux-gnueabihf \
+              --build=x86_64-pc-linux-gnu \
+              --host=$HOST \
               --with-wine64=../build64 \
               --with-x \
               --disable-winemenubuilder \
@@ -755,7 +761,7 @@ jobs:
               --without-unwind \
               --without-usb \
               --without-v4l2 \
-              --without-wayland
+              --without-wayland > configure32.log 2>&1
             
             if [ $? -ne 0 ]; then
               echo "32位配置失败，查看日志:"
@@ -1408,27 +1414,31 @@ jobs:
           
           cd ..
           
-          # 第二步：构建 32 位 Wine
+          # 第二步：构建 32 位 Wine - 修复交叉编译问题
           echo "=== 构建 32 位 Wine ==="
           mkdir -p build32
           cd build32
+          
+          # 设置交叉编译环境
+          echo "设置交叉编译环境..."
           
           # 测试并选择合适的交叉编译器
           echo "测试交叉编译器兼容性..."
           echo 'int main() { return 0; }' > test_simple.c
           
-          # 先尝试软浮点编译器
-          if arm-linux-gnueabi-gcc test_simple.c -o test_simple 2>/dev/null; then
-            echo "使用软浮点交叉编译器 (arm-linux-gnueabi)"
-            export CC="arm-linux-gnueabi-gcc"
-            export CXX="arm-linux-gnueabi-g++"
+          # 先尝试硬浮点编译器
+          if arm-linux-gnueabihf-gcc -march=armv7-a test_simple.c -o test_simple 2>/dev/null; then
+            echo "使用硬浮点交叉编译器 (arm-linux-gnueabihf)"
+            export CC="arm-linux-gnueabihf-gcc"
+            export CXX="arm-linux-gnueabihf-g++"
+            export HOST="arm-linux-gnueabihf"
             export CFLAGS="-march=armv7-a -mtune=cortex-a53 -O3 -g -pipe -Wall -Wextra -fPIC"
             export CXXFLAGS="-march=armv7-a -mtune=cortex-a53 -O3 -g -pipe -Wall -Wextra -fPIC"
           else
-            echo "尝试硬浮点编译器 (arm-linux-gnueabihf)"
-            export CC="arm-linux-gnueabihf-gcc"
-            export CXX="arm-linux-gnueabihf-g++"
-            # 使用更兼容的 ARMv7 架构标志
+            echo "尝试软浮点编译器 (arm-linux-gnueabi)"
+            export CC="arm-linux-gnueabi-gcc"
+            export CXX="arm-linux-gnueabi-g++"
+            export HOST="arm-linux-gnueabi"
             export CFLAGS="-march=armv7-a -mtune=cortex-a53 -O3 -g -pipe -Wall -Wextra -fPIC"
             export CXXFLAGS="-march=armv7-a -mtune=cortex-a53 -O3 -g -pipe -Wall -Wextra -fPIC"
           fi
@@ -1438,6 +1448,7 @@ jobs:
           export AR="${CC%-gcc}-ar"
           export LD="${CC%-gcc}-ld"
           export RANLIB="${CC%-gcc}-ranlib"
+          export STRIP="${CC%-gcc}-strip"
           export MAKEFLAGS="-j2"
           
           # 设置 32 位的 PKG_CONFIG_PATH
@@ -1445,11 +1456,12 @@ jobs:
           export PKG_CONFIG="pkg-config --define-variable=libdir=/usr/lib/arm-linux-gnueabihf"
           
           echo "最终使用的编译器: $CC"
+          echo "目标平台: $HOST"
           echo "CFLAGS: $CFLAGS"
           
           # 验证选择的编译器
           echo 'int main() { return 0; }' > final_test.c
-          $CC final_test.c -o final_test
+          $CC $CFLAGS final_test.c -o final_test
           if [ -f "final_test" ]; then
             echo "交叉编译器验证通过"
             file final_test
@@ -1461,8 +1473,8 @@ jobs:
           
           echo "配置 32 位 Wine..."
           ../configure \
-            --build=arm-linux-gnueabihf \
-            --host=arm-linux-gnueabihf \
+            --build=x86_64-pc-linux-gnu \
+            --host=$HOST \
             --with-wine64=../build64 \
             --with-x \
             --with-alsa \
