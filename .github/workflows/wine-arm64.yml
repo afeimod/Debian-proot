@@ -739,7 +739,7 @@ jobs:
             
             echo "配置 32 位 Wine..."
             ../configure \
-              --build=x86_64-pc-linux-gnu \
+              --build=arm-linux-gnueabihf \
               --host=$HOST \
               --with-wine64=../build64 \
               --with-x \
