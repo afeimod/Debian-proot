@@ -761,18 +761,9 @@ jobs:
               --without-unwind \
               --without-usb \
               --without-v4l2 \
-              --without-wayland > configure32.log 2>&1
+              --without-wayland
             
-            if [ $? -ne 0 ]; then
-              echo "32位配置失败，查看日志:"
-              cat configure32.log
-              # 显示 config.log 获取更多信息
-              if [ -f "config.log" ]; then
-                echo "=== config.log 尾部 ==="
-                tail -100 config.log
-              fi
-              exit 1
-            fi
+            
             echo "32位配置完成"
             
             echo "编译 32 位 Wine..."
