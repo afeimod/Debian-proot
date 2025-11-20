@@ -543,7 +543,7 @@ jobs:
               --without-unwind \
               --without-usb \
               --without-v4l2 \
-              --without-wayland > configure64.log 2>&1
+              --without-wayland
             
             if [ $? -ne 0 ]; then
               echo "64位配置失败，查看日志:"
