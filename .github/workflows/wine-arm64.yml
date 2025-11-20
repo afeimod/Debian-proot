@@ -573,6 +573,7 @@ jobs:
             ../configure \
                 --host=$HOST \
                 --with-wine64=../build64 \
+                --with-wine-tools=../build64 \
                 --disable-winemenubuilder \
                 --disable-win16 \
                 --disable-tests \
