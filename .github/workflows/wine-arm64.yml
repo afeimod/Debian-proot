@@ -512,7 +512,7 @@ jobs:
               --without-unwind \
               --without-usb \
               --without-v4l2 \
-              --without-wayland
+              --without-wayland > configure64.log 2>&1
             
             if [ $? -ne 0 ]; then
               echo "64位配置失败，查看日志:"
@@ -523,7 +523,7 @@ jobs:
             
             echo "编译 64 位 Wine (aarch64-windows)..."
             # 使用 tee 来限制输出，同时保存完整日志
-            make -j2 install || (echo "64位编译失败，查看日志..." && tail -100 make64.log && make -j1 install > make64_single.log 2>&1 || (tail -100 make64_single.log && exit 1))
+            make -j2 install > make64.log 2>&1 || (echo "64位编译失败，查看日志..." && tail -100 make64.log && make -j1 install > make64_single.log 2>&1 || (tail -100 make64_single.log && exit 1))
             echo "64位编译完成"
             
             cd ..
@@ -613,7 +613,7 @@ jobs:
             
             echo "编译 32 位 Wine (i386-windows)..."
             # 使用 tee 来限制输出，同时保存完整日志
-            make -j2 install || (echo "32位编译失败，查看日志..." && tail -100 make32.log && make -j1 install > make32_single.log 2>&1 || (tail -100 make32_single.log && exit 1))
+            make -j2 install > make32.log 2>&1 || (echo "32位编译失败，查看日志..." && tail -100 make32.log && make -j1 install > make32_single.log 2>&1 || (tail -100 make32_single.log && exit 1))
             echo "32位编译完成"
             
             echo "ARM64 WOW64 Wine 构建完成 (aarch64-windows + i386-windows)"
