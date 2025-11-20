@@ -527,7 +527,7 @@ jobs:
             cd $BUILD_DIR/proton
             
             # 克隆 Proton 源码
-            git clone --depth=1 https://github.com/afeimod/wine
+            git clone https://github.com/afeimod/wine
             cd wine
             
             # 生成 configure 脚本
