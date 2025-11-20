@@ -405,7 +405,6 @@ jobs:
           apt install -y \
             libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev \
-            libgstreamer-plugins-good1.0-dev \
             libgstreamer-plugins-bad1.0-dev
           
           # 安装多媒体编解码器开发文件
