@@ -54,7 +54,7 @@ permissions:
 
 jobs:
   setup-debian-trixie:
-    runs-on: ubuntu-latest-arm
+    runs-on: ubuntu-latest
     container:
       image: debian:trixie-slim
     steps:
@@ -69,7 +69,7 @@ jobs:
             software-properties-common
 
   build-fex:
-    runs-on: ubuntu-latest-arm
+    runs-on: ubuntu-latest
     if: github.event.inputs.build_type == 'fex-emu' || (github.event_name == 'schedule' && github.event.schedule == '0 4 10,25 * *')
     container:
       image: debian:trixie-slim
@@ -226,7 +226,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-proton:
-    runs-on: ubuntu-latest-arm
+    runs-on: ubuntu-latest
     if: github.event.inputs.build_type == 'proton' || (github.event_name == 'schedule' && github.event.schedule == '0 0 1,15 * *')
     timeout-minutes: 360
     container:
