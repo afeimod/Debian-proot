@@ -53,11 +53,33 @@ permissions:
   contents: write  # 允许 GITHUB_TOKEN 创建 Release
 
 jobs:
+  setup-debian-trixie:
+    runs-on: ubuntu-latest-arm
+    container:
+      image: debian:trixie-slim
+    steps:
+      - name: 更新系统并安装基础工具
+        run: |
+          apt-get update
+          apt-get install -y \
+            curl \
+            wget \
+            gnupg \
+            ca-certificates \
+            software-properties-common
+
   build-fex:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest-arm
     if: github.event.inputs.build_type == 'fex-emu' || (github.event_name == 'schedule' && github.event.schedule == '0 4 10,25 * *')
+    container:
+      image: debian:trixie-slim
     
     steps:
+    - name: 更新 Debian Trixie 系统
+      run: |
+        apt-get update
+        apt-get upgrade -y
+
     - name: Checkout FEX repository
       uses: actions/checkout@v4
       with:
@@ -68,8 +90,8 @@ jobs:
 
     - name: Install build dependencies
       run: |
-        sudo apt-get update
-        sudo apt-get install -y \
+        apt-get update
+        apt-get install -y \
           cmake \
           clang \
           git \
@@ -177,6 +199,7 @@ jobs:
           - **提交**: ${{ env.FEX_COMMIT }}
           - **架构**: WOW64 (ARM64)
           - **平台**: Wine on ARM64
+          - **构建环境**: Debian Trixie ARM64
           
           ## 包含文件
           - `libwow64fex.dll` - WOW64 版本
@@ -191,6 +214,7 @@ jobs:
           - 构建时间: ${{ github.event.head_commit.timestamp }}
           - 提交: ${{ env.FEX_COMMIT }}
           - 工作流: ${{ github.workflow }}
+          - 构建环境: Debian Trixie ARM64
           
           ## 注意
           - 这是纯 ARM64 构建，不包含 ARM64EC
@@ -202,28 +226,35 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-proton:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest-arm
     if: github.event.inputs.build_type == 'proton' || (github.event_name == 'schedule' && github.event.schedule == '0 0 1,15 * *')
     timeout-minutes: 360
+    container:
+      image: debian:trixie-slim
     
     steps:
       - uses: actions/checkout@v4
 
+      - name: 更新 Debian Trixie 系统
+        run: |
+          apt-get update
+          apt-get upgrade -y
+
       - name: 修复包管理系统
         run: |
-          sudo apt clean
-          sudo apt autoclean
-          sudo apt autoremove -y
-          sudo dpkg --configure -a
-          sudo apt update --fix-missing
+          apt clean
+          apt autoclean
+          apt autoremove -y
+          dpkg --configure -a
+          apt update --fix-missing
 
       - name: 安装构建依赖
         run: |
-          sudo apt update
+          apt update
           
           # 修复包依赖问题
-          sudo apt --fix-broken install -y
-          sudo apt install -f -y
+          apt --fix-broken install -y
+          apt install -f -y
           
           # 基础构建依赖
           BASE_DEPS="\
@@ -280,21 +311,21 @@ jobs:
             gettext \
             libgettextpo-dev \
             locales \
-            language-pack-zh-hans"
+            locales-all"
           
           # 逐个安装包
           for pkg in $BASE_DEPS; do
             echo "安装包: $pkg"
-            sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
+            apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
           done
 
       - name: 安装交叉编译工具链
         run: |
-          sudo apt update
+          apt update
           echo "安装交叉编译工具链..."
           
           # 安装必要的交叉编译工具
-          sudo apt install -y \
+          apt install -y \
             gcc-aarch64-linux-gnu \
             g++-aarch64-linux-gnu \
             binutils-aarch64-linux-gnu \
@@ -308,13 +339,13 @@ jobs:
 
       - name: 安装 GStreamer 开发依赖
         run: |
-          sudo apt update
+          apt update
           
           # 安装完整的 GStreamer 开发文件
           echo "安装 GStreamer 开发依赖..."
           
           # 先安装基础包
-          sudo apt install -y \
+          apt install -y \
             gstreamer1.0-tools \
             gstreamer1.0-plugins-base \
             gstreamer1.0-plugins-good \
@@ -331,7 +362,7 @@ jobs:
           
           for pkg in $GST_DEV_DEPS; do
             echo "安装 GStreamer 开发包: $pkg"
-            sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
+            apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
           done
           
           # 安装多媒体编解码器开发文件
@@ -352,18 +383,18 @@ jobs:
           
           for pkg in $CODEC_DEV_DEPS; do
             echo "安装编解码器开发包: $pkg"
-            sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
+            apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
           done
           
           echo "GStreamer 依赖安装完成"
 
       - name: 安装 SDL2 开发依赖
         run: |
-          sudo apt update
+          apt update
           echo "安装 SDL2 开发文件..."
           
           # 安装 SDL2 开发包
-          sudo apt install -y \
+          apt install -y \
             libsdl2-dev \
             libsdl2-2.0-0 \
             libsdl2-image-dev \
@@ -391,13 +422,13 @@ jobs:
             if [ -n "$ALT_LOCATION" ]; then
               echo "在其他位置找到: $ALT_LOCATION"
               # 创建符号链接
-              sudo mkdir -p /usr/lib/aarch64-linux-gnu/pkgconfig
-              sudo ln -sf "$ALT_LOCATION" "/usr/lib/aarch64-linux-gnu/pkgconfig/gstreamer-plugins-base-1.0.pc"
+              mkdir -p /usr/lib/aarch64-linux-gnu/pkgconfig
+              ln -sf "$ALT_LOCATION" "/usr/lib/aarch64-linux-gnu/pkgconfig/gstreamer-plugins-base-1.0.pc"
               echo "已创建符号链接"
             else
               echo "错误: 无法找到 gstreamer-plugins-base-1.0.pc 文件"
               # 尝试重新安装包
-              sudo apt install --reinstall -y libgstreamer-plugins-base1.0-dev
+              apt install --reinstall -y libgstreamer-plugins-base1.0-dev
             fi
           fi
           
@@ -418,8 +449,9 @@ jobs:
 
       - name: 设置中文语言环境
         run: |
-          sudo locale-gen zh_CN.UTF-8
-          sudo update-locale LANG=zh_CN.UTF-8
+          sed -i '/zh_CN.UTF-8/s/^# //' /etc/locale.gen
+          locale-gen zh_CN.UTF-8
+          update-locale LANG=zh_CN.UTF-8
           export LANG=zh_CN.UTF-8
           export LC_ALL=zh_CN.UTF-8
 
@@ -444,7 +476,7 @@ jobs:
             echo "分支: ${{ github.event.inputs.proton_branch || 'proton_10.0' }}"
             
             # 设置构建名称
-            BUILD_NAME="proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-arm64-wow64-xuser"
+            BUILD_NAME="proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-arm64-wow64-xuser-debian-trixie"
             echo "BUILD_NAME=$BUILD_NAME" >> $GITHUB_ENV
             
             # 设置中文构建环境
@@ -538,13 +570,13 @@ jobs:
             
             # 这里我们使用 mingw-w64 工具链来构建 Windows 目标
             # 安装 mingw-w64 交叉编译器
-            sudo apt install -y mingw-w64
+            apt install -y mingw-w64
             
             export CC="i686-w64-mingw32-gcc"
             export CXX="i686-w64-mingw32-g++"
             export HOST="i686-w64-mingw32"
-            export CFLAGS="-O2 -g -pipe -Wall -Wextra"
-            export CXXFLAGS="-O2 -g -pipe -Wall -Wextra"
+            export CFLAGS="-O3 -g -pipe -Wall -Wextra"
+            export CXXFLAGS="-O3 -g -pipe -Wall -Wextra"
             export LDFLAGS=""
             
             export AR="${CC%-gcc}-ar"
@@ -578,12 +610,12 @@ jobs:
                 --disable-winemenubuilder \
                 --disable-win16 \
                 --disable-tests \
-                --without-x \
-                --without-alsa \
-                --without-pulse \
-                --without-freetype \
-                --without-fontconfig \
-                --without-gstreamer \
+                --with-x \
+                --with-alsa \
+                --with-pulse \
+                --with-freetype \
+                --with-fontconfig \
+                --with-gstreamer \
                 --without-ldap \
                 --without-capi \
                 --without-oss \
@@ -599,7 +631,7 @@ jobs:
                 --without-unwind \
                 --without-usb \
                 --without-v4l2 \
-                --without-wayland
+                --without-wayland > configure64.log 2>&1
 
             if [ $? -ne 0 ]; then
                 echo "32位配置失败，查看日志:"
@@ -680,7 +712,7 @@ jobs:
       - name: Upload Proton artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-ARM64-WoW64-xuser
+          name: Proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-ARM64-WoW64-xuser-debian-trixie
           path: |
             ${{ github.workspace }}/*.tar.xz
             ${{ github.workspace }}/checksums.txt
@@ -690,8 +722,8 @@ jobs:
         uses: softprops/action-gh-release@v1
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'proton'
         with:
-          tag_name: proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-arm64-wow64-xuser
-          name: Proton ${{ github.event.inputs.proton_branch || 'proton_10.0' }} (ARM64 WOW64 with Vulkan & GStreamer for Termux - xuser)
+          tag_name: proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-arm64-wow64-xuser-debian-trixie
+          name: Proton ${{ github.event.inputs.proton_branch || 'proton_10.0' }} (ARM64 WOW64 with Vulkan & GStreamer for Termux - xuser - Debian Trixie)
           body: |
             # Proton ${{ github.event.inputs.proton_branch || 'proton_10.0' }} - ARM64 WOW64 with Vulkan & GStreamer for Termux (xuser)
             
@@ -702,6 +734,7 @@ jobs:
             - **图形 API**: Vulkan 支持已启用
             - **多媒体**: 完整 GStreamer 支持
             - **用户名**: xuser (已移除 Steam 优化)
+            - **构建环境**: Debian Trixie ARM64
             
             ## 特性
             ✓ ARM64 原生架构
@@ -712,12 +745,14 @@ jobs:
             ✓ 基于 Valve Proton，但移除了 Steam 特定优化
             ✓ 默认用户名改为 xuser
             ✓ 针对 ARM64 架构优化编译
+            ✓ 在 Debian Trixie ARM64 环境中构建
             
             ## 重要变更
             - 所有对 `steamuser` 的引用已改为 `xuser`
             - 移除了 Steam 特定的优化和组件
             - 更适合通用 Windows 应用程序运行
             - 针对 ARM64 架构优化
+            - 使用 Debian Trixie 构建环境，提供更新的工具链
             
             ## 安装说明
             解压后，将 `${{ env.BUILD_NAME }}` 文件夹放置在 Termux 的合适位置，并设置环境变量。
@@ -726,6 +761,7 @@ jobs:
             - 构建时间: ${{ github.event.head_commit.timestamp }}
             - 提交: ${{ github.sha }}
             - 工作流: ${{ github.workflow }}
+            - 构建环境: Debian Trixie ARM64
           files: |
             ${{ github.workspace }}/*.tar.xz
             ${{ github.workspace }}/checksums.txt
@@ -733,28 +769,35 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-wine-wow64:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest-arm
     if: github.event.inputs.build_type == 'wine-wow64' || (github.event_name == 'schedule' && github.event.schedule == '0 2 5,20 * *')
     timeout-minutes: 360
+    container:
+      image: debian:trixie-slim
     
     steps:
       - uses: actions/checkout@v4
       
+      - name: 更新 Debian Trixie 系统
+        run: |
+          apt-get update
+          apt-get upgrade -y
+
       - name: 修复包管理系统
         run: |
-          sudo apt clean
-          sudo apt autoclean
-          sudo apt autoremove -y
-          sudo dpkg --configure -a
-          sudo apt update --fix-missing
+          apt clean
+          apt autoclean
+          apt autoremove -y
+          dpkg --configure -a
+          apt update --fix-missing
 
       - name: 安装构建依赖
         run: |
-          sudo apt update
+          apt update
           
           # 修复包依赖问题
-          sudo apt --fix-broken install -y
-          sudo apt install -f -y
+          apt --fix-broken install -y
+          apt install -f -y
           
           # 基础构建依赖
           BASE_DEPS="\
@@ -811,21 +854,21 @@ jobs:
             gettext \
             libgettextpo-dev \
             locales \
-            language-pack-zh-hans"
+            locales-all"
           
           # 逐个安装包
           for pkg in $BASE_DEPS; do
             echo "安装包: $pkg"
-            sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
+            apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
           done
 
       - name: 安装交叉编译工具链
         run: |
-          sudo apt update
+          apt update
           echo "安装交叉编译工具链..."
           
           # 安装 mingw-w64 用于交叉编译 Windows 目标
-          sudo apt install -y mingw-w64
+          apt install -y mingw-w64
           
           echo "交叉编译器安装完成:"
           i686-w64-mingw32-gcc --version
@@ -833,13 +876,13 @@ jobs:
 
       - name: 安装 GStreamer 开发依赖
         run: |
-          sudo apt update
+          apt update
           
           # 安装完整的 GStreamer 开发文件
           echo "安装 GStreamer 开发依赖..."
           
           # 先安装基础包
-          sudo apt install -y \
+          apt install -y \
             gstreamer1.0-tools \
             gstreamer1.0-plugins-base \
             gstreamer1.0-plugins-good \
@@ -856,7 +899,7 @@ jobs:
           
           for pkg in $GST_DEV_DEPS; do
             echo "安装 GStreamer 开发包: $pkg"
-            sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
+            apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
           done
           
           # 安装多媒体编解码器开发文件
@@ -877,18 +920,18 @@ jobs:
           
           for pkg in $CODEC_DEV_DEPS; do
             echo "安装编解码器开发包: $pkg"
-            sudo apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
+            apt install -y --allow-downgrades --allow-remove-essential --allow-change-held-packages "$pkg" || echo "跳过有问题的包: $pkg"
           done
           
           echo "GStreamer 依赖安装完成"
 
       - name: 安装 SDL2 开发依赖
         run: |
-          sudo apt update
+          apt update
           echo "安装 SDL2 开发文件..."
           
           # 安装 SDL2 开发包
-          sudo apt install -y \
+          apt install -y \
             libsdl2-dev \
             libsdl2-2.0-0 \
             libsdl2-image-dev \
@@ -916,13 +959,13 @@ jobs:
             if [ -n "$ALT_LOCATION" ]; then
               echo "在其他位置找到: $ALT_LOCATION"
               # 创建符号链接
-              sudo mkdir -p /usr/lib/aarch64-linux-gnu/pkgconfig
-              sudo ln -sf "$ALT_LOCATION" "/usr/lib/aarch64-linux-gnu/pkgconfig/gstreamer-plugins-base-1.0.pc"
+              mkdir -p /usr/lib/aarch64-linux-gnu/pkgconfig
+              ln -sf "$ALT_LOCATION" "/usr/lib/aarch64-linux-gnu/pkgconfig/gstreamer-plugins-base-1.0.pc"
               echo "已创建符号链接"
             else
               echo "错误: 无法找到 gstreamer-plugins-base-1.0.pc 文件"
               # 尝试重新安装包
-              sudo apt install --reinstall -y libgstreamer-plugins-base1.0-dev
+              apt install --reinstall -y libgstreamer-plugins-base1.0-dev
             fi
           fi
           
@@ -943,8 +986,9 @@ jobs:
 
       - name: 设置中文语言环境
         run: |
-          sudo locale-gen zh_CN.UTF-8
-          sudo update-locale LANG=zh_CN.UTF-8
+          sed -i '/zh_CN.UTF-8/s/^# //' /etc/locale.gen
+          locale-gen zh_CN.UTF-8
+          update-locale LANG=zh_CN.UTF-8
           export LANG=zh_CN.UTF-8
           export LC_ALL=zh_CN.UTF-8
 
@@ -1016,7 +1060,7 @@ jobs:
             fi
             
             COMMIT_HASH=$(git rev-parse --short HEAD)
-            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${WINE_BRANCH}-arm64-wow64"
+            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${WINE_BRANCH}-arm64-wow64-debian-trixie"
             
           elif [ "$WINE_BRANCH" = "staging" ]; then
             # staging 分支处理
@@ -1032,7 +1076,7 @@ jobs:
             fi
             WINE_VERSION_ACTUAL=$(git describe --tags --abbrev=0 2>/dev/null || echo "$WINE_VERSION")
             COMMIT_HASH=$(git rev-parse --short HEAD)
-            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${COMMIT_HASH}-staging-arm64-wow64"
+            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${COMMIT_HASH}-staging-arm64-wow64-debian-trixie"
             
           elif [ "$WINE_BRANCH" = "vanilla" ]; then
             # vanilla 分支处理
@@ -1048,7 +1092,7 @@ jobs:
             fi
             WINE_VERSION_ACTUAL=$(git describe --tags --abbrev=0 2>/dev/null || echo "$WINE_VERSION")
             COMMIT_HASH=$(git rev-parse --short HEAD)
-            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${COMMIT_HASH}-vanilla-arm64-wow64"
+            BUILD_NAME="wine-${WINE_VERSION_ACTUAL}-${COMMIT_HASH}-vanilla-arm64-wow64-debian-trixie"
             
           else
             echo "未知的 Wine 分支: $WINE_BRANCH"
@@ -1272,7 +1316,7 @@ jobs:
       - name: Upload Wine ARM64 WoW64 artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Wine-${{ github.event.inputs.wine_branch || 'staging' }}-${{ github.event.inputs.wine_version || 'latest' }}-ARM64-WoW64
+          name: Wine-${{ github.event.inputs.wine_branch || 'staging' }}-${{ github.event.inputs.wine_version || 'latest' }}-ARM64-WoW64-debian-trixie
           path: |
             ${{ github.workspace }}/*.tar.xz
             ${{ github.workspace }}/checksums.txt
@@ -1282,8 +1326,8 @@ jobs:
         uses: softprops/action-gh-release@v1
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'wine-wow64'
         with:
-          tag_name: wine-${{ github.event.inputs.wine_branch || 'staging' }}-${{ github.event.inputs.wine_version || 'latest' }}-arm64-wow64
-          name: Wine ${{ github.event.inputs.wine_branch || 'staging' }} ${{ github.event.inputs.wine_version || 'latest' }} (ARM64 WOW64 with Vulkan & GStreamer for Termux)
+          tag_name: wine-${{ github.event.inputs.wine_branch || 'staging' }}-${{ github.event.inputs.wine_version || 'latest' }}-arm64-wow64-debian-trixie
+          name: Wine ${{ github.event.inputs.wine_branch || 'staging' }} ${{ github.event.inputs.wine_version || 'latest' }} (ARM64 WOW64 with Vulkan & GStreamer for Termux - Debian Trixie)
           body: |
             # Wine ${{ github.event.inputs.wine_branch || 'staging' }} ${{ github.event.inputs.wine_version || 'latest' }} - ARM64 WOW64 with Vulkan & GStreamer for Termux
             
@@ -1294,6 +1338,7 @@ jobs:
             - **平台**: Termux (Android ARM64)
             - **图形 API**: Vulkan 支持已启用
             - **多媒体**: 完整 GStreamer 支持
+            - **构建环境**: Debian Trixie ARM64
             
             ## 特性
             ✓ ARM64 原生架构
@@ -1302,6 +1347,7 @@ jobs:
             ✓ 完整的 GStreamer 支持
             ✓ 中文环境支持
             ✓ 针对 ARM64 架构优化编译
+            ✓ 在 Debian Trixie ARM64 环境中构建
             
             ## 安装说明
             解压后，将 `${{ env.BUILD_NAME }}` 文件夹放置在 Termux 的合适位置，并设置环境变量。
@@ -1310,6 +1356,7 @@ jobs:
             - 构建时间: ${{ github.event.head_commit.timestamp }}
             - 提交: ${{ github.sha }}
             - 工作流: ${{ github.workflow }}
+            - 构建环境: Debian Trixie ARM64
           files: |
             ${{ github.workspace }}/${{ env.BUILD_NAME }}.tar.xz
             ${{ github.workspace }}/checksums.txt
