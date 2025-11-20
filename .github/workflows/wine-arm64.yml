@@ -65,8 +65,7 @@ jobs:
             curl \
             wget \
             gnupg \
-            ca-certificates \
-            software-properties-common
+            ca-certificates
 
   build-fex:
     runs-on: ubuntu-latest
@@ -769,7 +768,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-wine-wow64:
-    runs-on: ubuntu-latest-arm
+    runs-on: ubuntu-latest
     if: github.event.inputs.build_type == 'wine-wow64' || (github.event_name == 'schedule' && github.event.schedule == '0 2 5,20 * *')
     timeout-minutes: 360
     container:
