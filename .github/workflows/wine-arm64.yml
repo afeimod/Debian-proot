@@ -574,6 +574,7 @@ jobs:
                 --host=$HOST \
                 --with-wine64=../build64 \
                 --with-wine-tools=../build64 \
+                --prefix=/tmp/wine-install-proton \
                 --disable-winemenubuilder \
                 --disable-win16 \
                 --disable-tests \
