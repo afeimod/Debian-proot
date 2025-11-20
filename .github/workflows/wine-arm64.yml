@@ -405,6 +405,7 @@ jobs:
           apt install -y \
             libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-good1.0-dev \
             libgstreamer-plugins-bad1.0-dev
           
           # 安装多媒体编解码器开发文件
@@ -527,7 +528,7 @@ jobs:
             cd $BUILD_DIR/proton
             
             # 克隆 Proton 源码
-            git clone https://github.com/afeimod/wine
+            git clone --depth=1 https://github.com/ValveSoftware/wine
             cd wine
             
             # 生成 configure 脚本
@@ -576,7 +577,6 @@ jobs:
               --with-gettext \
               --with-sdl \
               --enable-nls \
-              --disable-werror \
               --disable-winemenubuilder \
               --disable-win16 \
               --disable-tests \
