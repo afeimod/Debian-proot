@@ -527,7 +527,7 @@ jobs:
             cd $BUILD_DIR/proton
             
             # 克隆 Proton 源码
-            git clone --depth=1 https://github.com/ValveSoftware/wine
+            git clone https://github.com/ValveSoftware/wine
             cd wine
             
             # 生成 configure 脚本
@@ -545,8 +545,8 @@ jobs:
             export CXX=g++
     
             # 设置编译选项，忽略特定警告
-            export CFLAGS="-O3 -g -pipe -Wall -Wextra -fPIC -Wno-sign-compare -Wno-unused-parameter"
-            export CXXFLAGS="-O3 -g -pipe -Wall -Wextra -fPIC -Wno-sign-compare -Wno-unused-parameter"
+            export CFLAGS="-O3 -g -pipe -Wall -Wextra -fPIC -Wno-sign-compare -Wno-unused-parameter -Wno-missing-field-initializers"
+            export CXXFLAGS="-O3 -g -pipe -Wall -Wextra -fPIC -Wno-sign-compare -Wno-unused-parameter -Wno-missing-field-initializers"
     
             export MAKEFLAGS="-j2"
             
