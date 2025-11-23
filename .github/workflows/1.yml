@@ -143,33 +143,18 @@ jobs:
         
         # 创建启动脚本
         cat > "$OBFS_PACKAGE/run_obfuscated.sh" << 'EOF'
-#!/bin/bash
-# 运行混淆后的Python程序
+            #!/bin/bash
+            # 运行混淆后的Python程序
         
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MAIN_FILE="${{ steps.find_obfuscated_main.outputs.MAIN_FILE }}"
+            SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+            MAIN_FILE="${{ steps.find_obfuscated_main.outputs.MAIN_FILE }}"
         
-cd "$SCRIPT_DIR"
-python3 "$MAIN_FILE" "$@"
-EOF
+            cd "$SCRIPT_DIR"
+            python3 "$MAIN_FILE" "$@"
+        EOF
         
         chmod +x "$OBFS_PACKAGE/run_obfuscated.sh"
         
-        # 创建README
-        cat > "$OBFS_PACKAGE/README.txt" << EOF
-混淆后的Python程序
-        
-此目录包含使用pyminifier混淆的Python代码。
-        
-运行方法:
-1. 确保系统已安装Python 3.11
-2. 运行: ./run_obfuscated.sh
-        
-或者直接运行:
-python3 ${{ steps.find_obfuscated_main.outputs.MAIN_FILE }}
-        
-注意: 此代码已进行混淆处理，变量名和函数名已被重命名以保护源代码。
-EOF
         
         # 打包混淆后的代码
         tar -czf "obfuscated_release.tar.gz" "$OBFS_PACKAGE"
