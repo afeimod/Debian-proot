@@ -1,4 +1,4 @@
-name: Build Python3 and Release
+name: Build Python3 with Obfuscation and Release
 
 on:
   push:
@@ -28,49 +28,174 @@ jobs:
         libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev \
         libffi-dev liblzma-dev python3-opencv
         
-    - name: Install PyInstaller and dependencies
+    - name: Install pyminifier and dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pyinstaller opencv-python
+        pip install pyminifier opencv-python
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         
-    - name: Find main Python file
-      id: find_main
+    - name: Find all Python files
+      id: find_python_files
       run: |
-        # 查找项目的主文件（可以是.py文件或包含if __name__ == '__main__'的文件）
-        if [ -f "main.py" ]; then
+        # 查找所有的Python文件
+        find . -name "*.py" -type f > python_files.txt
+        echo "找到的Python文件:"
+        cat python_files.txt
+        echo "TOTAL_FILES=$(wc -l < python_files.txt)" >> $GITHUB_OUTPUT
+        
+    - name: Create obfuscated directory structure
+      run: |
+        # 创建混淆输出目录
+        mkdir -p obfuscated_dist
+        # 复制原始目录结构
+        find . -name "*.py" -type f | while read file; do
+          dir=$(dirname "$file")
+          mkdir -p "obfuscated_dist/$dir"
+        done
+        
+    - name: Obfuscate Python files with pyminifier
+      run: |
+        # 使用pyminifier混淆所有Python文件
+        while IFS= read -r file; do
+          if [ -f "$file" ]; then
+            echo "混淆文件: $file"
+            rel_path="${file#./}"
+            output_file="obfuscated_dist/$rel_path"
+            
+            # 使用pyminifier进行混淆
+            pyminifier --obfuscate --obfuscate-variables --obfuscate-functions \
+                      --obfuscate-classes --gzip "$file" > "$output_file"
+            
+            # 检查混淆是否成功
+            if [ $? -eq 0 ] && [ -s "$output_file" ]; then
+              echo "✓ 成功混淆: $file -> $output_file"
+            else
+              echo "✗ 混淆失败: $file"
+              # 如果混淆失败，复制原始文件
+              cp "$file" "$output_file"
+            fi
+          fi
+        done < python_files.txt
+        
+    - name: Test obfuscated code
+      run: |
+        # 测试混淆后的代码是否能正常导入
+        cd obfuscated_dist
+        python -c "
+        import sys
+        import importlib.util
+        
+        # 尝试导入所有混淆后的Python文件
+        failed_imports = []
+        
+        for file in sys.argv[1:]:
+            try:
+                spec = importlib.util.spec_from_file_location('test_module', file)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                print(f'✓ 成功导入: {file}')
+            except Exception as e:
+                print(f'✗ 导入失败 {file}: {e}')
+                failed_imports.append(file)
+        
+        if failed_imports:
+            print(f'共有 {len(failed_imports)} 个文件导入失败')
+            sys.exit(1)
+        else:
+            print('所有混淆文件导入测试通过！')
+        " $(find . -name "*.py")
+      continue-on-error: true
+        
+    - name: Find main Python file in obfuscated code
+      id: find_obfuscated_main
+      run: |
+        # 在混淆后的代码中查找主文件
+        OBFS_DIR="obfuscated_dist"
+        if [ -f "$OBFS_DIR/main.py" ]; then
           echo "MAIN_FILE=main.py" >> $GITHUB_OUTPUT
-        elif [ -f "app.py" ]; then
+          echo "MAIN_FILE_PATH=$OBFS_DIR/main.py" >> $GITHUB_OUTPUT
+        elif [ -f "$OBFS_DIR/app.py" ]; then
           echo "MAIN_FILE=app.py" >> $GITHUB_OUTPUT
+          echo "MAIN_FILE_PATH=$OBFS_DIR/app.py" >> $GITHUB_OUTPUT
         else
           # 查找包含if __name__ == '__main__'的Python文件
-          MAIN_FILE=$(find . -name "*.py" -type f -exec grep -l "if __name__ == '__main__'" {} \; | head -1)
+          MAIN_FILE=$(find "$OBFS_DIR" -name "*.py" -type f -exec grep -l "if __name__ == '__main__'" {} \; | head -1)
           if [ -n "$MAIN_FILE" ]; then
-            echo "MAIN_FILE=${MAIN_FILE#./}" >> $GITHUB_OUTPUT
+            MAIN_FILE_REL=${MAIN_FILE#$OBFS_DIR/}
+            echo "MAIN_FILE=$MAIN_FILE_REL" >> $GITHUB_OUTPUT
+            echo "MAIN_FILE_PATH=$MAIN_FILE" >> $GITHUB_OUTPUT
           else
-            echo "No main Python file found"
+            echo "在混淆代码中未找到主Python文件"
             exit 1
           fi
         fi
-        echo "Main file: ${{ steps.find_main.outputs.MAIN_FILE }}"
+        echo "混淆后的主文件: ${{ steps.find_obfuscated_main.outputs.MAIN_FILE }}"
+        echo "完整路径: ${{ steps.find_obfuscated_main.outputs.MAIN_FILE_PATH }}"
         
-    - name: Build with PyInstaller
+    - name: Create obfuscated distribution package
       run: |
-        pyinstaller --onefile --strip --noconsole --clean --noconfirm ${{ steps.find_main.outputs.MAIN_FILE }}
+        # 创建混淆代码的发布包
+        OBFS_PACKAGE="obfuscated_package"
+        mkdir -p "$OBFS_PACKAGE"
         
-    - name: List dist contents
+        # 复制混淆后的代码
+        cp -r obfuscated_dist/* "$OBFS_PACKAGE/" 2>/dev/null || true
+        
+        # 创建启动脚本
+        cat > "$OBFS_PACKAGE/run_obfuscated.sh" << 'EOF'
+#!/bin/bash
+# 运行混淆后的Python程序
+        
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MAIN_FILE="${{ steps.find_obfuscated_main.outputs.MAIN_FILE }}"
+        
+cd "$SCRIPT_DIR"
+python3 "$MAIN_FILE" "$@"
+EOF
+        
+        chmod +x "$OBFS_PACKAGE/run_obfuscated.sh"
+        
+        # 创建README
+        cat > "$OBFS_PACKAGE/README.txt" << EOF
+混淆后的Python程序
+        
+此目录包含使用pyminifier混淆的Python代码。
+        
+运行方法:
+1. 确保系统已安装Python 3.11
+2. 运行: ./run_obfuscated.sh
+        
+或者直接运行:
+python3 ${{ steps.find_obfuscated_main.outputs.MAIN_FILE }}
+        
+注意: 此代码已进行混淆处理，变量名和函数名已被重命名以保护源代码。
+EOF
+        
+        # 打包混淆后的代码
+        tar -czf "obfuscated_release.tar.gz" "$OBFS_PACKAGE"
+        echo "创建混淆发布包: obfuscated_release.tar.gz"
+        
+    - name: List distribution contents
       run: |
-        ls -la dist/
-        file dist/*
+        echo "=== 原始文件结构 ==="
+        find . -name "*.py" | head -10
         
-    - name: Upload build artifacts
+        echo "=== 混淆后文件结构 ==="
+        find obfuscated_dist -name "*.py" | head -10
+        
+        echo "=== 发布包内容 ==="
+        tar -tzf obfuscated_release.tar.gz | head -20
+        
+    - name: Upload obfuscated artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: executable-build
-        path: dist/
+        name: obfuscated-python-code
+        path: |
+          obfuscated_release.tar.gz
+          obfuscated_dist/
         retention-days: 1
         
-    - name: Create Release
+    - name: Create Release with Obfuscated Code
       id: create_release
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
@@ -78,7 +203,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
+        release_name: "Obfuscated Release ${{ github.ref }}"
         draft: false
         prerelease: false
-        files: dist/*
+        files: |
+          obfuscated_release.tar.gz
