@@ -27,7 +27,7 @@ jobs:
         libbz2-dev libreadline-dev libsqlite3-dev curl \
         libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev \
         libffi-dev liblzma-dev python3-opencv \
-        python3-full python3-dev  # 确保安装完整的Python 3.11包含2to3
+        python3-full python3-dev python3-pip
         
     - name: Install pyminifier and dependencies
       run: |
@@ -35,7 +35,7 @@ jobs:
         # 先安装必要的依赖
         pip install setuptools wheel
         # 安装修复版本的pyminifier
-        pip install --no-build-isolation pyminifier
+        pip3 install pyminifier
         # 或者使用替代方案安装
         pip install opencv-python
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
