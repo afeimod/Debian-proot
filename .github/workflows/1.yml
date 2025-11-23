@@ -1,4 +1,4 @@
-name: Build and Release
+name: Build Python3 and Release
 
 on:
   push:
@@ -56,7 +56,7 @@ jobs:
         
     - name: Build with PyInstaller
       run: |
-        pyinstaller --onefile --clean --noconfirm ${{ steps.find_main.outputs.MAIN_FILE }}
+        pyinstaller --onefile --strip --noconsole --exclude-module --clean --noconfirm ${{ steps.find_main.outputs.MAIN_FILE }}
         
     - name: List dist contents
       run: |
