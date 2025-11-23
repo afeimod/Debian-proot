@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import sys
 import subprocess
 import os
@@ -1162,12 +1163,12 @@ class DynamicWallpaper(QMainWindow):
         self.transparency = self.settings.value("transparency", 100, type=int)
         
         # 文件路径
-        self.current_video_path = self.settings.value("video_path", os.path.expanduser("~/1.mp4"), type=str)
+        self.current_video_path = self.settings.value("video_path", os.path.expanduser("/opt/apps/LinboxDtbz/video/1.mp4"), type=str)
         self.current_image_path = self.settings.value("image_path", "", type=str)
         
         # 上次使用的目录
-        self.last_video_dir = self.settings.value("last_video_dir", os.path.expanduser("~/Videos"), type=str)
-        self.last_image_dir = self.settings.value("last_image_dir", os.path.expanduser("~/Pictures"), type=str)
+        self.last_video_dir = self.settings.value("last_video_dir", os.path.expanduser("/opt/apps/LinboxDtbz/video"), type=str)
+        self.last_image_dir = self.settings.value("last_image_dir", os.path.expanduser("/opt/apps/LinboxDtbz/pictures"), type=str)
         
         # 播放速度
         self.playback_speed = self.settings.value("playback_speed", 100, type=int)
@@ -1295,7 +1296,7 @@ class DynamicWallpaper(QMainWindow):
             self.set_image_background(self.current_image_path)
         else:
             # 默认视频文件路径
-            video_path = os.path.expanduser("~/1.mp4")
+            video_path = os.path.expanduser("/opt/apps/LinboxDtbz/video/1.mp4")
             if os.path.exists(video_path):
                 self.current_video_path = video_path
                 self.load_video_file(video_path)
@@ -1717,7 +1718,7 @@ class DynamicWallpaper(QMainWindow):
             if os.path.exists(self.last_video_dir):
                 file_dialog.setDirectory(self.last_video_dir)
             else:
-                file_dialog.setDirectory(os.path.expanduser("~/Videos"))
+                file_dialog.setDirectory(os.path.expanduser("/opt/apps/LinboxDtbz/video/Videos"))
             
             # 优化文件过滤器 - 只显示常见视频格式
             file_dialog.setNameFilter("视频文件 (*.mp4 *.avi *.mkv *.mov *.wmv *.flv *.webm *.m4v)")
@@ -1774,7 +1775,7 @@ class DynamicWallpaper(QMainWindow):
             file_path, _ = QFileDialog.getOpenFileName(
                 self.icon_container, 
                 "选择视频文件", 
-                self.last_video_dir if os.path.exists(self.last_video_dir) else os.path.expanduser("~/Videos"),
+                self.last_video_dir if os.path.exists(self.last_video_dir) else os.path.expanduser("/opt/apps/LinboxDtbz/video/Videos"),
                 "视频文件 (*.mp4 *.avi *.mkv *.mov *.wmv *.flv *.webm *.m4v);;所有文件 (*)"
             )
             
@@ -1813,7 +1814,7 @@ class DynamicWallpaper(QMainWindow):
             if os.path.exists(self.last_image_dir):
                 file_dialog.setDirectory(self.last_image_dir)
             else:
-                file_dialog.setDirectory(os.path.expanduser("~/Pictures"))
+                file_dialog.setDirectory(os.path.expanduser("/opt/apps/LinboxDtbz/pictures"))
             
             # 优化文件过滤器 - 只显示常见图片格式
             file_dialog.setNameFilter("图片文件 (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.webp)")
@@ -1870,7 +1871,7 @@ class DynamicWallpaper(QMainWindow):
             file_path, _ = QFileDialog.getOpenFileName(
                 self.icon_container, 
                 "选择图片文件", 
-                self.last_image_dir if os.path.exists(self.last_image_dir) else os.path.expanduser("~/Pictures"),
+                self.last_image_dir if os.path.exists(self.last_image_dir) else os.path.expanduser("/opt/apps/LinboxDtbz/pictures"),
                 "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.webp);;所有文件 (*)"
             )
             
@@ -2405,7 +2406,7 @@ class DynamicWallpaper(QMainWindow):
             QTimer.singleShot(1000, lambda: self.load_video_file(self.current_video_path))
         else:
             # 尝试加载默认视频
-            video_path = os.path.expanduser("~/1.mp4")
+            video_path = os.path.expanduser("/opt/apps/LinboxDtbz/video/1.mp4")
             if os.path.exists(video_path):
                 QTimer.singleShot(1000, lambda: self.load_video_file(video_path))
 
