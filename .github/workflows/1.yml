@@ -27,7 +27,7 @@ jobs:
         libbz2-dev libreadline-dev libsqlite3-dev curl \
         libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev \
         libffi-dev liblzma-dev python3-opencv \
-        python3.11-full python3.11-dev  # 确保安装完整的Python 3.11包含2to3
+        python3-full python3-dev  # 确保安装完整的Python 3.11包含2to3
         
     - name: Install pyminifier and dependencies
       run: |
