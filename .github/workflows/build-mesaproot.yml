@@ -1,19 +1,22 @@
 # build-mesaproot.yml
-name: Build Mesa (aarch64)
+name: Build Mesa for Proot (aarch64)
 
 on:
   workflow_dispatch:
     inputs:
-      mesa_version:
-        description: 'Mesa 版本 (分支、标签或提交哈希)'
-        required: true
-        default: 'main'
-        type: string
       mesa_branch:
-        description: 'Mesa 分支 (可选，用于特定分支构建)'
+        description: 'Mesa 分支 (可选，默认为 adreno-main)'
         required: false
-        default: ''
+        default: 'adreno-main'
         type: string
+      use_upstream:
+        description: '是否使用上游官方 Mesa (而不是 lfdevs 的分支)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 permissions:
   contents: write
@@ -23,31 +26,53 @@ jobs:
     runs-on: ubuntu-24.04-arm
 
     steps:
-    - name: 设置 Mesa 版本
-      id: set_version
+    - name: 设置构建参数
+      id: setup
       run: |
+        # 设置默认参数
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          echo "MESA_VERSION=${{ github.event.inputs.mesa_version }}" >> $GITHUB_ENV
           echo "MESA_BRANCH=${{ github.event.inputs.mesa_branch }}" >> $GITHUB_ENV
+          echo "USE_UPSTREAM=${{ github.event.inputs.use_upstream }}" >> $GITHUB_ENV
         else
-          echo "MESA_VERSION=main" >> $GITHUB_ENV
-          echo "MESA_BRANCH=" >> $GITHUB_ENV
+          echo "MESA_BRANCH=adreno-main" >> $GITHUB_ENV
+          echo "USE_UPSTREAM=false" >> $GITHUB_ENV
         fi
         
         BUILD_DATE=$(date +%Y%m%d)
         echo "BUILD_DATE=$BUILD_DATE" >> $GITHUB_ENV
         
-        echo "Mesa 版本: $MESA_VERSION"
-        echo "Mesa 分支: $MESA_BRANCH"
+        echo "使用的 Mesa 分支: $MESA_BRANCH"
+        echo "是否使用上游: $USE_UPSTREAM"
         echo "构建日期: $BUILD_DATE"
 
-    - name: 检出源码
+    - name: 检出仓库
       uses: actions/checkout@v4
 
-    - name: 安装系统依赖
+    - name: 显示环境信息
       run: |
+        echo "构建环境信息:"
+        uname -a
+        lscpu | grep -E 'Model name|Architecture|CPU MHz|Core'
+        free -h
+
+    - name: 安装系统依赖和 Python 工具
+      run: |
+        # 更新源并安装系统依赖
         sudo sed -i "s/^Types: deb$/Types: deb deb-src/" /etc/apt/sources.list.d/ubuntu.sources
         sudo apt update
+        
+        # 先安装系统自带的 meson 和 ninja
+        echo "安装系统自带的构建工具..."
+        sudo apt install -y meson ninja-build
+        
+        # 验证系统安装的版本
+        echo "系统 meson 版本:"
+        meson --version || echo "meson not found"
+        echo "系统 ninja 版本:"
+        ninja --version || echo "ninja not found"
+        
+        # 安装其他构建依赖
+        echo "安装其他依赖..."
         sudo apt install -y \
           glslang-tools \
           libxrandr-dev \
@@ -75,121 +100,85 @@ jobs:
           bison \
           flex
 
-    - name: 安装 Meson 和 Ninja
+    - name: 安装 Python 依赖（兼容性版本）
       run: |
-        # 检查并安装最新版 meson
-        python3 -m pip install --user meson ninja mako
-        # 确保用户 bin 目录在 PATH 中
-        echo "export PATH=\"$HOME/.local/bin:\$PATH\"" >> ~/.bashrc
-        source ~/.bashrc
+        # 安装指定版本的 meson 和 ninja 到用户目录
+        # 使用较新的版本，但保持兼容性
+        pip3 install --user meson==1.2.1 ninja==1.11.1 mako
         
-        # 验证安装
-        echo "Meson 版本:"
-        python3 -m pip show meson
-        echo "PATH: $PATH"
-        echo "which meson: $(which meson || echo 'not found')"
+        # 将用户目录的 bin 添加到 PATH（确保优先使用）
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
         
-        # 如果 which 找不到，尝试直接调用
-        if ! command -v meson &> /dev/null; then
-          echo "使用 Python 模块路径直接调用 meson"
-          echo "alias meson=\"python3 -m mesonbuild.mesonmain\"" >> ~/.bashrc
-          source ~/.bashrc
-        fi
+        # 等待 PATH 更新
+        sleep 2
+        
+        echo "验证安装的版本:"
+        $HOME/.local/bin/meson --version
+        $HOME/.local/bin/ninja --version
 
-    - name: 验证 Meson 可用性
+    - name: 克隆 Mesa 源码
       run: |
-        # 尝试多种方式调用 meson
-        echo "测试 meson 命令..."
+        echo "📥 克隆 Mesa 仓库..."
         
-        # 方法1: 直接调用
-        if command -v meson &> /dev/null; then
-          meson --version
-          echo "✅ meson 命令可用"
+        if [ "$USE_UPSTREAM" = "true" ]; then
+          echo "使用上游官方 Mesa 仓库"
+          git clone https://gitlab.freedesktop.org/mesa/mesa.git mesa-src
+          cd mesa-src
         else
-          echo "尝试方法2: 通过 Python 模块调用"
-          python3 -c "from mesonbuild.mesonmain import main; import sys; sys.argv = ['meson', '--version']; main()"
-          echo "✅ Python 模块可用"
+          echo "使用 lfdevs 的 Mesa for Android Container 仓库"
+          git clone https://github.com/lfdevs/mesa-for-android-container.git mesa-src
+          cd mesa-src
           
-          # 创建包装脚本
-          cat > ~/.local/bin/meson << 'EOF'
-            #!/bin/bash
-            exec python3 -m mesonbuild.mesonmain "$@"
-          EOF
-          chmod +x ~/.local/bin/meson
-          export PATH="$HOME/.local/bin:$PATH"
-        fi
-
-    - name: 克隆并准备 Mesa 源码
-      run: |
-        # 克隆 Mesa 仓库 - 使用与 prootMesa.yml 相同的仓库
-        git clone https://github.com/lfdevs/mesa-for-android-container.git mesa
-        
-        cd mesa
-        
-        # 检查并切换到指定分支
-        if [ -n "$MESA_BRANCH" ]; then
-          echo "切换到分支: $MESA_BRANCH"
-          if git checkout mesa-$MESA_BRANCH 2>/dev/null || git checkout $MESA_BRANCH 2>/dev/null; then
-            echo "✅ 切换到分支 $MESA_BRANCH"
-          else
-            echo "⚠️  分支 $MESA_BRANCH 不存在，使用默认分支"
+          # 检出指定分支
+          if [ -n "$MESA_BRANCH" ] && [ "$MESA_BRANCH" != "main" ]; then
+            echo "检出分支: $MESA_BRANCH"
+            git checkout $MESA_BRANCH
           fi
         fi
         
-        # 如果指定了版本且不是 main，尝试检出
-        if [ "$MESA_VERSION" != "main" ]; then
-          echo "尝试检出版本: $MESA_VERSION"
-          git checkout $MESA_VERSION 2>/dev/null || echo "版本 $MESA_VERSION 不存在，使用当前分支"
-        fi
-        
         # 获取版本信息
-        MESA_COMMIT_HASH=$(git rev-parse --short HEAD)
-        MESA_DESCRIBE=$(git describe --tags --always 2>/dev/null || echo "custom-$MESA_COMMIT_HASH")
-        MESA_TAG=$(git describe --tags --exact-match 2>/dev/null || echo "")
-        
-        echo "MESA_COMMIT_HASH=$MESA_COMMIT_HASH" >> $GITHUB_ENV
-        echo "MESA_DESCRIBE=$MESA_DESCRIBE" >> $GITHUB_ENV
-        echo "MESA_TAG=$MESA_TAG" >> $GITHUB_ENV
-        
-        # 从 VERSION 文件获取版本号
+        GIT_HASH=$(git rev-parse --short HEAD)
         if [ -f "VERSION" ]; then
           OFFICIAL_VERSION=$(cat VERSION)
         else
-          OFFICIAL_VERSION="$MESA_VERSION-$MESA_COMMIT_HASH"
+          OFFICIAL_VERSION="git-$GIT_HASH"
         fi
         
-        echo "OFFICIAL_VERSION=$OFFICIAL_VERSION" >> $GITHUB_ENV
+        GIT_DESCRIBE=$(git describe --tags --always 2>/dev/null || echo "custom-$GIT_HASH")
         
-        echo "✅ 源码准备完成"
+        echo "MESA_GIT_HASH=$GIT_HASH" >> $GITHUB_ENV
+        echo "MESA_VERSION=$OFFICIAL_VERSION" >> $GITHUB_ENV
+        echo "GIT_DESCRIBE=$GIT_DESCRIBE" >> $GITHUB_ENV
+        
+        echo "✅ 源码克隆完成"
         echo "版本: $OFFICIAL_VERSION"
-        echo "提交: $MESA_COMMIT_HASH"
-        echo "描述: $MESA_DESCRIBE"
-        echo "标签: $MESA_TAG"
+        echo "提交: $GIT_HASH"
+        echo "描述: $GIT_DESCRIBE"
+        echo "分支: $(git branch --show-current)"
 
-    - name: 配置和构建 Mesa
+    - name: 构建 Mesa
       run: |
-        cd mesa
+        cd mesa-src
         
-        # 创建安装目录并设置权限 - 与 prootMesa.yml 相同
-        sudo mkdir -p /opt/mesa
-        sudo chmod 777 -R /opt
+        echo "🔨 开始构建 Mesa..."
+        BUILD_START=$(date +%s)
+        
+        # 创建安装目录
+        sudo mkdir -p /opt/proot-mesa
+        sudo chmod 777 -R /opt/proot-mesa
         
         # 创建构建目录
         mkdir -p builddir
         
-        # 确保 PATH 包含 meson
-        export PATH="$HOME/.local/bin:$PATH"
-        export PYTHONPATH="$HOME/.local/lib/python3.10/site-packages:$PYTHONPATH"
+        # 验证使用的 meson
+        echo "使用以下 meson 路径:"
+        which meson
+        meson --version
         
-        echo "当前 PATH: $PATH"
-        echo "Python 路径:"
-        python3 -c "import sys; print('\n'.join(sys.path))"
-        
-        # 使用 meson 配置 - 使用与 prootMesa.yml 完全相同的配置
-        echo "配置 Mesa 构建..."
+        # 配置构建选项
         meson setup builddir \
           --libdir=lib \
-          -Dprefix=/opt/mesa \
+          -Dprefix=/opt/proot-mesa \
           -Dbuildtype=release \
           -Doptimization=3 \
           -Db_lto=true \
@@ -223,131 +212,122 @@ jobs:
           -Dgbm=enabled \
           -Dtools=drm-shim,freedreno
         
-        # 构建
-        echo "开始构建..."
-        BUILD_START=$(date +%s)
+        # 检查配置状态
+        echo "配置状态检查:"
+        meson configure builddir || true
+        
+        # 开始构建
+        echo "🏗️  正在构建..."
         ninja -C builddir -j$(nproc)
+        
+        echo "📦 正在安装..."
+        sudo ninja -C builddir install
+        
         BUILD_END=$(date +%s)
-        
-        echo "安装..."
-        ninja -C builddir install
-        
         BUILD_TIME=$((BUILD_END - BUILD_START))
         echo "✅ 构建完成，耗时: ${BUILD_TIME}秒"
         
-        # 验证构建
-        echo "验证构建结果:"
-        ls -la /opt/mesa/lib/ | head -20
-
 
     - name: 打包构建产物
       run: |
         echo "📦 开始打包..."
         
-        # 创建版本化的包名 - 与 prootMesa.yml 类似的命名
-        VERSION_SHORT=$(echo "$OFFICIAL_VERSION" | cut -c1-20)
-        TAR_NAME="termux-proot-mesa-${VERSION_SHORT}-aarch64.tar.gz"
-        FULL_TAR="proot-mesa-${VERSION_SHORT}-aarch64.tar.gz"
+        # 创建版本化的包名
+        PACKAGE_NAME="proot-mesa-${MESA_VERSION}-aarch64"
         
-        echo "TAR_NAME=$TAR_NAME" >> $GITHUB_ENV
-        echo "FULL_TAR=$FULL_TAR" >> $GITHUB_ENV
-        
-        # 仅打包 Vulkan 驱动 - 与 prootMesa.yml 相同
-        cd mesa/builddir
-        tar -czvf "../../${TAR_NAME}" src/freedreno/vulkan/libvulkan_freedreno.so 2>/dev/null || \
-          tar -czvf "../../${TAR_NAME}" -C /opt/mesa lib/libvulkan_freedreno.so
-        
-        # 打包完整安装目录 - 与 prootMesa.yml 相同
+        # 打包完整安装目录
         cd /opt
-        tar -czvf "${GITHUB_WORKSPACE}/${FULL_TAR}" mesa/
+        tar -czvf "${HOME}/${PACKAGE_NAME}-full.tar.gz" proot-mesa/
         
+        # 仅打包 Vulkan 驱动（可选）
+        cd /opt/proot-mesa
+        if [ -d "lib" ]; then
+          tar -czvf "${HOME}/${PACKAGE_NAME}-vulkan.tar.gz" lib/libvulkan_freedreno.so lib/libvulkan_swrast.so 2>/dev/null || true
+        fi
+        
+        # 移动回工作目录
         cd $GITHUB_WORKSPACE
-        sha256sum "${TAR_NAME}" > "${TAR_NAME}.sha256"
-        sha256sum "${FULL_TAR}" > "${FULL_TAR}.sha256"
+        mv "${HOME}/${PACKAGE_NAME}-full.tar.gz" .
+        mv "${HOME}/${PACKAGE_NAME}-vulkan.tar.gz" . 2>/dev/null || true
+        
+        # 生成校验和
+        sha256sum ${PACKAGE_NAME}-*.tar.gz > checksums.txt
+        
+        # 设置输出变量
+        echo "PACKAGE_NAME=${PACKAGE_NAME}" >> $GITHUB_ENV
+        echo "FULL_PACKAGE=${PACKAGE_NAME}-full.tar.gz" >> $GITHUB_ENV
         
         echo "📦 打包完成:"
         ls -lh *.tar.gz
 
-    - name: 上传构建产物到 Artifacts
+    - name: 上传构建产物
       uses: actions/upload-artifact@v4
       with:
-        name: mesa-artifacts-${{ env.OFFICIAL_VERSION }}-aarch64
+        name: proot-mesa-${{ env.MESA_VERSION }}-aarch64
         path: |
-          ${{ env.TAR_NAME }}
-          ${{ env.FULL_TAR }}
-          ${{ env.TAR_NAME }}.sha256
-          ${{ env.FULL_TAR }}.sha256
+          ${{ env.PACKAGE_NAME }}-*.tar.gz
+          checksums.txt
 
-    - name: 创建发布标签和 Release
-      if: ${{ github.event_name == 'workflow_dispatch' }}
-      run: |
-        # 创建发布标签
-        if [ -n "$MESA_TAG" ] && [ "$MESA_TAG" != "" ]; then
-          RELEASE_TAG="$MESA_TAG-termux"
-        else
-          RELEASE_TAG="mesa-$OFFICIAL_VERSION-$BUILD_DATE-termux"
-        fi
-        
-        echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
-        echo "发布标签: $RELEASE_TAG"
-
-    - name: 发布到 GitHub Release
+    - name: 创建轻量级发布
       uses: softprops/action-gh-release@v1
       if: ${{ github.event_name == 'workflow_dispatch' }}
       with:
-        tag_name: ${{ env.RELEASE_TAG }}
-        name: Mesa ${{ env.OFFICIAL_VERSION }} (aarch64, Termux glibc)
+        tag_name: proot-mesa-${{ env.MESA_VERSION }}-${{ env.BUILD_DATE }}
+        name: Mesa Proot ${{ env.MESA_VERSION }} (aarch64)
         body: |
-          Mesa 3D Graphics Library for Termux glibc
+          Mesa 3D Graphics Library for Termux Proot (glibc) on aarch64
           
           构建信息:
-          - **版本**: ${{ env.OFFICIAL_VERSION }}
-          - **Git 描述**: ${{ env.MESA_DESCRIBE }}
-          - **提交哈希**: ${{ env.MESA_COMMIT_HASH }}
+          - **版本**: ${{ env.MESA_VERSION }}
+          - **Git 描述**: ${{ env.GIT_DESCRIBE }}
+          - **提交哈希**: ${{ env.MESA_GIT_HASH }}
           - **构建日期**: ${{ env.BUILD_DATE }}
-          - **目标架构**: aarch64
-          - **环境**: Termux glibc
-          
-          驱动支持:
-          - ✅ Gallium Drivers: zink, freedreno, llvmpipe, softpipe
-          - ✅ Vulkan Drivers: freedreno, swrast
-          - ✅ OpenGL, OpenGL ES 1.x, OpenGL ES 2.x
-          - ✅ EGL, GBM
+          - **分支**: ${{ env.MESA_BRANCH }}
+          - **仓库**: $(if [ "${{ env.USE_UPSTREAM }}" = "true" ]; then echo "上游官方"; else echo "lfdevs/android-container"; fi)
           
           包含文件:
-          - `${{ env.TAR_NAME }}` - 仅 Vulkan 驱动
-          - `${{ env.FULL_TAR }}` - 完整 Mesa 安装
+          - `${{ env.FULL_PACKAGE }}` - 完整 Mesa 安装包
+          - `*-vulkan.tar.gz` - 仅 Vulkan 驱动 (可选)
+          - `checksums.txt` - 校验和文件
           
           安装说明:
-          1. 下载完整包: `${{ env.FULL_TAR }}`
-          2. 在 Termux glibc 环境中解压: `tar -xzf ${{ env.FULL_TAR }} -C /`
-          3. 或仅安装 Vulkan 驱动: `tar -xzf ${{ env.TAR_NAME }} -C /path/to/lib`
+          1. 下载完整的 tar.gz 包
+          2. 在 Proot 环境中解压到根目录: `tar -xzf package.tar.gz -C /`
+          3. 或者解压到自定义目录并设置环境变量:
+             ```bash
+             export LD_LIBRARY_PATH=/path/to/proot-mesa/lib:$LD_LIBRARY_PATH
+             export LIBGL_DRIVERS_PATH=/path/to/proot-mesa/lib/dri
+             ```
+          
+          注意:
+          - 需要 Termux 的 glibc 环境 (如 proot-distro 的 Ubuntu/Debian)
+          - 推荐在 Proot 容器中使用
         files: |
-          ${{ env.TAR_NAME }}
-          ${{ env.FULL_TAR }}
-          ${{ env.TAR_NAME }}.sha256
-          ${{ env.FULL_TAR }}.sha256
+          ${{ env.PACKAGE_NAME }}-*.tar.gz
+          checksums.txt
         draft: false
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: 输出总结信息
+    - name: 输出总结
       run: |
-        echo "✅ Mesa 构建完成"
+        echo "✅ Mesa Proot 构建完成!"
         echo "================================"
-        echo "版本: $OFFICIAL_VERSION"
-        echo "提交: $MESA_COMMIT_HASH"
+        echo "版本: $MESA_VERSION"
+        echo "提交: $MESA_GIT_HASH"
         echo "构建日期: $BUILD_DATE"
+        echo "分支: $MESA_BRANCH"
         echo "目标架构: aarch64"
-        echo "环境: Termux glibc"
+        echo "环境: Termux Proot (glibc)"
         echo ""
-        echo "📦 构建产物:"
-        echo "- $TAR_NAME (Vulkan 驱动)"
-        echo "- $FULL_TAR (完整安装)"
+        echo "📦 生成的文件:"
+        ls -1 *.tar.gz | while read file; do
+          echo "  - $file"
+        done
         echo ""
         echo "驱动支持:"
-        echo "✓ Gallium: zink, freedreno, llvmpipe, softpipe"
-        echo "✓ Vulkan: freedreno, swrast"
-        echo "✓ OpenGL, OpenGL ES 1.x/2.x"
-        echo "✓ EGL, GBM"
+        echo "  ✓ Gallium: zink, freedreno, llvmpipe, softpipe"
+        echo "  ✓ Vulkan: freedreno, swrast"
+        echo "  ✓ OpenGL, OpenGL ES 1.x/2.x"
+        echo "  ✓ EGL, GBM"
