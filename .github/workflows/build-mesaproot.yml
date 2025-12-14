@@ -112,9 +112,9 @@ jobs:
           
           # 创建包装脚本
           cat > ~/.local/bin/meson << 'EOF'
-#!/bin/bash
-exec python3 -m mesonbuild.mesonmain "$@"
-EOF
+            #!/bin/bash
+            exec python3 -m mesonbuild.mesonmain "$@"
+          EOF
           chmod +x ~/.local/bin/meson
           export PATH="$HOME/.local/bin:$PATH"
         fi
