@@ -146,6 +146,8 @@ jobs:
           -Dprefix=/opt/mesa \
           -Dbuildtype=release \
           -Doptimization=3 \
+          -Dcpp_args="-O3 -march=native -mtune=native" \
+          -Dc_args="-O3 -march=native -mtune=native" \
           -Db_lto=true \
           -Dplatforms=x11 \
           -Degl-native-platform=x11 \
