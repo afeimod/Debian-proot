@@ -55,18 +55,29 @@ jobs:
         lscpu | grep -E 'Model name|Architecture|CPU MHz|Core'
         free -h
 
-
-    - name: 安装依赖
+    - name: 安装系统依赖
       run: |
-          sudo sed -i "s/^Types: deb$/Types: deb deb-src/" /etc/apt/sources.list.d/ubuntu.sources
-          sudo apt update
-          sudo apt install -y glslang-tools libxrandr-dev libxxf86vm-dev libxcb-shm0-dev libxcb-glx0-dev \
-              libxext-dev llvm-19 libx11-dev libx11-xcb-dev libxcb1-dev libxcb-dri3-dev libxcb-present-dev \
-              libxcb-randr0-dev libxcb-sync-dev libxcb-xfixes0-dev libxshmfence-dev libdrm-dev \
-              libgbm-dev libegl1-mesa-dev libexpat1-dev libwayland-dev python3-pip
+        sudo sed -i "s/^Types: deb$/Types: deb deb-src/" /etc/apt/sources.list.d/ubuntu.sources
+        sudo apt update
+        sudo apt install -y glslang-tools libxrandr-dev libxxf86vm-dev libxcb-shm0-dev libxcb-glx0-dev \
+            libxext-dev llvm-19 libx11-dev libx11-xcb-dev libxcb1-dev libxcb-dri3-dev libxcb-present-dev \
+            libxcb-randr0-dev libxcb-sync-dev libxcb-xfixes0-dev libxshmfence-dev libdrm-dev \
+            libgbm-dev libegl1-mesa-dev libexpat1-dev libwayland-dev python3-pip \
+            python3-setuptools python3-wheel ninja-build
 
-          pip3 install --user meson ninja mako
-
+    - name: 安装 Python 构建工具
+      run: |
+        # 使用系统级的 pip 安装，避免用户级安装的路径问题
+        sudo pip3 install --upgrade pip
+        sudo pip3 install meson mako
+        
+        # 验证安装
+        echo "检查安装的 meson 版本:"
+        meson --version
+        python3 -c "import mesonbuild; print('mesonbuild 模块路径:', mesonbuild.__file__)"
+        
+        # 设置环境变量，确保能找到所有工具
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
 
     - name: 克隆 Mesa 源码
       run: |
@@ -117,15 +128,17 @@ jobs:
         
         # 创建安装目录
         sudo mkdir -p /opt/mesa
-        sudo chmod 777 -R /opt/mesa
+        sudo chmod 777 -R /opt
         
         # 创建构建目录
         mkdir -p builddir
         
-        # 验证使用的 meson
-        echo "使用以下 meson 路径:"
+        # 验证使用的工具
+        echo "检查构建工具:"
         which meson
         meson --version
+        which ninja
+        ninja --version
         
         # 配置构建选项
         meson setup builddir \
@@ -179,6 +192,10 @@ jobs:
         BUILD_TIME=$((BUILD_END - BUILD_START))
         echo "✅ 构建完成，耗时: ${BUILD_TIME}秒"
         
+        # 验证安装
+        echo "安装验证:"
+        ls -la /opt/mesa/
+        ls -la /opt/mesa/lib/ 2>/dev/null || true
 
     - name: 打包构建产物
       run: |
@@ -189,18 +206,24 @@ jobs:
         
         # 打包完整安装目录
         cd /opt
-        tar -czvf "${HOME}/${PACKAGE_NAME}-full.tar.gz" proot-mesa/
+        tar -czvf "${HOME}/${PACKAGE_NAME}-full.tar.gz" mesa/
         
         # 仅打包 Vulkan 驱动（可选）
-        cd /opt/proot-mesa
+        cd /opt/mesa
         if [ -d "lib" ]; then
-          tar -czvf "${HOME}/${PACKAGE_NAME}-vulkan.tar.gz" lib/libvulkan_freedreno.so lib/libvulkan_swrast.so 2>/dev/null || true
+          # 查找并打包所有 Vulkan 驱动
+          find lib -name "libvulkan_*.so" -o -name "*vulkan*.so*" 2>/dev/null | while read -r file; do
+            echo "找到 Vulkan 驱动: $file"
+          done
+          tar -czvf "${HOME}/${PACKAGE_NAME}-vulkan.tar.gz" $(find lib -name "libvulkan_*.so" -o -name "*vulkan*.so*" 2>/dev/null) 2>/dev/null || true
         fi
         
         # 移动回工作目录
         cd $GITHUB_WORKSPACE
         mv "${HOME}/${PACKAGE_NAME}-full.tar.gz" .
-        mv "${HOME}/${PACKAGE_NAME}-vulkan.tar.gz" . 2>/dev/null || true
+        if [ -f "${HOME}/${PACKAGE_NAME}-vulkan.tar.gz" ]; then
+          mv "${HOME}/${PACKAGE_NAME}-vulkan.tar.gz" .
+        fi
         
         # 生成校验和
         sha256sum ${PACKAGE_NAME}-*.tar.gz > checksums.txt
@@ -247,8 +270,8 @@ jobs:
           2. 在 Proot 环境中解压到根目录: `tar -xzf package.tar.gz -C /`
           3. 或者解压到自定义目录并设置环境变量:
              ```bash
-             export LD_LIBRARY_PATH=/path/to/proot-mesa/lib:$LD_LIBRARY_PATH
-             export LIBGL_DRIVERS_PATH=/path/to/proot-mesa/lib/dri
+             export LD_LIBRARY_PATH=/path/to/mesa/lib:$LD_LIBRARY_PATH
+             export LIBGL_DRIVERS_PATH=/path/to/mesa/lib/dri
              ```
           
           注意:
