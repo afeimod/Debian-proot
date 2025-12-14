@@ -196,35 +196,6 @@ jobs:
         echo "✅ 构建完成，耗时: ${BUILD_TIME}秒"
         
         # 保存构建信息
-        cat > /opt/proot-mesa/mesa-build-info.txt << EOF
-Mesa Proot Build Information
-============================
-版本: $MESA_VERSION
-Git 描述: $GIT_DESCRIBE
-提交哈希: $MESA_GIT_HASH
-构建日期: $BUILD_DATE
-构建时长: ${BUILD_TIME}秒
-目标架构: aarch64
-环境: Termux Proot (glibc)
-使用的仓库: $(if [ "$USE_UPSTREAM" = "true" ]; then echo "上游官方"; else echo "lfdevs/android-container"; fi)
-分支: $MESA_BRANCH
-
-驱动支持:
-- Gallium Drivers: zink, freedreno, llvmpipe, softpipe
-- Vulkan Drivers: freedreno, swrast
-- OpenGL: 支持
-- OpenGL ES 1.x: 支持
-- OpenGL ES 2.x: 支持
-- EGL: 支持
-- GBM: 支持
-
-构建配置:
-- 构建类型: release
-- 优化级别: 3
-- LTO: 启用
-- Shader Cache: 启用
-- 平台: x11
-EOF
 
     - name: 打包构建产物
       run: |
