@@ -56,8 +56,8 @@ jobs:
         free -h
 
 
-      - name: 安装依赖
-        run: |
+    - name: 安装依赖
+      run: |
           sudo sed -i "s/^Types: deb$/Types: deb deb-src/" /etc/apt/sources.list.d/ubuntu.sources
           sudo apt update
           sudo apt install -y glslang-tools libxrandr-dev libxxf86vm-dev libxcb-shm0-dev libxcb-glx0-dev \
