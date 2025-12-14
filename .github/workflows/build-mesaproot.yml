@@ -76,7 +76,9 @@ jobs:
     - name: 克隆并准备 Mesa 源码
       run: |
         # 克隆 Mesa 仓库
-        git clone https://gitlab.freedesktop.org/mesa/mesa.git
+        #git clone https://gitlab.freedesktop.org/mesa/mesa.git
+        git clone https://github.com/lfdevs/mesa-for-android-container.git mesa
+        
         cd mesa
         
         # 只有当版本不是 main 或指定了分支时才进行 checkout
