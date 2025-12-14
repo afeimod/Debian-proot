@@ -108,7 +108,9 @@ jobs:
         else
           echo "OFFICIAL_VERSION=$MESA_DESCRIBE" >> $GITHUB_ENV
         fi
-        
+        echo "A8xx补丁"
+        wget https://raw.githubusercontent.com/afeimod/winlator-mod/main/path/A8x-GMU.patch
+        patch -p1 < A8x-GMU.patch
         echo "Mesa 提交哈希: $MESA_COMMIT_HASH"
         echo "Mesa 描述: $MESA_DESCRIBE"
         echo "Mesa 标签: $MESA_TAG"
@@ -124,30 +126,38 @@ jobs:
         # 修复 Meson 配置，移除重复的构建选项
         meson setup builddir \
           --libdir=lib \
-          -Dprefix=/opt/mesa \
           -Dbuildtype=release \
-          -Doptimization=3 \
-          -Db_lto=true \
-          -Dplatforms=x11 \
-          -Degl-native-platform=x11 \
-          -Dglx=dri \
-          -Dglx-direct=true \
-          -Dopengl=true \
-          -Dgles1=enabled \
-          -Dgles2=enabled \
-          -Dglvnd=disabled \
-          -Degl=enabled \
-          -Dllvm=disabled \
-          -Dshared-llvm=disabled \
-          -Dshader-cache=enabled \
-          -Dxlib-lease=enabled \
-          -Dvulkan-beta=true \
-          -Dgallium-drivers=zink,freedreno \
-          -Dvulkan-drivers=freedreno \
-          -Dfreedreno-kmds=msm,kgsl \
-          -Dvideo-codecs=all \
-          -Dgbm=enabled \
-          -Dtools=drm-shim,freedreno
+            -Doptimization=3 \
+            -Db_lto=true \
+            -Dplatforms=x11 \
+            -Degl-native-platform=x11 \
+            -Dglx=dri \
+            -Dglx-direct=true \
+            -Dopengl=true \
+            -Dgles1=enabled \
+            -Dgles2=enabled \
+            -Dglvnd=disabled \
+            -Degl=enabled \
+            -Dllvm=enabled \
+            -Dshared-llvm=enabled \
+            -Dshader-cache=enabled \
+            -Dshared-glapi=enabled \
+            -Dxlib-lease=enabled \
+            -Dvulkan-beta=true \
+            -Dlibunwind=disabled \
+            -Dvalgrind=disabled \
+            -Dmicrosoft-clc=disabled \
+            -Dgallium-rusticl=false \
+            -Dgallium-extra-hud=true \
+            -Dgallium-drivers=zink,freedreno,llvmpipe,softpipe \
+            -Dgallium-rusticl-enable-drivers=freedreno \
+            -Dshader-cache-default=true \
+            -Dvulkan-drivers=freedreno,swrast \
+            -Dfreedreno-kmds=msm,kgsl \
+            -Dvideo-codecs=all \
+            -Dmediafoundation-codecs=all \
+            -Dgbm=enabled \
+            -Dtools=drm-shim,freedreno
 
         ninja -C builddir
         ninja -C builddir install
