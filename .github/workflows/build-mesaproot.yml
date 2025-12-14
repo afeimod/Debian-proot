@@ -68,7 +68,7 @@ jobs:
     - name: 安装 Python 构建工具
       run: |
         # 使用系统级的 pip 安装，避免用户级安装的路径问题
-        sudo pip3 install --upgrade pip
+        #sudo pip3 install --upgrade pip
         sudo pip3 install meson mako
         
         # 验证安装
