@@ -55,67 +55,18 @@ jobs:
         lscpu | grep -E 'Model name|Architecture|CPU MHz|Core'
         free -h
 
-    - name: 安装系统依赖和 Python 工具
-      run: |
-        # 更新源并安装系统依赖
-        sudo sed -i "s/^Types: deb$/Types: deb deb-src/" /etc/apt/sources.list.d/ubuntu.sources
-        sudo apt update
-        
-        # 先安装系统自带的 meson 和 ninja
-        echo "安装系统自带的构建工具..."
-        sudo apt install -y meson ninja-build
-        
-        # 验证系统安装的版本
-        echo "系统 meson 版本:"
-        meson --version || echo "meson not found"
-        echo "系统 ninja 版本:"
-        ninja --version || echo "ninja not found"
-        
-        # 安装其他构建依赖
-        echo "安装其他依赖..."
-        sudo apt install -y \
-          glslang-tools \
-          libxrandr-dev \
-          libxxf86vm-dev \
-          libxcb-shm0-dev \
-          libxcb-glx0-dev \
-          libxext-dev \
-          llvm-19 \
-          libx11-dev \
-          libx11-xcb-dev \
-          libxcb1-dev \
-          libxcb-dri3-dev \
-          libxcb-present-dev \
-          libxcb-randr0-dev \
-          libxcb-sync-dev \
-          libxcb-xfixes0-dev \
-          libxshmfence-dev \
-          libdrm-dev \
-          libgbm-dev \
-          libegl1-mesa-dev \
-          libexpat1-dev \
-          libwayland-dev \
-          python3-pip \
-          pkg-config \
-          bison \
-          flex
 
-    - name: 安装 Python 依赖（兼容性版本）
-      run: |
-        # 移除旧版 meson（如果存在）
-        sudo apt remove -y meson || true
-        
-        # 使用 pip 安装最新版 meson
-        pip3 install --user meson ninja mako
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
-        
-        
-        # 等待 PATH 更新
-        sleep 2
-        
-        echo "验证安装的版本:"
-        $HOME/.local/bin/meson --version
-        $HOME/.local/bin/ninja --version
+      - name: 安装依赖
+        run: |
+          sudo sed -i "s/^Types: deb$/Types: deb deb-src/" /etc/apt/sources.list.d/ubuntu.sources
+          sudo apt update
+          sudo apt install -y glslang-tools libxrandr-dev libxxf86vm-dev libxcb-shm0-dev libxcb-glx0-dev \
+              libxext-dev llvm-19 libx11-dev libx11-xcb-dev libxcb1-dev libxcb-dri3-dev libxcb-present-dev \
+              libxcb-randr0-dev libxcb-sync-dev libxcb-xfixes0-dev libxshmfence-dev libdrm-dev \
+              libgbm-dev libegl1-mesa-dev libexpat1-dev libwayland-dev python3-pip
+
+          pip3 install --user meson ninja mako
+
 
     - name: 克隆 Mesa 源码
       run: |
@@ -123,12 +74,12 @@ jobs:
         
         if [ "$USE_UPSTREAM" = "true" ]; then
           echo "使用上游官方 Mesa 仓库"
-          git clone https://gitlab.freedesktop.org/mesa/mesa.git mesa-src
-          cd mesa-src
+          git clone https://gitlab.freedesktop.org/mesa/mesa.git
+          cd mesa
         else
           echo "使用 lfdevs 的 Mesa for Android Container 仓库"
-          git clone https://github.com/lfdevs/mesa-for-android-container.git mesa-src
-          cd mesa-src
+          git clone https://github.com/lfdevs/mesa-for-android-container.git mesa
+          cd mesa
           
           # 检出指定分支
           if [ -n "$MESA_BRANCH" ] && [ "$MESA_BRANCH" != "main" ]; then
