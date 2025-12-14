@@ -110,7 +110,7 @@ jobs:
 
     - name: 构建 Mesa
       run: |
-        cd mesa-src
+        cd mesa
         
         echo "🔨 开始构建 Mesa..."
         BUILD_START=$(date +%s)
@@ -130,7 +130,7 @@ jobs:
         # 配置构建选项
         meson setup builddir \
           --libdir=lib \
-          -Dprefix=/opt/proot-mesa \
+          -Dprefix=/opt/mesa \
           -Dbuildtype=release \
           -Doptimization=3 \
           -Db_lto=true \
