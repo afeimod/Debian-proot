@@ -116,8 +116,8 @@ jobs:
         BUILD_START=$(date +%s)
         
         # 创建安装目录
-        sudo mkdir -p /opt/proot-mesa
-        sudo chmod 777 -R /opt/proot-mesa
+        sudo mkdir -p /opt/mesa
+        sudo chmod 777 -R /opt/mesa
         
         # 创建构建目录
         mkdir -p builddir
