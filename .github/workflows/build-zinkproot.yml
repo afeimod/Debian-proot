@@ -198,7 +198,7 @@ jobs:
           find lib -name "libGL.so" -o -name "*GL*.so*" 2>/dev/null | while read -r file; do
             echo "找到 Vulkan 驱动: $file"
           done
-          tar -czvf "${HOME}/${PACKAGE_NAME}-vulkan.tar.gz" $(find lib -name "libvulkan_*.so" -o -name "*vulkan*.so*" 2>/dev/null) 2>/dev/null || true
+          tar -czvf "${HOME}/${PACKAGE_NAME}-vulkan.tar.gz" $(find lib -name "libGL.so" -o -name "*GL*.so*" 2>/dev/null) 2>/dev/null || true
         fi
         
         # 移动回工作目录
