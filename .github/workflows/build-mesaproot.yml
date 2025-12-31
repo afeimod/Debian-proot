@@ -214,8 +214,6 @@ jobs:
           -Dandroid-libbacktrace=disabled \
           -Dandroid-stub=true \
           -Dinstall-intel-gpu-tests=false \
-          -Dgallium-opencl=disabled \
-          -Dmicrosoft-clc=disabled \
           -Dgallium-rusticl=false \
           -Dgallium-rusticl-enable-drivers=freedreno
         
