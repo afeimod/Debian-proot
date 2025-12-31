@@ -205,9 +205,6 @@ jobs:
           -Dlibunwind=disabled \
           -Dvalgrind=disabled \
           -Dgallium-drivers=zink,freedreno,llvmpipe,virgl,softpipe \
-          -Dgallium-omx=disabled \
-          -Dgallium-va=disabled \
-          -Dgallium-xa=disabled \
           -Dgallium-xvmc=disabled \
           -Dgallium-extra-hud=true \
           -Dvideo-codecs=all \
