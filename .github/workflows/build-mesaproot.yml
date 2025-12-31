@@ -4,10 +4,10 @@ name: Build Mesa for Proot (aarch64)
 on:
   workflow_dispatch:
     inputs:
-      mesa_branch:
-        description: 'Mesa 分支 (可选，默认为 adreno-main)'
+      mesa_version:
+        description: 'Mesa 版本/标签/提交 (例如: 24.1.0, main, 哈希)'
         required: false
-        default: 'adreno-main'
+        default: '24.1.0'
         type: string
       use_upstream:
         description: '是否使用上游官方 Mesa (而不是 lfdevs 的分支)'
@@ -31,17 +31,17 @@ jobs:
       run: |
         # 设置默认参数
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          echo "MESA_BRANCH=${{ github.event.inputs.mesa_branch }}" >> $GITHUB_ENV
+          echo "MESA_VERSION_INPUT=${{ github.event.inputs.mesa_version }}" >> $GITHUB_ENV
           echo "USE_UPSTREAM=${{ github.event.inputs.use_upstream }}" >> $GITHUB_ENV
         else
-          echo "MESA_BRANCH=adreno-main" >> $GITHUB_ENV
+          echo "MESA_VERSION_INPUT=24.1.0" >> $GITHUB_ENV
           echo "USE_UPSTREAM=false" >> $GITHUB_ENV
         fi
         
         BUILD_DATE=$(date +%Y%m%d)
         echo "BUILD_DATE=$BUILD_DATE" >> $GITHUB_ENV
         
-        echo "使用的 Mesa 分支: $MESA_BRANCH"
+        echo "输入的 Mesa 版本: $MESA_VERSION_INPUT"
         echo "是否使用上游: $USE_UPSTREAM"
         echo "构建日期: $BUILD_DATE"
 
@@ -59,16 +59,17 @@ jobs:
       run: |
         sudo sed -i "s/^Types: deb$/Types: deb deb-src/" /etc/apt/sources.list.d/ubuntu.sources
         sudo apt update
-        sudo apt install -y glslang-tools libxrandr-dev libxxf86vm-dev libxcb-shm0-dev libxcb-glx0-dev \
-            libxext-dev llvm-19 libx11-dev libx11-xcb-dev libxcb1-dev libxcb-dri3-dev libxcb-present-dev \
-            libxcb-randr0-dev libxcb-sync-dev libxcb-xfixes0-dev libxshmfence-dev libdrm-dev \
-            libgbm-dev libegl1-mesa-dev libexpat1-dev libwayland-dev python3-pip \
-            python3-setuptools python3-wheel ninja-build
+        sudo apt install -y build-essential glslang-tools libxrandr-dev libxxf86vm-dev libxcb-shm0-dev \
+            libxcb-glx0-dev libxext-dev llvm-19 libx11-dev libx11-xcb-dev libxcb1-dev libxcb-dri3-dev \
+            libxcb-present-dev libxcb-randr0-dev libxcb-sync-dev libxcb-xfixes0-dev libxshmfence-dev \
+            libdrm-dev libgbm-dev libegl1-mesa-dev libexpat1-dev libwayland-dev python3-pip \
+            python3-setuptools python3-wheel ninja-build flex bison libpthread-stubs0-dev \
+            libunwind-dev libvulkan-dev libzstd-dev libelf-dev libudev-dev libsensors-dev \
+            libcap-dev gettext
 
     - name: 安装 Python 构建工具
       run: |
         # 使用系统级的 pip 安装，避免用户级安装的路径问题
-        #sudo pip3 install --upgrade pip
         sudo pip3 install meson mako
         
         # 验证安装
@@ -85,17 +86,44 @@ jobs:
         
         if [ "$USE_UPSTREAM" = "true" ]; then
           echo "使用上游官方 Mesa 仓库"
-          git clone https://gitlab.freedesktop.org/mesa/mesa.git
-          cd mesa
+          MESA_REPO="https://gitlab.freedesktop.org/mesa/mesa.git"
         else
           echo "使用 lfdevs 的 Mesa for Android Container 仓库"
-          git clone https://github.com/lfdevs/mesa-for-android-container.git mesa
-          cd mesa
-          
-          # 检出指定分支
-          if [ -n "$MESA_BRANCH" ] && [ "$MESA_BRANCH" != "main" ]; then
-            echo "检出分支: $MESA_BRANCH"
-            git checkout $MESA_BRANCH
+          MESA_REPO="https://github.com/lfdevs/mesa-for-android-container.git"
+        fi
+        
+        git clone --depth 1 $MESA_REPO mesa
+        cd mesa
+        
+        # 检出指定的版本/标签/提交
+        if [ "$USE_UPSTREAM" = "true" ]; then
+          # 上游仓库：查找标签或分支
+          if git tag -l | grep -q "^$MESA_VERSION_INPUT$"; then
+            echo "检出标签: $MESA_VERSION_INPUT"
+            git fetch --depth 1 origin tag "$MESA_VERSION_INPUT"
+            git checkout -b build "$MESA_VERSION_INPUT"
+          elif git ls-remote --heads origin "$MESA_VERSION_INPUT" | grep -q "$MESA_VERSION_INPUT"; then
+            echo "检出分支: $MESA_VERSION_INPUT"
+            git fetch --depth 1 origin "$MESA_VERSION_INPUT"
+            git checkout -b build "$MESA_VERSION_INPUT"
+          else
+            echo "未找到标签或分支 $MESA_VERSION_INPUT，使用默认分支"
+            # 尝试作为提交哈希
+            if git rev-parse --verify "$MESA_VERSION_INPUT" 2>/dev/null; then
+              echo "检出提交: $MESA_VERSION_INPUT"
+              git checkout "$MESA_VERSION_INPUT"
+            fi
+          fi
+        else
+          # lfdevs仓库：只处理分支
+          if [ -n "$MESA_VERSION_INPUT" ] && [ "$MESA_VERSION_INPUT" != "main" ]; then
+            echo "尝试检出分支: $MESA_VERSION_INPUT"
+            if git ls-remote --heads origin "$MESA_VERSION_INPUT" | grep -q "$MESA_VERSION_INPUT"; then
+              git fetch --depth 1 origin "$MESA_VERSION_INPUT"
+              git checkout -b build "$MESA_VERSION_INPUT"
+            else
+              echo "分支 $MESA_VERSION_INPUT 不存在，使用默认分支"
+            fi
           fi
         fi
         
@@ -104,17 +132,26 @@ jobs:
         if [ -f "VERSION" ]; then
           OFFICIAL_VERSION=$(cat VERSION)
         else
-          OFFICIAL_VERSION="git-$GIT_HASH"
+          OFFICIAL_VERSION=$(git describe --tags --always 2>/dev/null || echo "git-$GIT_HASH")
+        fi
+        
+        # 如果用户指定了版本，使用用户指定的版本作为包名的一部分
+        if [ "$MESA_VERSION_INPUT" != "24.1.0" ]; then
+          PACKAGE_VERSION="$MESA_VERSION_INPUT-$GIT_HASH"
+        else
+          PACKAGE_VERSION="$OFFICIAL_VERSION"
         fi
         
         GIT_DESCRIBE=$(git describe --tags --always 2>/dev/null || echo "custom-$GIT_HASH")
         
         echo "MESA_GIT_HASH=$GIT_HASH" >> $GITHUB_ENV
         echo "MESA_VERSION=$OFFICIAL_VERSION" >> $GITHUB_ENV
+        echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
         echo "GIT_DESCRIBE=$GIT_DESCRIBE" >> $GITHUB_ENV
         
         echo "✅ 源码克隆完成"
         echo "版本: $OFFICIAL_VERSION"
+        echo "包版本: $PACKAGE_VERSION"
         echo "提交: $GIT_HASH"
         echo "描述: $GIT_DESCRIBE"
         echo "分支: $(git branch --show-current)"
@@ -141,6 +178,7 @@ jobs:
         ninja --version
         
         # 配置构建选项
+        # 特别注意：添加 freedreno-kmds=kgsl,msm 并启用相关选项
         meson setup builddir \
           --libdir=lib \
           -Dprefix=/opt/mesa \
@@ -156,28 +194,36 @@ jobs:
           -Dopengl=true \
           -Dgles1=enabled \
           -Dgles2=enabled \
-          -Dglvnd=disabled \
+          -Dglvnd=false \
           -Degl=enabled \
-          -Dllvm=enabled \
-          -Dshared-llvm=enabled \
           -Dshader-cache=enabled \
           -Dshared-glapi=enabled \
+          -Dllvm=enabled \
+          -Dshared-llvm=enabled \
           -Dxlib-lease=enabled \
-          -Dvulkan-beta=true \
+          -Dvulkan-drivers=freedreno,swrast \
+          -Dfreedreno-kmds=kgsl,msm \
           -Dlibunwind=disabled \
           -Dvalgrind=disabled \
+          -Dgallium-drivers=zink,freedreno,llvmpipe,virgl,softpipe \
+          -Dgallium-nine=false \
+          -Dgallium-omx=disabled \
+          -Dgallium-va=disabled \
+          -Dgallium-xa=disabled \
+          -Dgallium-xvmc=disabled \
+          -Dgallium-extra-hud=true \
+          -Dvideo-codecs=all \
+          -Dtools=drm-shim,freedreno \
+          -Dgbm=enabled \
+          -Dlmsensors=disabled \
+          -Dpower8=disabled \
+          -Dandroid-libbacktrace=disabled \
+          -Dandroid-stub=true \
+          -Dinstall-intel-gpu-tests=false \
+          -Dgallium-opencl=disabled \
           -Dmicrosoft-clc=disabled \
           -Dgallium-rusticl=false \
-          -Dgallium-extra-hud=true \
-          -Dgallium-drivers=zink,freedreno,llvmpipe,virgl \
-          -Dgallium-rusticl-enable-drivers=freedreno \
-          -Dshader-cache-default=true \
-          -Dvulkan-drivers=freedreno,swrast \
-          -Dfreedreno-kmds=msm,kgsl \
-          -Dvideo-codecs=all \
-          -Dmediafoundation-codecs=all \
-          -Dgbm=enabled \
-          -Dtools=drm-shim,freedreno
+          -Dgallium-rusticl-enable-drivers=freedreno
         
         # 检查配置状态
         echo "配置状态检查:"
@@ -190,6 +236,21 @@ jobs:
         echo "📦 正在安装..."
         sudo ninja -C builddir install
         
+        # 确保 gallium-pipe 目录存在并包含必要的文件
+        echo "确保 gallium-pipe 目录结构..."
+        sudo mkdir -p /opt/mesa/lib/gallium-pipe
+        if [ -d "builddir/src/gallium/targets/pipe-loader" ]; then
+          echo "复制 pipe-loader 文件..."
+          sudo cp -f builddir/src/gallium/targets/pipe-loader/*.so /opt/mesa/lib/gallium-pipe/ 2>/dev/null || true
+        fi
+        
+        # 确保 kgsl 相关的驱动存在
+        echo "检查 freedreno 驱动..."
+        if [ -d "/opt/mesa/lib/dri" ]; then
+          echo "已安装的 DRI 驱动:"
+          ls -la /opt/mesa/lib/dri/ || true
+        fi
+        
         BUILD_END=$(date +%s)
         BUILD_TIME=$((BUILD_END - BUILD_START))
         echo "✅ 构建完成，耗时: ${BUILD_TIME}秒"
@@ -197,35 +258,46 @@ jobs:
         # 验证安装
         echo "安装验证:"
         ls -la /opt/mesa/
+        echo "lib 目录:"
         ls -la /opt/mesa/lib/ 2>/dev/null || true
+        echo "gallium-pipe 目录:"
+        ls -la /opt/mesa/lib/gallium-pipe/ 2>/dev/null || true
 
     - name: 打包构建产物
       run: |
         echo "📦 开始打包..."
         
         # 创建版本化的包名
-        PACKAGE_NAME="proot-mesa-${MESA_VERSION}-aarch64"
+        PACKAGE_NAME="proot-mesa-${PACKAGE_VERSION}-aarch64"
         
         # 打包完整安装目录
         cd /opt
         tar -czvf "${HOME}/${PACKAGE_NAME}-full.tar.gz" mesa/
         
-        # 仅打包 Vulkan 驱动（可选）
+        # 创建仅包含关键文件的轻量包
         cd /opt/mesa
+        mkdir -p /tmp/mesa-light/{lib,share}
+        
+        # 复制库文件
         if [ -d "lib" ]; then
-          # 查找并打包所有 Vulkan 驱动
-          find lib -name "libvulkan_*.so" -o -name "*vulkan*.so*" 2>/dev/null | while read -r file; do
-            echo "找到 Vulkan 驱动: $file"
-          done
-          tar -czvf "${HOME}/${PACKAGE_NAME}-vulkan.tar.gz" $(find lib -name "libvulkan_*.so" -o -name "*vulkan*.so*" 2>/dev/null) 2>/dev/null || true
+          cp -r lib/* /tmp/mesa-light/lib/ 2>/dev/null || true
         fi
+        
+        # 复制必要的共享文件
+        if [ -d "share" ]; then
+          cp -r share/glvnd /tmp/mesa-light/share/ 2>/dev/null || true
+          cp -r share/drirc.d /tmp/mesa-light/share/ 2>/dev/null || true
+          cp -r share/vulkan /tmp/mesa-light/share/ 2>/dev/null || true
+        fi
+        
+        # 打包轻量版
+        cd /tmp
+        tar -czvf "${HOME}/${PACKAGE_NAME}-light.tar.gz" mesa-light/
         
         # 移动回工作目录
         cd $GITHUB_WORKSPACE
         mv "${HOME}/${PACKAGE_NAME}-full.tar.gz" .
-        if [ -f "${HOME}/${PACKAGE_NAME}-vulkan.tar.gz" ]; then
-          mv "${HOME}/${PACKAGE_NAME}-vulkan.tar.gz" .
-        fi
+        mv "${HOME}/${PACKAGE_NAME}-light.tar.gz" .
         
         # 生成校验和
         sha256sum ${PACKAGE_NAME}-*.tar.gz > checksums.txt
@@ -233,6 +305,7 @@ jobs:
         # 设置输出变量
         echo "PACKAGE_NAME=${PACKAGE_NAME}" >> $GITHUB_ENV
         echo "FULL_PACKAGE=${PACKAGE_NAME}-full.tar.gz" >> $GITHUB_ENV
+        echo "LIGHT_PACKAGE=${PACKAGE_NAME}-light.tar.gz" >> $GITHUB_ENV
         
         echo "📦 打包完成:"
         ls -lh *.tar.gz
@@ -240,7 +313,7 @@ jobs:
     - name: 上传构建产物
       uses: actions/upload-artifact@v4
       with:
-        name: proot-mesa-${{ env.MESA_VERSION }}-aarch64
+        name: proot-mesa-${{ env.PACKAGE_VERSION }}-aarch64
         path: |
           ${{ env.PACKAGE_NAME }}-*.tar.gz
           checksums.txt
@@ -249,36 +322,48 @@ jobs:
       uses: softprops/action-gh-release@v1
       if: ${{ github.event_name == 'workflow_dispatch' }}
       with:
-        tag_name: proot-mesa-${{ env.MESA_VERSION }}-${{ env.BUILD_DATE }}
-        name: Mesa Proot ${{ env.MESA_VERSION }} (aarch64)
+        tag_name: proot-mesa-${{ env.PACKAGE_VERSION }}-${{ env.BUILD_DATE }}
+        name: Mesa Proot ${{ env.PACKAGE_VERSION }} (aarch64)
         body: |
           Mesa 3D Graphics Library for Termux Proot (glibc) on aarch64
           
           构建信息:
           - **版本**: ${{ env.MESA_VERSION }}
+          - **包版本**: ${{ env.PACKAGE_VERSION }}
           - **Git 描述**: ${{ env.GIT_DESCRIBE }}
           - **提交哈希**: ${{ env.MESA_GIT_HASH }}
           - **构建日期**: ${{ env.BUILD_DATE }}
-          - **分支**: ${{ env.MESA_BRANCH }}
+          - **输入版本**: ${{ env.MESA_VERSION_INPUT }}
           - **仓库**: $(if [ "${{ env.USE_UPSTREAM }}" = "true" ]; then echo "上游官方"; else echo "lfdevs/android-container"; fi)
           
           包含文件:
-          - `${{ env.FULL_PACKAGE }}` - 完整 Mesa 安装包
-          - `*-vulkan.tar.gz` - 仅 Vulkan 驱动 (可选)
+          - `${{ env.FULL_PACKAGE }}` - 完整 Mesa 安装包 (包含所有开发文件)
+          - `${{ env.LIGHT_PACKAGE }}` - 轻量版安装包 (仅运行时文件)
           - `checksums.txt` - 校验和文件
+          
+          驱动支持:
+          - ✅ Freedreno with KGSL support
+          - ✅ Zink (OpenGL on Vulkan)
+          - ✅ LLVMPIPE (软件渲染)
+          - ✅ VirGL (虚拟化)
+          - ✅ Vulkan: freedreno, swrast
+          - ✅ 包含 gallium-pipe 目录
           
           安装说明:
           1. 下载完整的 tar.gz 包
           2. 在 Proot 环境中解压到根目录: `tar -xzf package.tar.gz -C /`
-          3. 或者解压到自定义目录并设置环境变量:
+          3. 设置环境变量:
              ```bash
-             export LD_LIBRARY_PATH=/path/to/mesa/lib:$LD_LIBRARY_PATH
-             export LIBGL_DRIVERS_PATH=/path/to/mesa/lib/dri
+             export LD_LIBRARY_PATH=/opt/mesa/lib:$LD_LIBRARY_PATH
+             export LIBGL_DRIVERS_PATH=/opt/mesa/lib/dri
+             export VK_ICD_FILENAMES=/opt/mesa/share/vulkan/icd.d/freedreno_icd.aarch64.json
+             export GALLIUM_DRIVER_DIR=/opt/mesa/lib/gallium-pipe
              ```
           
           注意:
           - 需要 Termux 的 glibc 环境 (如 proot-distro 的 Ubuntu/Debian)
           - 推荐在 Proot 容器中使用
+          - 包含 KGSL 支持，适用于 Android 内核
         files: |
           ${{ env.PACKAGE_NAME }}-*.tar.gz
           checksums.txt
@@ -292,9 +377,10 @@ jobs:
         echo "✅ Mesa Proot 构建完成!"
         echo "================================"
         echo "版本: $MESA_VERSION"
+        echo "包版本: $PACKAGE_VERSION"
         echo "提交: $MESA_GIT_HASH"
         echo "构建日期: $BUILD_DATE"
-        echo "分支: $MESA_BRANCH"
+        echo "输入版本: $MESA_VERSION_INPUT"
         echo "目标架构: aarch64"
         echo "环境: Termux Proot (glibc)"
         echo ""
@@ -304,7 +390,13 @@ jobs:
         done
         echo ""
         echo "驱动支持:"
-        echo "  ✓ Gallium: zink, freedreno, llvmpipe, softpipe"
-        echo "  ✓ Vulkan: freedreno, swrast"
-        echo "  ✓ OpenGL, OpenGL ES 1.x/2.x"
-        echo "  ✓ EGL, GBM"
+        echo "  ✅ Gallium: zink, freedreno (with KGSL), llvmpipe, virgl"
+        echo "  ✅ Vulkan: freedreno, swrast"
+        echo "  ✅ OpenGL, OpenGL ES 1.x/2.x"
+        echo "  ✅ EGL, GBM"
+        echo "  ✅ gallium-pipe 目录: $(ls -d /opt/mesa/lib/gallium-pipe 2>/dev/null && echo '存在' || echo '缺失')"
+        echo ""
+        echo "重要修复:"
+        echo "  ✓ 支持 KGSL (Android 内核)"
+        echo "  ✓ 包含 gallium-pipe 目录"
+        echo "  ✓ 正确版本控制"
