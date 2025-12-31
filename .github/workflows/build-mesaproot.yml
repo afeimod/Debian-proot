@@ -7,7 +7,7 @@ on:
       mesa_version:
         description: 'Mesa 版本/标签/提交 (例如: 24.1.0, main, 哈希)'
         required: false
-        default: '24.1.0'
+        default: 'adreno-main'
         type: string
       use_upstream:
         description: '是否使用上游官方 Mesa (而不是 lfdevs 的分支)'
@@ -194,10 +194,9 @@ jobs:
           -Dopengl=true \
           -Dgles1=enabled \
           -Dgles2=enabled \
-          -Dglvnd=false \
+          -Dglvnd=disabled \
           -Degl=enabled \
           -Dshader-cache=enabled \
-          -Dshared-glapi=enabled \
           -Dllvm=enabled \
           -Dshared-llvm=enabled \
           -Dxlib-lease=enabled \
@@ -206,7 +205,6 @@ jobs:
           -Dlibunwind=disabled \
           -Dvalgrind=disabled \
           -Dgallium-drivers=zink,freedreno,llvmpipe,virgl,softpipe \
-          -Dgallium-nine=false \
           -Dgallium-omx=disabled \
           -Dgallium-va=disabled \
           -Dgallium-xa=disabled \
