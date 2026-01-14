@@ -72,8 +72,8 @@ jobs:
         sudo sed -i "s/^Types: deb$/Types: deb deb-src/" /etc/apt/sources.list.d/ubuntu.sources
         sudo apt update
         sudo apt install -y build-essential glslang-tools libxrandr-dev libxxf86vm-dev libxcb-shm0-dev \
-            libxcb-glx0-dev libxext-dev llvm-19 libx11-dev libx11-xcb-dev libxcb1-dev libxcb-dri3-dev \
-            libxcb-present-dev libxcb-randr0-dev libxcb-sync-dev libxcb-xfixes0-dev libxshmfence-dev \
+            libxcb-glx0-dev libxcb-xfixes0-dev libxext-dev llvm-19 libx11-dev libx11-xcb-dev libxcb1-dev libxcb-dri3-dev \
+            libxcb-present-dev libxcb-randr0-dev libxcb-sync-dev libxshmfence-dev \
             libdrm-dev libgbm-dev libegl1-mesa-dev libexpat1-dev libwayland-dev python3-pip \
             python3-setuptools python3-wheel ninja-build flex bison libpthread-stubs0-dev \
             libunwind-dev libvulkan-dev libzstd-dev libelf-dev libudev-dev libsensors-dev \
@@ -109,24 +109,30 @@ jobs:
         cd mesa
         
         # 根据构建类型确定版本
-        if [ "$BUILD_TYPE" = "custom" ] && [ -n "$MESA_VERSION_INPUT" ]; then
-          echo "使用自定义版本: $MESA_VERSION_INPUT"
-          VERSION_TO_USE="$MESA_VERSION_INPUT"
-        elif [ "$BUILD_TYPE" = "stable" ]; then
-          echo "获取最新稳定版标签..."
-          if [ "$USE_UPSTREAM" = "true" ]; then
+        if [ "$USE_UPSTREAM" = "true" ]; then
+          # 上游官方仓库的版本选择逻辑
+          if [ "$BUILD_TYPE" = "custom" ] && [ -n "$MESA_VERSION_INPUT" ]; then
+            echo "使用自定义版本: $MESA_VERSION_INPUT"
+            VERSION_TO_USE="$MESA_VERSION_INPUT"
+          elif [ "$BUILD_TYPE" = "stable" ]; then
+            echo "获取最新稳定版标签..."
             # 获取最新稳定标签
             git fetch --depth 1 --tags
             LATEST_TAG=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "24.1.0")
             VERSION_TO_USE="$LATEST_TAG"
           else
-            # lfdevs 仓库可能没有标签，使用 main 分支
-            echo "lfdevs 仓库使用 main 分支"
+            echo "使用开发版 (main 分支)"
             VERSION_TO_USE="main"
           fi
         else
-          echo "使用开发版 (main 分支)"
-          VERSION_TO_USE="main"
+          # lfdevs 仓库的版本选择逻辑 - 默认使用 adreno-main 分支
+          if [ "$BUILD_TYPE" = "custom" ] && [ -n "$MESA_VERSION_INPUT" ]; then
+            echo "使用自定义版本: $MESA_VERSION_INPUT"
+            VERSION_TO_USE="$MESA_VERSION_INPUT"
+          else
+            echo "lfdevs 仓库使用默认分支 adreno-main"
+            VERSION_TO_USE="adreno-main"
+          fi
         fi
         
         echo "最终使用的版本: $VERSION_TO_USE"
@@ -154,18 +160,20 @@ jobs:
           fi
         else
           # lfdevs仓库：只处理分支
-          if [ -n "$VERSION_TO_USE" ] && [ "$VERSION_TO_USE" != "main" ]; then
+          if [ -n "$VERSION_TO_USE" ]; then
             echo "尝试检出分支: $VERSION_TO_USE"
             if git ls-remote --heads origin "$VERSION_TO_USE" | grep -q "$VERSION_TO_USE"; then
               git fetch --depth 1 origin "$VERSION_TO_USE"
               git checkout -b build "$VERSION_TO_USE"
             else
-              echo "分支 $VERSION_TO_USE 不存在，使用默认分支"
-              git checkout main
+              echo "分支 $VERSION_TO_USE 不存在，使用默认分支 adreno-main"
+              git checkout adreno-main
+              VERSION_TO_USE="adreno-main"
             fi
           else
-            echo "检出 main 分支"
-            git checkout main
+            echo "检出默认分支 adreno-main"
+            git checkout adreno-main
+            VERSION_TO_USE="adreno-main"
           fi
         fi
         
@@ -213,6 +221,7 @@ jobs:
         echo "描述: $GIT_DESCRIBE"
         echo "分支: $(git branch --show-current)"
         echo "构建类型: $BUILD_TYPE"
+        echo "使用的仓库: $(if [ "$USE_UPSTREAM" = "true" ]; then echo "上游官方"; else echo "lfdevs/android-container"; fi)"
 
     - name: 构建 Mesa
       run: |
@@ -432,6 +441,7 @@ jobs:
         echo "使用的版本: $VERSION_TO_USE"
         echo "目标架构: aarch64"
         echo "环境: Termux Proot (glibc)"
+        echo "使用的仓库: $(if [ "$USE_UPSTREAM" = "true" ]; then echo "上游官方"; else echo "lfdevs/android-container"; fi)"
         echo ""
         echo "📦 生成的文件:"
         ls -1 *.tar.gz | while read file; do
