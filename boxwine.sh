@@ -3,20 +3,23 @@
 #时间：2024年4月26日
 #描述：帮助小白朋友们快速在容器里面配置box86/box64和wine这三种组件实现运行windows程序。
 
+set -euo pipefail
+shopt -s failglob
+
 function tips() {
-    printf "\e[97m%s\n\e[0m" "$@"
+    printf "\e[97m$@\n\e[0m"
     return 0
 }
 function err() {
-    printf "\e[91m%s\n\e[0m" "$@"
+    printf "\e[91m$@\n\e[0m"
     exit 1
 }
 
 function detect_chroot_00() {
   if [ -d /proc/1/root ]; then
     INITROOTINODE=$(stat -c %i /proc/1/root)
-    PPROOTINODE=$(stat -c %i /proc/$PPID/root)
-    if [ $INITROOTINODE -ne $PPROOTINODE ]; then
+    PROOTROOTINODE=$(stat -c %i /proc/$PPID/root)
+    if [ $INITROOTINODE -ne $PROOTROOTINODE ]; then
       return 0
     else
       return 1
@@ -87,18 +90,63 @@ function check_additional_dependences() {
   done
 }
 
+function parse_argument() {
+	POS_ARGS=$(getopt -n "${0}" -l "wine:,help::" -o "wv:,h::" -- "$@")
+	eval set -- "$POS_ARGS"
+	while true; do
+		case "$1" in
+			--wine|-wv)
+				if ! [ -z $2 ];then
+					WINEVER="$2"
+				else
+					err "你必须指定一个版本！"
+				fi
+				shift 2
+				break
+				;;
+			--help|-h) 
+				tips "Usage: $0 [options] ..."
+				tips "可用选项如下："
+				tips "\t-h/--help 显示帮助信息"
+				tips "\t-wv/--wine 指定要安装的wine版本"
+				exit 1
+				;;
+			""|--) 
+				WINEVER="9.9"
+				tips "默认安装wine9.9，是否继续？[y/n]"
+				read -n1 opt
+				case "$opt" in
+					[yY]) ;;
+					[nN])
+						$0 --help
+						exit 1
+						;;
+					*)
+						$0 --help
+						exit 1
+						;;
+				esac
+				;;
+			*)
+				err "未知参数"
+				$0 --help
+				;;
+		esac
+	done
+	return
+}
 function install_wine() {
-    tips "正在安装传统wine 9.7 staging（需要cpu支持32位指令集）..."
+    tips "正在安装传统wine $WINEVER staging（需要cpu支持32位指令集）..."
     {
         cd /tmp/
-        wget https://github.com/Kron4ek/Wine-Builds/releases/download/9.7/wine-9.7-staging-amd64.tar.xz
-        tar -Jpxf wine-9.7-staging-amd64.tar.xz -C /opt/
+        wget https://github.com/Kron4ek/Wine-Builds/releases/download/$WINEVER/wine-$WINEVER-staging-amd64.tar.xz
+        tar -Jpxf wine-$WINEVER-staging-amd64.tar.xz -C /opt/
         tips "正在设置环境变量..."
       cat >> /etc/profile <<EOF
-export BOX86_PATH=/opt/wine-9.7-staging-amd64/bin
-export BOX86_LD_LIBRARY_PATH=/opt/wine-9.7-staging-amd64/lib/wine/i386-unix
-export BOX64_PATH=/opt/wine-9.7-staging-amd64/bin
-export BOX64_LD_LIBRARY_PATH=/opt/wine-9.7-staging-amd64/lib/wine/x86_64-unix
+export BOX86_PATH=/opt/wine-$WINEVER-staging-amd64/bin
+export BOX86_LD_LIBRARY_PATH=/opt/wine-$WINEVER-staging-amd64/lib/wine/i386-unix
+export BOX64_PATH=/opt/wine-$WINEVER-staging-amd64/bin
+export BOX64_LD_LIBRARY_PATH=/opt/wine-$WINEVER-staging-amd64/lib/wine/x86_64-unix
 EOF
         source /etc/profile
     } || err "无法安装wine！"
@@ -116,7 +164,7 @@ function show_versions() {
 }
 function boot_wine() {
     tips "正在创建wine容器，这需要一点时间..."
-    WINEDLLOVERRIDES="mscoree,mshtml=disabled" box64 wine64 wineboot || err "无法创建wiwineboot"
+    WINEDLLOVERRIDES="mscoree,mshtml=disabled" box64 wine64 wineboot || { err "无法创建wine容器" ; rm -rf ~/.wine ;}
 }
 
 function guide_to_start() {
@@ -133,6 +181,7 @@ function final_words() {
 
 function main() {
     detect_chroot_01
+    parse_argument "$@"
     is_root_and_check_distro
     check_dependences
     check_additional_dependences  # 调用新的函数
@@ -144,3 +193,4 @@ function main() {
     final_words
     exit 0
 }
+main "$@"
