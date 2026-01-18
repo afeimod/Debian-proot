@@ -1,5 +1,5 @@
-# build-mesa.yml
-name: Build Mesa for Linbox (aarch64)
+# build-mesaproot.yml
+name: Build Mesa for proot (aarch64)
 
 on:
   workflow_dispatch:
