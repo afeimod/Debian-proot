@@ -248,11 +248,12 @@ jobs:
         # 特别注意：添加 freedreno-kmds=kgsl,msm 并启用相关选项
         meson setup builddir \
           --libdir=lib \
-          -Dprefix=/opt/mesa \
+          -Dprefix=/data/data/com.termux/files/usr/glibc \
           -Dbuildtype=release \
           -Doptimization=3 \
           -Dcpp_args="-O3 -march=native -mtune=native" \
           -Dc_args="-O3 -march=native -mtune=native" \
+          -Db_lto=true \
           -Dplatforms=x11 \
           -Degl-native-platform=x11 \
           -Dglx=dri \
@@ -262,23 +263,26 @@ jobs:
           -Dgles2=enabled \
           -Dglvnd=disabled \
           -Degl=enabled \
-          -Dshader-cache=enabled \
           -Dllvm=enabled \
           -Dshared-llvm=enabled \
+          -Dshader-cache=enabled \
+          -Dshared-glapi=enabled \
           -Dxlib-lease=enabled \
-          -Dvulkan-drivers=freedreno,swrast \
-          -Dfreedreno-kmds=kgsl,msm \
+          -Dvulkan-beta=true \
           -Dlibunwind=disabled \
           -Dvalgrind=disabled \
-          -Dgallium-drivers=zink,freedreno,llvmpipe,virgl,softpipe \
-          -Dgallium-extra-hud=true \
-          -Dvideo-codecs=all \
-          -Dtools=drm-shim,freedreno \
-          -Dgbm=enabled \
-          -Dlmsensors=disabled \
-          -Dpower8=disabled \
+          -Dmicrosoft-clc=disabled \
           -Dgallium-rusticl=false \
-          -Dgallium-rusticl-enable-drivers=freedreno
+          -Dgallium-extra-hud=true \
+          -Dgallium-drivers=zink,freedreno,llvmpipe,softpipe \
+          -Dgallium-rusticl-enable-drivers=freedreno \
+          -Dshader-cache-default=true \
+          -Dvulkan-drivers=freedreno,swrast \
+          -Dfreedreno-kmds=msm,kgsl \
+          -Dvideo-codecs=all \
+          -Dmediafoundation-codecs=all \
+          -Dgbm=enabled \
+          -Dtools=drm-shim,freedreno
         
         # 检查配置状态
         echo "配置状态检查:"
