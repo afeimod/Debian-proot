@@ -207,8 +207,8 @@ jobs:
         PACKAGE_NAME="prootmesa-${MESA_VERSION}-aarch64"
         
         # 打包完整安装目录
-        cd /data/data/com.termux/files/usr/
-        tar -czvf "${HOME}/${PACKAGE_NAME}-full.tar.gz" opt
+        cd /opt
+        tar -czvf "${HOME}/${PACKAGE_NAME}-full.tar.gz" opt/mesa
         
         # 仅打包 Vulkan 驱动（可选）
         cd /opt/mesa
