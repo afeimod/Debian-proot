@@ -1,0 +1,249 @@
+name: Build MangoHud (aarch64)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_ref:
+        description: '版本号/标签/提交哈希 (例如: v0.7.0, master, 或 commit hash)'
+        required: true
+        default: 'master'
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  REPO_URL: https://github.com/flightlessmango/MangoHud.git
+
+jobs:
+  build: 
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      # 🧩 检出当前仓库
+      - name: Checkout workflow repository
+        uses: actions/checkout@v4
+
+      # 🧭 克隆指定版本的 MangoHud 源码
+      - name: Clone MangoHud source
+        run: |
+          git clone --depth=1 --branch ${{ inputs.version_ref }} $REPO_URL MangoHud || \
+          git clone --depth=1 $REPO_URL MangoHud
+          cd MangoHud
+          git checkout ${{ inputs.version_ref }} || echo "使用默认分支"
+
+      # 🔖 获取源码版本信息
+      - name: 获取源码版本信息
+        id: get_version
+        run: |
+          cd MangoHud
+          # 尝试获取标签
+          if git describe --tags --abbrev=0 >/dev/null 2>&1; then
+            VERSION=$(git describe --tags --abbrev=0)
+          else
+            VERSION="dev-$(git rev-parse --short HEAD)"
+          fi
+          
+          AUTHOR=$(git log -1 --pretty=format:'%an')
+          COMMIT=$(git rev-parse HEAD)
+          COMMIT_SHORT=$(git rev-parse --short HEAD)
+          BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          DATE=$(date '+%Y-%m-%d %H:%M:%S UTC')
+          
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "AUTHOR=$AUTHOR" >> $GITHUB_ENV
+          echo "COMMIT=$COMMIT" >> $GITHUB_ENV
+          echo "COMMIT_SHORT=$COMMIT_SHORT" >> $GITHUB_ENV
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+          echo "BUILD_TIME=$DATE" >> $GITHUB_ENV
+          echo "INPUT_VERSION=${{ inputs.version_ref }}" >> $GITHUB_ENV
+          
+          echo "✅ 构建信息:"
+          echo "📦 版本: $VERSION"
+          echo "🌿 分支/标签: $BRANCH"
+          echo "🔖 提交: $COMMIT_SHORT"
+          echo "👤 作者: $AUTHOR"
+          echo "🎯 输入版本: ${{ inputs.version_ref }}"
+          echo "🕓 构建时间: $DATE"
+
+      - name: 修复依赖
+        run: |
+          sudo apt clean
+          sudo apt autoclean
+          sudo rm -rf /var/lib/apt/lists/*
+          sudo apt update
+          sudo rm /var/lib/apt/lists/lock
+          sudo rm /var/cache/apt/archives/lock
+
+      # 📦 安装依赖
+      - name: 安装基础依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential glslang-tools python3-pip git \
+            pkg-config meson libdbus-1-dev libx11-dev \
+            libxext-dev libxrandr-dev libxinerama-dev \
+            libxdamage-dev libxfixes-dev libdrm-dev \
+            libgl1-mesa-dev libwayland-dev libxkbcommon-dev patchelf
+
+      # 🛠️ 升级 Meson/Ninja
+      - name: 升级 Meson 和 Ninja
+        run: |
+          pip install --upgrade pip
+          pip install --upgrade meson ninja mako
+          meson --version
+          ninja --version
+
+      # ⚙️ 应用 Termux 无 root CPU 频率补丁
+      - name: 应用 Termux 无 root CPU 频率补丁
+        run: |
+          cd MangoHud
+          SRC_FILE="src/sysinfo/linux.cpp"
+          if [ -f "$SRC_FILE" ]; then
+            echo "🔧 应用 CPU 频率检测修补..."
+            cp "$SRC_FILE" "${SRC_FILE}.bak"
+            awk '
+            BEGIN {in_func=0}
+            /^int get_cpu_freq\(int core\)/ {print; in_func=1; next}
+            in_func && /^\{/ {print; print "    int freq = 0; std::string path;"; next}
+            in_func && /return freq;/ {
+                print "    // 尝试 scaling_cur_freq"
+                print "    path = \"/sys/devices/system/cpu/cpu\" + std::to_string(core) + \"/cpufreq/scaling_cur_freq\";"
+                print "    { std::ifstream f(path); if(f.is_open()){ f >> freq; if(freq>0) return freq/1000; } }"
+                print ""
+                print "    // 尝试 cpuinfo_cur_freq"
+                print "    path = \"/sys/devices/system/cpu/cpu\" + std::to_string(core) + \"/cpufreq/cpuinfo_cur_freq\";"
+                print "    { std::ifstream f(path); if(f.is_open()){ f >> freq; if(freq>0) return freq/1000; } }"
+                print ""
+                print "    // 从 /proc/cpuinfo 读取 (非 root fallback)"
+                print "    {"
+                print "        std::ifstream cpuinfo(\"/proc/cpuinfo\");"
+                print "        if(cpuinfo.is_open()){"
+                print "            std::string line; int index=-1;"
+                print "            while(std::getline(cpuinfo,line)){"
+                print "                if(line.find(\"processor\")!=std::string::npos) index++;"
+                print "                if(index==core && line.find(\"cpu MHz\")!=std::string::npos){"
+                print "                    size_t pos=line.find(\":\");"
+                print "                    if(pos!=std::string::npos){"
+                print "                        std::istringstream iss(line.substr(pos+1));"
+                print "                        iss >> freq; if(freq>0) return (int)freq;"
+                print "                    }"
+                print "                }"
+                print "            }"
+                print "        }"
+                print "    }"
+                print ""
+                print "    // fallback 默认值"
+                print "    return 2000;"
+                in_func=0; next
+            }
+            {print}
+            ' "${SRC_FILE}.bak" > "$SRC_FILE"
+            echo "✅ CPU 频率检测补丁应用成功"
+          else
+            echo "⚠️ 未找到 $SRC_FILE"
+          fi
+
+      # 🏗️ 构建 MangoHud
+      - name: 构建 MangoHud (Termux glibc)
+        run: |
+          cd MangoHud
+          sudo mkdir -p /opt/mesa
+          sudo chmod -R 777 /opt
+          meson setup build \
+            --prefix=/opt/mesa \
+            --libdir=lib \
+            -Dbuildtype=release \
+            -Dwith_x11=enabled \
+            -Dwith_wayland=enabled \
+            -Dwith_xnvctrl=disabled \
+            -Dwith_dbus=enabled \
+            -Dmangoplot=enabled \
+            -Dmangoapp=false \
+            -Dmangohudctl=false \
+            -Dtests=disabled
+          ninja -C build -j$(nproc)
+          ninja -C build install
+
+      # 🔧 修正 $LIB 变量
+      - name: 修正 MangoHud 启动脚本
+        run: |
+          ROOT=/opt/mesa
+          if [ -f "$ROOT/bin/mangohud" ]; then
+            sed -i 's|/\\$LIB|/lib|g' "$ROOT/bin/mangohud"
+          fi
+
+      # 🧱 修补 ELF 解释器
+      - name: 修补 ELF 可执行文件
+        run: |
+          ROOT=/opt/mesa
+          INTERP=$ROOT/lib/ld-linux-aarch64.so.1
+          for dir in "$ROOT/bin" "$ROOT/lib"; do
+            [ -d "$dir" ] || continue
+            for f in "$dir"/*; do
+              if file "$f" | grep -q 'ELF'; then
+                patchelf --set-interpreter "$INTERP" "$f" || true
+              fi
+            done
+          done
+
+      # 📦 打包结果
+      - name: 打包构建产物
+        run: |
+          cd /opt/mesa
+          TAR_NAME="termux-mangohud-${{ env.VERSION }}-aarch64.tar.gz"
+          tar -czvf /home/runner/$TAR_NAME glibc
+          echo "TAR_NAME=$TAR_NAME" >> $GITHUB_ENV
+          echo "📦 打包完成: $TAR_NAME"
+
+      # ☁️ 上传产物
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.TAR_NAME }}
+          path: /home/runner/${{ env.TAR_NAME }}
+
+      # 🚀 发布 Release
+      - name: 发布到 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ env.VERSION }}-${{ env.COMMIT_SHORT }}
+          name: MangoHud ${{ env.VERSION }} (aarch64, Termux glibc)
+          body: |
+            ## MangoHud ${{ env.VERSION }} for Termux (aarch64 glibc)
+
+            ### 📋 构建信息
+            - **版本号**: `${{ env.VERSION }}`
+            - **构建来源**: `${{ env.INPUT_VERSION }}`
+            - **分支/标签**: `${{ env.BRANCH }}`
+            - **架构**: aarch64
+            - **环境**: Termux glibc
+            - **作者**: `${{ env.AUTHOR }}`
+            - **提交**: `${{ env.COMMIT_SHORT }}`
+            - **完整提交**: `${{ env.COMMIT }}`
+            - **构建时间**: `${{ env.BUILD_TIME }}`
+
+            ### 📦 文件信息
+            - **文件名**: `${{ env.TAR_NAME }}`
+            - **包含**: 完整的 MangoHud 安装文件
+
+            ### 🛠️ 构建特性
+            - ✅ 支持 X11
+            - ✅ 支持 Wayland
+            - ✅ 支持 DBus
+            - ✅ 启用 MangoPlot
+            - ✅ Termux 无 root CPU 频率检测补丁
+            - ❌ 禁用 XNVCtrl (NVIDIA GPU 统计)
+            - ❌ 禁用 MangoApp
+            - ❌ 禁用 MangoHudctl
+
+            ### 📥 使用方法
+            1. 下载并解压到 Termux 的 `/opt/mesa` 目录
+            2. 运行 `mangohud` 命令使用
+
+            ### 🔧 手动构建参数
+            - **请求版本**: `${{ inputs.version_ref }}`
+            - **触发时间**: `${{ github.event.workflow_dispatch.inputs.triggered_at }}`
+          files: /home/runner/${{ env.TAR_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
