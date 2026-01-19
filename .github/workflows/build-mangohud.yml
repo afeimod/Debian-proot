@@ -148,11 +148,11 @@ jobs:
       - name: 修复 Android 兼容性问题
         run: |
           cd MangoHud
-            rm /src/file_utils.cpp
-            rm /src/gpu.cpp
+            rm ./src/file_utils.cpp
+            rm ./src/gpu.cpp
             wget -O gpu.cpp https://github.com/afeimod/linbox/raw/main/path/gpu.cpp
             wget -O file_utils.cpp https://github.com/afeimod/linbox/raw/main/path/file_utils.cpp
-            cp *.cpp /src/
+            cp *.cpp ./src/
 
       # 🏗️ 构建 MangoHud
       - name: 构建 MangoHud (Termux)
