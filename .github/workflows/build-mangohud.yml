@@ -145,46 +145,18 @@ jobs:
           fi
 
       # 🔧 应用跳过 /sys/class/drm 访问补丁（使用补丁文件）
+      # 🔧 应用跳过 /sys/class/drm 访问补丁
       - name: 应用跳过 /sys/class/drm 访问补丁
         run: |
-            cd MangoHud
-            cat > termux_drm_fix.patch << 'EOF'
-            --- a/src/gpu.cpp
-            +++ b/src/gpu.cpp
-            @@ -1,4 +1,5 @@
-             #include "gpu.hpp"
-            +#include <ghc/filesystem.hpp>
-     
-             #include <fstream>
-             #include <regex>
-            @@ -84,6 +85,13 @@ std::vector<GPU> get_gpus() {
-                 std::vector<GPU> gpus;
-     
-                 // iterate /sys/class/drm for gpu info
-            +    try {
-                 for (const auto& entry : ghc::filesystem::directory_iterator("/sys/class/drm")) {
-                     if (!entry.path().filename().string().starts_with("card"))
-                         continue;
-            @@ -91,6 +99,11 @@ std::vector<GPU> get_gpus() {
-                     if (gpu)
-                         gpus.push_back(*gpu);
-                 }
-            +    } catch (const ghc::filesystem::filesystem_error& e) {
-            +        // Skip /sys/class/drm access if no permission (Termux without root)
-            +        return {};
-            +    }
-            +
-                 return gpus;
-             }
-            EOF
-    
-            # 应用补丁
-            if patch -p1 -N --dry-run < termux_drm_fix.patch 2>/dev/null; then
-              patch -p1 < termux_drm_fix.patch
-              echo "✅ DRM 访问补丁应用成功"
-            else
-              echo "⚠️ 补丁可能已应用或不需要应用"
-            fi
+          cd MangoHud
+          wget -O termux_drm_access_fix.patch https://github.com/afeimod/linbox/raw/main/path/termux_drm_access_fix.patch
+          # 应用补丁
+          if patch -p1 -N --dry-run < termux_drm_access_fix.patch 2>/dev/null; then
+            patch -p1 < termux_drm_access_fix.patch
+            echo "✅ DRM 访问补丁应用成功"
+          else
+            echo "⚠️ 补丁可能已应用或不需要应用"
+          fi
           
 
       # 🏗️ 构建 MangoHud
