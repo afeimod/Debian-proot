@@ -144,199 +144,219 @@ jobs:
             echo "⚠️ 未找到 $SRC_FILE"
           fi
 
-      # 🔧 应用跳过 /sys/class/drm 访问补丁
+      # 🔧 修复 Android 兼容性问题
       - name: 修复 Android 兼容性问题
         run: |
           cd MangoHud
-    
+          
           echo "🔧 修复 file_utils.cpp..."
-    
+          
           # 修复 file_utils.cpp：添加权限检查
           FILE_UTILS="src/file_utils.cpp"
           if [ -f "$FILE_UTILS" ]; then
             # 备份原文件
             cp "$FILE_UTILS" "${FILE_UTILS}.bak"
             
-            # 在 ls 函数中添加权限检查
-            sed -i '/^std::vector<std::string> ls(const char\* root, const char\* prefix, LS_FLAGS flags)/,/^std::vector<std::string>/ {
-                /^\s*DIR\* dirp = opendir(root);/i\    // --- [Fix Start] ---\n    // 在 Android Proot 环境下，直接 opendir 受限目录可能会崩，先检查权限\n    if (access(root, R_OK | X_OK) != 0) {\n        return list; // 如果没权限，直接返回空列表，不要报错也不要继续\n    }\n    // --- [Fix End] ---
-            }' "$FILE_UTILS"
-      
+            # 在ls函数中添加权限检查
+            awk '
+            BEGIN {in_func=0; added=0}
+            /^std::vector<std::string> ls(const char\* root, const char\* prefix, LS_FLAGS flags)/ {
+                in_func=1
+                print
+                next
+            }
+            in_func && /^\s*DIR\* dirp = opendir(root);/ && !added {
+                print
+                print "    // --- [Fix Start] ---"
+                print "    // 在 Android Proot 环境下，直接 opendir 受限目录可能会崩，先检查权限"
+                print "    if (access(root, R_OK | X_OK) != 0) {"
+                print "        SPDLOG_WARN(\"No permission to access directory: {}\", root);"
+                print "        return list; // 如果没权限，直接返回空列表，不要报错也不要继续"
+                print "    }"
+                print "    // --- [Fix End] ---"
+                added=1
+                next
+            }
+            in_func && /^\}/ {
+                in_func=0
+                added=0
+                print
+                next
+            }
+            {print}
+            ' "${FILE_UTILS}.bak" > "$FILE_UTILS"
+            
             echo "✅ file_utils.cpp 修复完成"
           fi
-    
+          
           echo "🔧 修复 gpu.cpp..."
-    
-          # 修复 gpu.cpp：使用直接替换方法
+          
+          # 修复 gpu.cpp：使用更安全的方法修改
           GPU_FILE="src/gpu.cpp"
           if [ -f "$GPU_FILE" ]; then
-            echo "🔧 直接重写 gpu.cpp 中的构造函数..."
-      
-            # 创建临时文件，只修改构造函数
+            echo "🔧 修改 GPUS 构造函数..."
+            
+            # 备份原文件
+            cp "$GPU_FILE" "${GPU_FILE}.bak"
+            
+            # 使用更安全的sed方法修改
+            # 首先，在构造函数开头添加条件判断
+            sed -i '5 a\#include <fstream>\n#include <algorithm>\n#include <iostream>\n#include <thread>\n#include <chrono>' "$GPU_FILE"
+            
+            # 修改构造函数体
             awk '
-            BEGIN { in_constructor = 0; found_constructor = 0 }
-      
+            BEGIN {in_constructor=0; brace_count=0; found_constructor=0}
+            
             # 找到构造函数开始
-            /^GPUS::GPUS\(const overlay_params\* early_params\)/ {
+            /GPUS::GPUS\(const overlay_params\* early_params\)/ {
+                found_constructor=1
                 print
-                print "    std::set<std::string> gpu_entries;"
-                print "    auto params = early_params ? early_params : get_params().get();"
-                print ""
-                print "    if (fs::exists(\"/sys/class/drm\")) {"
-                print "        try {"
-                print "            for (const auto& entry : fs::directory_iterator(\"/sys/class/drm\")) {"
-                print "                if (!entry.is_directory()) continue;"
-                print "                std::string node_name = entry.path().filename().string();"
-                print "                if (node_name.find(\"renderD\") == 0 && node_name.length() > 7) {"
-                print "                    std::string render_number = node_name.substr(7);"
-                print "                    if (std::all_of(render_number.begin(), render_number.end(), ::isdigit)) {"
-                print "                        gpu_entries.insert(node_name);"
-                print "                    }"
-                print "                }"
-                print "            }"
-                print "        } catch (...) {"
-                print "            SPDLOG_WARN(\"Skipping /sys/class/drm scan due to permission error.\");"
-                print "        }"
-                print "    }"
-                print ""
-                print "    uint8_t idx = 0, total_active = 0;"
-                print ""
-                print "    for (const auto& node_name : gpu_entries) {"
-                print "        const std::string driver = get_driver(node_name);"
-                print "        if (driver.empty()) continue;"
-                print ""
-                print "        {"
-                print "            const std::string* d = std::find(std::begin(supported_drivers), std::end(supported_drivers), driver);"
-                print "            if (d == std::end(supported_drivers)) continue;"
-                print "        }"
-                print ""
-                print "        std::string path = \"/sys/class/drm/\" + node_name;"
-                print "        std::string device_address = get_pci_device_address(path);"
-                print "        const char* pci_dev = device_address.c_str();"
-                print "        uint32_t vendor_id = 0, device_id = 0;"
-                print ""
-                print "        if (!device_address.empty()) {"
-                print "            try { vendor_id = std::stoul(read_line(\"/sys/bus/pci/devices/\" + device_address + \"/vendor\"), nullptr, 16); } catch(...) {}"
-                print "            try { device_id = std::stoul(read_line(\"/sys/bus/pci/devices/\" + device_address + \"/device\"), nullptr, 16); } catch (...) {}"
-                print "        }"
-                print ""
-                print "        std::shared_ptr<GPU> ptr = std::make_shared<GPU>(node_name, vendor_id, device_id, pci_dev, driver);"
-                print "        if (params->gpu_list.size() == 1 && params->gpu_list[0] == idx++) ptr->is_active = true;"
-                print "        if (!params->pci_dev.empty() && pci_dev == params->pci_dev) ptr->is_active = true;"
-                print "        available_gpus.emplace_back(ptr);"
-                print "        if (ptr->is_active) total_active++;"
-                print "    }"
-                print ""
-                print "    if (fs::exists(\"/sys/class/kgsl/kgsl-3d0/gpubusy\")) {"
-                print "        bool already_added = false;"
-                print "        for (auto& g : available_gpus) {"
-                print "            if (g->driver == \"adreno\" || g->driver == \"freedreno\") already_added = true;"
-                print "        }"
-                print ""
-                print "        if (!already_added) {"
-                print "            auto adreno = std::make_shared<GPU>(\"Adreno\", 0x5143, 0, \"0000:00:00.0\", \"adreno\");"
-                print "            "
-                print "            if (total_active == 0) {"
-                print "                adreno->is_active = true;"
-                print "                total_active++;"
-                print "            }"
-                print "            available_gpus.emplace_back(adreno);"
-                print ""
-                print "            std::thread([adreno](){"
-                print "                while(true) {"
-                print "                    std::ifstream stream(\"/sys/class/kgsl/kgsl-3d0/gpubusy\");"
-                print "                    if (stream.is_open()) {"
-                print "                        std::string line;"
-                print "                        if (std::getline(stream, line)) {"
-                print "                            long long used = 0, total = 0;"
-                print "                            if (sscanf(line.c_str(), \"%lld %lld\", &used, &total) == 2 && total > 0) {"
-                print "                                 int val = (int)((float)used / total * 100);"
-                print "                                 if (val > 100) val = 100;"
-                print "                                 if (val < 0) val = 0;"
-                print "                                 adreno->metrics.load = val;"
-                print "                            }"
-                print "                        }"
-                print "                    }"
-                print "                    std::this_thread::sleep_for(std::chrono::milliseconds(200));"
-                print "                }"
-                print "            }).detach();"
-                print ""
-                print "            SPDLOG_INFO(\"Adreno GPU injected with background monitoring thread\");"
-                print "        }"
-                print "    }"
-                print ""
-                print "    if (total_active < 2) return;"
-                print "    for (auto& gpu : available_gpus) {"
-                print "        if (!gpu->is_active) continue;"
-                print "        break;"
-                print "    }"
-                print ""
-                in_constructor = 1
                 next
             }
-      
-            # 跳过原构造函数的内容，直到函数结束
-            in_constructor && /^\}/ {
+            
+            found_constructor && /\{/ {
                 if (brace_count == 0) {
-                    print "}"
-                    in_constructor = 0
-                    found_constructor = 1
+                    print
+                    print "    std::set<std::string> gpu_entries;"
+                    print "    auto params = early_params ? early_params : get_params().get();"
+                    print ""
+                    print "    if (fs::exists(\"/sys/class/drm\")) {"
+                    print "        try {"
+                    print "            for (const auto& entry : fs::directory_iterator(\"/sys/class/drm\")) {"
+                    print "                if (!entry.is_directory())"
+                    print "                    continue;"
+                    print ""
+                    print "                std::string node_name = entry.path().filename().string();"
+                    print ""
+                    print "                // Check if the directory is a render node (e.g., renderD128, renderD129, etc.)"
+                    print "                if (node_name.find(\"renderD\") == 0 && node_name.length() > 7) {"
+                    print "                    // Ensure the rest of the string after \"renderD\" is numeric"
+                    print "                    std::string render_number = node_name.substr(7);"
+                    print "                    if (std::all_of(render_number.begin(), render_number.end(), ::isdigit)) {"
+                    print "                        gpu_entries.insert(node_name);  // Store the render entry"
+                    print "                    }"
+                    print "                }"
+                    print "            }"
+                    print "        } catch (...) {"
+                    print "            SPDLOG_WARN(\"Skipping /sys/class/drm scan due to permission error.\");"
+                    print "        }"
+                    print "    }"
+                    print ""
+                    print "    // Now process the sorted GPU entries"
+                    print "    uint8_t idx = 0, total_active = 0;"
+                    
+                    # 跳过原构造函数中的遍历循环
+                    skip_loop=1
+                } else {
+                    print
                 }
-                next
-            }
-      
-            in_constructor && /\{/ {
                 brace_count++
                 next
             }
-      
-            in_constructor && /\}/ {
-                brace_count--
+            
+            # 跳过原构造函数中的遍历循环
+            skip_loop && /for \(const auto& entry : fs::directory_iterator\("\/sys\/class\/drm"\)\)/ {
+                in_original_loop=1
                 next
             }
-      
-            in_constructor {
-                next  # 跳过原构造函数的内容
-            }
-      
-            # 添加必要的头文件
-            /^#include "gpu.h"/ {
-                print
-                print "#include \"overlay_params.h\""
-                print "#include <fstream>"
-                print "#include <algorithm>"
-                print "#include <iostream>"
-                print "#include <thread>"
-                print "#include <chrono>"
+            
+            in_original_loop && /\{/ {
+                loop_brace_count++
                 next
             }
-      
-            # 保留其他部分
-            {
-                print
-            }
-      
-            END {
-                if (!found_constructor) {
-                    print "⚠️ 警告: 未找到 GPUS 构造函数，可能代码结构已更改" > "/dev/stderr"
+            
+            in_original_loop && /\}/ {
+                loop_brace_count--
+                if (loop_brace_count == 0) {
+                    in_original_loop=0
+                    skip_loop=0
                 }
+                next
             }
-            ' "$GPU_FILE" > "${GPU_FILE}.tmp"
-      
-            # 替换原文件
-            mv "${GPU_FILE}.tmp" "$GPU_FILE"
-      
-            echo "✅ gpu.cpp 修复完成"
+            
+            skip_loop && in_original_loop {
+                next
+            }
+            
+            found_constructor && /\}/ {
+                brace_count--
+                if (brace_count == 0) {
+                    # 在构造函数结束前添加Adreno GPU监控代码
+                    print
+                    print ""
+                    print "    // Adreno GPU monitoring for Android"
+                    print "    if (fs::exists(\"/sys/class/kgsl/kgsl-3d0/gpubusy\")) {"
+                    print "        bool already_added = false;"
+                    print "        for (auto& g : available_gpus) {"
+                    print "            if (g->driver == \"adreno\" || g->driver == \"freedreno\") already_added = true;"
+                    print "        }"
+                    print ""
+                    print "        if (!already_added) {"
+                    print "            auto adreno = std::make_shared<GPU>(\"Adreno\", 0x5143, 0, \"0000:00:00.0\", \"adreno\");"
+                    print "            "
+                    print "            if (total_active == 0) {"
+                    print "                adreno->is_active = true;"
+                    print "                total_active++;"
+                    print "            }"
+                    print "            available_gpus.emplace_back(adreno);"
+                    print ""
+                    print "            std::thread([adreno](){"
+                    print "                while(true) {"
+                    print "                    std::ifstream stream(\"/sys/class/kgsl/kgsl-3d0/gpubusy\");"
+                    print "                    if (stream.is_open()) {"
+                    print "                        std::string line;"
+                    print "                        if (std::getline(stream, line)) {"
+                    print "                            long long used = 0, total = 0;"
+                    print "                            if (sscanf(line.c_str(), \"%lld %lld\", &used, &total) == 2 && total > 0) {"
+                    print "                                 int val = (int)((float)used / total * 100);"
+                    print "                                 if (val > 100) val = 100;"
+                    print "                                 if (val < 0) val = 0;"
+                    print "                                 adreno->metrics.load = val;"
+                    print "                            }"
+                    print "                        }"
+                    print "                    }"
+                    print "                    std::this_thread::sleep_for(std::chrono::milliseconds(200));"
+                    print "                }"
+                    print "            }).detach();"
+                    print ""
+                    print "            SPDLOG_INFO(\"Adreno GPU injected with background monitoring thread\");"
+                    print "        }"
+                    print "    }"
+                    print "}"
+                    found_constructor=0
+                } else {
+                    print
+                }
+                next
+            }
+            
+            {print}
+            ' "${GPU_FILE}.bak" > "${GPU_FILE}.tmp"
+            
+            # 检查是否成功修改
+            if grep -q "Skipping /sys/class/drm scan due to permission error" "${GPU_FILE}.tmp" && \
+               grep -q "Adreno GPU injected" "${GPU_FILE}.tmp"; then
+              mv "${GPU_FILE}.tmp" "$GPU_FILE"
+              echo "✅ gpu.cpp 修复完成"
+            else
+              echo "⚠️ gpu.cpp 修改失败，使用原文件"
+              mv "${GPU_FILE}.bak" "$GPU_FILE"
+            fi
+            
+            # 清理临时文件
+            rm -f "${GPU_FILE}.tmp" "${GPU_FILE}.bak"
           fi
-    
+          
           echo "🔍 验证修改..."
           echo "=== file_utils.cpp 修改验证 ==="
-          grep -n "access(root, R_OK | X_OK)" "$FILE_UTILS" || echo "未找到权限检查代码"
-    
+          grep -n "No permission to access directory" "$FILE_UTILS" || echo "未找到权限检查代码"
+          
           echo ""
           echo "=== gpu.cpp 修改验证 ==="
-          grep -n "Skipping /sys/class/drm scan" "$GPU_FILE" || echo "未找到跳过DRM扫描的日志"
-          grep -n "/sys/class/kgsl/kgsl-3d0/gpubusy" "$GPU_FILE" || echo "未找到Adreno GPU监控代码"
+          if [ -f "$GPU_FILE" ]; then
+            grep -n "Skipping /sys/class/drm scan" "$GPU_FILE" || echo "未找到跳过DRM扫描的日志"
+            grep -n "/sys/class/kgsl/kgsl-3d0/gpubusy" "$GPU_FILE" || echo "未找到Adreno GPU监控代码"
+          fi
 
       # 🏗️ 构建 MangoHud
       - name: 构建 MangoHud (Termux)
