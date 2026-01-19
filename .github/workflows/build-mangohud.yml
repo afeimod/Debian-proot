@@ -145,7 +145,7 @@ jobs:
           fi
 
       # 🏗️ 构建 MangoHud
-      - name: 构建 MangoHud (Termux glibc)
+      - name: 构建 MangoHud (Termux)
         run: |
           cd MangoHud
           sudo mkdir -p /opt/mesa
@@ -190,9 +190,9 @@ jobs:
       # 📦 打包结果
       - name: 打包构建产物
         run: |
-          cd /opt/mesa
+          cd /opt
           TAR_NAME="termux-mangohud-${{ env.VERSION }}-aarch64.tar.gz"
-          tar -czvf /home/runner/$TAR_NAME glibc
+          tar -czvf /home/runner/$TAR_NAME mesa
           echo "TAR_NAME=$TAR_NAME" >> $GITHUB_ENV
           echo "📦 打包完成: $TAR_NAME"
 
@@ -208,16 +208,16 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ env.VERSION }}-${{ env.COMMIT_SHORT }}
-          name: MangoHud ${{ env.VERSION }} (aarch64, Termux glibc)
+          name: MangoHud ${{ env.VERSION }} (aarch64)
           body: |
-            ## MangoHud ${{ env.VERSION }} for Termux (aarch64 glibc)
+            ## MangoHud ${{ env.VERSION }} for Termux (aarch64)
 
             ### 📋 构建信息
             - **版本号**: `${{ env.VERSION }}`
             - **构建来源**: `${{ env.INPUT_VERSION }}`
             - **分支/标签**: `${{ env.BRANCH }}`
             - **架构**: aarch64
-            - **环境**: Termux glibc
+            - **环境**: Termux
             - **作者**: `${{ env.AUTHOR }}`
             - **提交**: `${{ env.COMMIT_SHORT }}`
             - **完整提交**: `${{ env.COMMIT }}`
