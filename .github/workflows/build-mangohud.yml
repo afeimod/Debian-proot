@@ -148,31 +148,64 @@ jobs:
       - name: 修复 Android 兼容性问题
         run: |
           cd MangoHud
-          
-          wget -O termux_drm_access_fix.patch https://github.com/afeimod/linbox/raw/main/path/termux_drm_access_fix.patch
-          
-          echo "🔧 应用 gpu.cpp 补丁..."
-          if patch -p1 -i termux_drm_access_fix.patch -f --verbose src/gpu.cpp; then
-            echo "✅ gpu.cpp 补丁应用成功"
-          else
-            echo "⚠️ gpu.cpp 补丁应用失败，尝试手动修复..."
-            # 如果补丁失败，尝试使用sed直接修复
-            sed -i '5 a\#include "overlay_params.h"' src/gpu.cpp
-            sed -i '6 a\#include <fstream>' src/gpu.cpp
-            sed -i '7 a\#include <algorithm>' src/gpu.cpp
-            sed -i '8 a\#include <iostream>' src/gpu.cpp
-            sed -i '9 a\#include <thread>' src/gpu.cpp
-            sed -i '10 a\#include <chrono>' src/gpu.cpp
-            
-            # 修改构造函数中的遍历逻辑
-            sed -i 's/for (const auto\& entry : fs::directory_iterator("\/sys\/class\/drm")) {/if (fs::exists("\/sys\/class\/drm")) {\n        try {\n            for (const auto\& entry : fs::directory_iterator("\/sys\/class\/drm")) {/' src/gpu.cpp
-            sed -i '/try {/,/} catch/ {
-                /} catch/s/catch {/catch (...) {\n            SPDLOG_WARN("Skipping \/sys\/class\/drm scan due to permission error.");\n        }/
-            }' src/gpu.cpp
-            
-            echo "✅ gpu.cpp 手动修复完成"
-          fi
-          
+    
+              echo "🔧 修复 file_utils.cpp..."
+    
+            # 修复 file_utils.cpp：添加权限检查
+            FILE_UTILS="src/file_utils.cpp"
+            if [ -f "$FILE_UTILS" ]; then
+              echo "🔧 在 file_utils.cpp 中添加权限检查..."
+              # 使用sed在ls函数中添加权限检查
+              sed -i '/^\s*DIR\* dirp = opendir(root);/i\    // --- [Fix Start] ---\n    // 在 Android Proot 环境下，直接 opendir 受限目录可能会崩，先检查权限\n    if (access(root, R_OK | X_OK) != 0) {\n        return list; // 如果没权限，直接返回空列表，不要报错也不要继续\n    }\n    // --- [Fix End] ---' "$FILE_UTILS"
+      
+              echo "✅ file_utils.cpp 修复完成"
+            fi
+    
+            echo "🔧 修复 gpu.cpp..."
+    
+            # 修复 gpu.cpp：逐步应用修改
+            GPU_FILE="src/gpu.cpp"
+            if [ -f "$GPU_FILE" ]; then
+              echo "🔧 备份原文件..."
+              cp "$GPU_FILE" "${GPU_FILE}.backup"
+      
+              echo "🔧 步骤1: 添加必要的头文件..."
+              sed -i '5a\#include "overlay_params.h"\n#include <fstream>\n#include <algorithm>\n#include <iostream>\n#include <thread>\n#include <chrono>' "$GPU_FILE"
+      
+              echo "🔧 步骤2: 修改构造函数，添加try-catch包装..."
+              # 替换遍历/sys/class/drm的代码
+              sed -i 's/for (const auto\& entry : fs::directory_iterator("\/sys\/class\/drm")) {/if (fs::exists("\/sys\/class\/drm")) {\n        try {\n            for (const auto\& entry : fs::directory_iterator("\/sys\/class\/drm")) {/' "$GPU_FILE"
+      
+              # 添加catch部分
+              sed -i '/try {/,/^\s*}$/ {
+                  /^\s*}$/ {
+                      i\            } catch (...) {\n                SPDLOG_WARN("Skipping /sys/class/drm scan due to permission error.");\n            }
+                  }
+              }' "$GPU_FILE"
+      
+              # 修复try-catch后的括号
+              sed -i 's/        } catch/        }\n    } catch/' "$GPU_FILE"
+      
+              echo "🔧 步骤3: 简化构造函数中的日志输出..."
+              # 简化日志输出
+              sed -i '/SPDLOG_DEBUG("GPU Found:/d' "$GPU_FILE"
+              sed -i '/SPDLOG_INFO("Set.*as active GPU/d' "$GPU_FILE"
+              sed -i '/if (ptr->is_active) {/,/^[[:space:]]*}/ {
+                  /if (ptr->is_active) {/ {
+                      s/if (ptr->is_active) {/if (ptr->is_active) total_active++;/
+                      d
+                  }
+                  /^[[:space:]]*}/d
+              }' "$GPU_FILE"
+      
+             echo "🔧 步骤4: 添加Adreno GPU监控代码..."
+              # 在构造函数末尾添加Adreno GPU监控代码
+             ADRENO_CODE='\n    // Adreno GPU monitoring for Android\n    if (fs::exists("\/sys\/class\/kgsl\/kgsl-3d0\/gpubusy")) {\n        bool already_added = false;\n        for (auto\& g : available_gpus) {\n            if (g->driver == "adreno" || g->driver == "freedreno") already_added = true;\n        }\n\n        if (!already_added) {\n            auto adreno = std::make_shared<GPU>("Adreno", 0x5143, 0, "0000:00:00.0", "adreno");\n            \n            if (total_active == 0) {\n                adreno->is_active = true;\n                total_active++;\n            }\n            available_gpus.emplace_back(adreno);\n\n            std::thread([adreno](){\n                while(true) {\n                    std::ifstream stream("\/sys\/class\/kgsl\/kgsl-3d0\/gpubusy");\n                    if (stream.is_open()) {\n                        std::string line;\n                        if (std::getline(stream, line)) {\n                            long long used = 0, total = 0;\n                            if (sscanf(line.c_str(), "%lld %lld", \&used, \&total) == 2 \&\& total > 0) {\n                                 int val = (int)((float)used / total * 100);\n                                 if (val > 100) val = 100;\n                                 if (val < 0) val = 0;\n                                 adreno->metrics.load = val;\n                            }\n                        }\n                    }\n                    std::this_thread::sleep_for(std::chrono::milliseconds(200));\n                }\n            }).detach();\n\n            SPDLOG_INFO("Adreno GPU injected with background monitoring thread");\n        }\n    }'
+      
+              # 在"if (total_active < 2)"前插入Adreno代码
+              sed -i '/if (total_active < 2)/i\    '"$(echo "$ADRENO_CODE" | sed 's/[\/&]/\\&/g')"'' "$GPU_FILE"
+            fi
+              echo "✅ gpu.cpp 修复完成"
           
 
       # 🏗️ 构建 MangoHud
