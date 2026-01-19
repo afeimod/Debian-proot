@@ -144,31 +144,99 @@ jobs:
             echo "⚠️ 未找到 $SRC_FILE"
           fi
 
-      - name: 应用 /sys/class/drm 权限绕过补丁
+      - name: 应用跳过 /sys/class/drm 访问补丁
         run: |
           cd MangoHud
-          echo "🔧 查找并修补 /sys/class/drm 访问权限问题..."
+          echo "🔧 查找并修补 /sys/class/drm 访问..."
           
-          # 查找所有可能访问 /sys/class/drm 的文件
-          find src -type f -name "*.cpp" -o -name "*.hpp" -o -name "*.c" -o -name "*.h" | xargs grep -l "/sys/class/drm" 2>/dev/null || true
-          
-          # 1. 修补 gpu.cpp 或相关文件中的权限检查
-          for file in src/gpu.cpp src/overlay.cpp src/overlay_params.cpp src/sysinfo/gpu.cpp; do
-            if [ -f "$file" ]; then
-              echo "修补文件: $file"
+          # 方法1：查找并修改使用 ghc::filesystem::directory_iterator 访问 /sys/class/drm 的代码
+          find src -type f \( -name "*.cpp" -o -name "*.hpp" \) | while read file; do
+            if grep -n "ghc::filesystem::directory_iterator" "$file" | grep -q "/sys/class/drm"; then
+              echo "🔍 找到需要修补的文件: $file"
+              
+              # 备份原文件
               cp "$file" "${file}.bak"
               
-              # 方法2：注释掉可能引发异常的 drm 相关代码段
-              sed -i 's|ghc::filesystem::directory_iterator("/sys/class/drm")|ghc::filesystem::directory_iterator("/data/local/tmp/drm_fallback")|g' "$file"
-              sed -i 's|"/sys/class/drm/|\"/data/local/tmp/drm_fallback/|g' "$file"
+              # 使用 sed 进行更精确的修改
+              sed -i '
+              /ghc::filesystem::directory_iterator.*\/sys\/class\/drm/ {
+                # 在匹配行前添加 try-catch 块
+                i\    try {
+                # 当前行
+                b line
+                :line
+                a\    } catch (const ghc::filesystem::filesystem_error& e) {
+                a\        // 跳过 /sys/class/drm 访问，无权限
+                a\        return {};
+                a\    }
+              }
+              ' "$file"
               
-              echo "✅ $file 已修补"
+              echo "✅ $file 已添加 try-catch 块"
             fi
           done
           
+          # 方法2：直接修改 gpu.cpp（这是最可能访问 DRM 的文件）
+          GPU_FILE="src/gpu.cpp"
+          if [ -f "$GPU_FILE" ]; then
+            echo "🔧 直接修补 $GPU_FILE..."
+            cp "$GPU_FILE" "${GPU_FILE}.bak"
+            
+            # 在遍历 /sys/class/drm 的循环前添加 try-catch
+            awk '
+            /for.*directory_iterator.*\/sys\/class\/drm/ || /directory_iterator.*drm.*\{/ {
+                print "    try {"
+                print
+                next
+            }
+            /for \(auto.*drm.*:/ {
+                print "    try {"
+                print
+                next
+            }
+            /^\s*for.*drm.*:.*directory_iterator/ {
+                print "    try {"
+                print
+                next
+            }
+            {
+                print
+            }
+            ' "${GPU_FILE}.bak" > "${GPU_FILE}.tmp"
+            
+            # 在适当的位置添加 catch 块
+            awk '
+            /^\s*for \(auto.*drm.*:.*directory_iterator/ {
+                in_drm_loop=1
+                print
+                next
+            }
+            in_drm_loop && /^\s*\{/ {
+                brace_count++
+                print
+                next
+            }
+            in_drm_loop && /^\s*\}/ {
+                brace_count--
+                if (brace_count == 0) {
+                    print "    } catch (const ghc::filesystem::filesystem_error& e) {"
+                    print "        // 跳过 /sys/class/drm 访问，无权限"
+                    print "        return {};"
+                    print "    }"
+                    in_drm_loop=0
+                }
+                print
+                next
+            }
+            {
+                print
+            }
+            ' "${GPU_FILE}.tmp" > "$GPU_FILE"
+            
+            rm "${GPU_FILE}.tmp"
+            echo "✅ $GPU_FILE 已修补"
+          fi
           
-          
-          echo "✅ /sys/class/drm 权限绕过补丁应用完成"
 
       # 🏗️ 构建 MangoHud
       - name: 构建 MangoHud (Termux)
