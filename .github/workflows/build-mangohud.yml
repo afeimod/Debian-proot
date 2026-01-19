@@ -144,6 +144,46 @@ jobs:
             echo "⚠️ 未找到 $SRC_FILE"
           fi
 
+      - name: 应用 /sys/class/drm 权限绕过补丁
+        run: |
+          cd MangoHud
+          echo "🔧 查找并修补 /sys/class/drm 访问权限问题..."
+          
+          # 查找所有可能访问 /sys/class/drm 的文件
+          find src -type f -name "*.cpp" -o -name "*.hpp" -o -name "*.c" -o -name "*.h" | xargs grep -l "/sys/class/drm" 2>/dev/null || true
+          
+          # 1. 修补 gpu.cpp 或相关文件中的权限检查
+          for file in src/gpu.cpp src/overlay.cpp src/overlay_params.cpp src/sysinfo/gpu.cpp; do
+            if [ -f "$file" ]; then
+              echo "修补文件: $file"
+              cp "$file" "${file}.bak"
+              
+              # 方法1：在访问 /sys/class/drm 前添加权限检查
+              sed -i 's|"/sys/class/drm"|"/data/local/tmp/drm_fallback"|g' "$file"
+              
+              # 方法2：注释掉可能引发异常的 drm 相关代码段
+              sed -i 's|ghc::filesystem::directory_iterator("/sys/class/drm")|ghc::filesystem::directory_iterator("/data/local/tmp/drm_fallback")|g' "$file"
+              sed -i 's|"/sys/class/drm/|\"/data/local/tmp/drm_fallback/|g' "$file"
+              
+              echo "✅ $file 已修补"
+            fi
+          done
+          
+          # 2. 创建一个虚拟的回退文件来避免异常
+          echo "创建虚拟 drm 回退目录..."
+          mkdir -p /data/local/tmp/drm_fallback || true
+          
+          # 3. 修补可能的动态路径构建
+          find src -type f -name "*.cpp" -o -name "*.hpp" | while read file; do
+            if grep -q "sys.*class.*drm" "$file" 2>/dev/null; then
+              echo "处理文件: $file"
+              sed -i 's|/sys/class/drm|/data/local/tmp/drm_fallback|g' "$file"
+              sed -i 's|sys/class/drm|data/local/tmp/drm_fallback|g' "$file"
+            fi
+          done
+          
+          echo "✅ /sys/class/drm 权限绕过补丁应用完成"
+
       # 🏗️ 构建 MangoHud
       - name: 构建 MangoHud (Termux)
         run: |
