@@ -20,11 +20,12 @@ on:
       target_arch:
         description: '目标架构'
         required: false
-        default: 'aarch64'
+        default: 'both'
         type: choice
         options:
           - 'aarch64'
           - 'arm-linux-gnueabihf'
+          - 'both'
 
 permissions:
   contents: write
@@ -32,10 +33,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04-arm
-    
-    strategy:
-      matrix:
-        arch: [${{ github.event.inputs.target_arch || 'aarch64' }}]
 
     steps:
     - name: 设置构建参数
@@ -45,26 +42,18 @@ jobs:
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
           echo "MESA_BRANCH=${{ github.event.inputs.mesa_branch }}" >> $GITHUB_ENV
           echo "USE_UPSTREAM=${{ github.event.inputs.use_upstream }}" >> $GITHUB_ENV
-          echo "TARGET_ARCH=${{ github.event.inputs.target_arch || 'aarch64' }}" >> $GITHUB_ENV
+          echo "TARGET_ARCH=${{ github.event.inputs.target_arch || 'both' }}" >> $GITHUB_ENV
         else
           echo "MESA_BRANCH=adreno-main" >> $GITHUB_ENV
           echo "USE_UPSTREAM=false" >> $GITHUB_ENV
-          echo "TARGET_ARCH=${{ matrix.arch }}" >> $GITHUB_ENV
+          echo "TARGET_ARCH=both" >> $GITHUB_ENV
         fi
         
         BUILD_DATE=$(date +%Y%m%d)
         echo "BUILD_DATE=$BUILD_DATE" >> $GITHUB_ENV
         
-        # 根据架构设置安装目录前缀
-        if [ "$TARGET_ARCH" = "aarch64" ]; then
-          echo "INSTALL_PREFIX=/opt/mesa-aarch64" >> $GITHUB_ENV
-          echo "MESON_CPU=aarch64" >> $GITHUB_ENV
-          echo "CROSS_PREFIX=" >> $GITHUB_ENV
-        elif [ "$TARGET_ARCH" = "arm-linux-gnueabihf" ]; then
-          echo "INSTALL_PREFIX=/opt/mesa-armhf" >> $GITHUB_ENV
-          echo "MESON_CPU=arm" >> $GITHUB_ENV
-          echo "CROSS_PREFIX=arm-linux-gnueabihf-" >> $GITHUB_ENV
-        fi
+        # 设置安装目录
+        echo "INSTALL_PREFIX=/opt/mesa" >> $GITHUB_ENV
         
         echo "使用的 Mesa 分支: $MESA_BRANCH"
         echo "是否使用上游: $USE_UPSTREAM"
@@ -89,7 +78,7 @@ jobs:
         sudo sed -i "s/^Types: deb$/Types: deb deb-src/" /etc/apt/sources.list.d/ubuntu.sources
         sudo apt update
         
-        # 基础依赖
+        # 基础依赖（用于 aarch64 构建）
         sudo apt install -y \
           glslang-tools libxrandr-dev libxxf86vm-dev libxcb-shm0-dev libxcb-glx0-dev \
           libxext-dev llvm-19 libx11-dev libx11-xcb-dev libxcb1-dev libxcb-dri3-dev \
@@ -98,8 +87,8 @@ jobs:
           libwayland-dev python3-pip python3-setuptools python3-wheel ninja-build \
           flex bison libtool pkg-config
         
-        # 根据目标架构安装额外的工具链
-        if [ "$TARGET_ARCH" = "arm-linux-gnueabihf" ]; then
+        # 如果包含 armhf 构建，安装交叉编译工具链
+        if [ "$TARGET_ARCH" = "both" ] || [ "$TARGET_ARCH" = "arm-linux-gnueabihf" ]; then
           echo "安装 ARM 交叉编译工具链..."
           sudo apt install -y \
             gcc-arm-linux-gnueabihf \
@@ -115,7 +104,8 @@ jobs:
             libxcb-sync-dev:armhf \
             libxshmfence-dev:armhf \
             libxxf86vm-dev:armhf \
-            libexpat1-dev:armhf
+            libexpat1-dev:armhf \
+            libwayland-dev:armhf
         fi
 
     - name: 安装 Python 构建工具
@@ -168,76 +158,17 @@ jobs:
         echo "描述: $GIT_DESCRIBE"
         echo "分支: $(git branch --show-current)"
 
-    - name: 为 armhf 设置交叉编译环境
-      if: env.TARGET_ARCH == 'arm-linux-gnueabihf'
+    - name: 构建 aarch64 架构
+      if: env.TARGET_ARCH == 'aarch64' || env.TARGET_ARCH == 'both'
       run: |
-        echo "设置 ARM 交叉编译环境..."
-        
-        # 创建交叉编译配置文件
-        cat > cross-file.txt << EOF
-        [binaries]
-        c = 'arm-linux-gnueabihf-gcc'
-        cpp = 'arm-linux-gnueabihf-g++'
-        ar = 'arm-linux-gnueabihf-ar'
-        strip = 'arm-linux-gnueabihf-strip'
-        pkgconfig = 'arm-linux-gnueabihf-pkg-config'
-        
-        [host_machine]
-        system = 'linux'
-        cpu_family = 'arm'
-        cpu = '$MESON_CPU'
-        endian = 'little'
-        
-        [properties]
-        needs_exe_wrapper = true
-        
-        [paths]
-        prefix = '$INSTALL_PREFIX'
-        EOF
-        
-        echo "交叉编译配置文件:"
-        cat cross-file.txt
-        
-        # 设置环境变量
-        export CC="arm-linux-gnueabihf-gcc"
-        export CXX="arm-linux-gnueabihf-g++"
-        export AR="arm-linux-gnueabihf-ar"
-        export STRIP="arm-linux-gnueabihf-strip"
-        export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig"
-        export PKG_CONFIG_SYSROOT_DIR="/usr/arm-linux-gnueabihf"
-        
-        echo "交叉编译环境变量已设置"
-
-    - name: 构建 Mesa
-      run: |
+        echo "🔨 开始构建 aarch64 架构..."
         cd mesa
         
-        echo "🔨 开始构建 Mesa..."
-        echo "目标架构: $TARGET_ARCH"
-        BUILD_START=$(date +%s)
+        # 为 aarch64 创建构建目录
+        mkdir -p build-aarch64
         
-        # 创建安装目录
-        sudo mkdir -p $INSTALL_PREFIX
-        sudo chmod 777 -R /opt
-        
-        # 创建构建目录
-        mkdir -p builddir
-        
-        # 验证使用的工具
-        echo "检查构建工具:"
-        which meson
-        meson --version
-        which ninja
-        ninja --version
-        
-        if [ "$TARGET_ARCH" = "arm-linux-gnueabihf" ]; then
-          echo "检查交叉编译工具:"
-          which arm-linux-gnueabihf-gcc
-          arm-linux-gnueabihf-gcc --version
-        fi
-        
-        # 准备构建命令
-        MESON_CMD="meson setup builddir \
+        # 配置 aarch64 构建
+        meson setup build-aarch64 \
            -Dprefix=$INSTALL_PREFIX \
            -Dplatforms=x11 \
            -Dbuildtype=release \
@@ -259,50 +190,154 @@ jobs:
            -Dmicrosoft-clc=disabled \
            -Dllvm=enabled \
            -Dshared-llvm=enabled \
-           -Dvulkan-beta=true \
-           -Dvideo-codecs=all"
+           -Dvideo-codecs=all
         
-        # 如果是交叉编译，添加交叉编译文件
-        if [ "$TARGET_ARCH" = "arm-linux-gnueabihf" ]; then
-          MESON_CMD="$MESON_CMD --cross-file ../cross-file.txt"
-        fi
+        echo "🏗️  正在构建 aarch64..."
+        ninja -C build-aarch64 -j$(nproc)
         
-        echo "执行配置命令:"
-        echo $MESON_CMD
-        
-        # 配置构建选项
-        eval $MESON_CMD
-        
-        # 检查配置状态
-        echo "配置状态检查:"
-        meson configure builddir || true
-        
-        # 开始构建
-        echo "🏗️  正在构建..."
-        ninja -C builddir -j$(nproc)
-        
-        echo "📦 正在安装..."
-        sudo ninja -C builddir install
-        
-        BUILD_END=$(date +%s)
-        BUILD_TIME=$((BUILD_END - BUILD_START))
-        echo "✅ 构建完成，耗时: ${BUILD_TIME}秒"
+        echo "📦 正在安装 aarch64..."
+        sudo ninja -C build-aarch64 install
         
         # 验证安装
-        echo "安装验证:"
-        ls -la $INSTALL_PREFIX
-        if [ -d "$INSTALL_PREFIX/lib" ]; then
-          echo "库文件:"
-          ls -la $INSTALL_PREFIX/lib/ || true
+        echo "aarch64 安装验证:"
+        ls -la $INSTALL_PREFIX/lib/
+        echo "aarch64 库文件架构:"
+        file $INSTALL_PREFIX/lib/*.so 2>/dev/null | head -5 || true
+
+    - name: 构建 arm-linux-gnueabihf 架构
+      if: env.TARGET_ARCH == 'arm-linux-gnueabihf' || env.TARGET_ARCH == 'both'
+      run: |
+        echo "🔨 开始构建 arm-linux-gnueabihf 架构..."
+        cd mesa
+        
+        # 创建交叉编译配置文件
+        cat > cross-file.txt << EOF
+            [binaries]
+            c = 'arm-linux-gnueabihf-gcc'
+            cpp = 'arm-linux-gnueabihf-g++'
+            ar = 'arm-linux-gnueabihf-ar'
+            strip = 'arm-linux-gnueabihf-strip'
+            pkgconfig = 'pkg-config'
+
+            [host_machine]
+            system = 'linux'
+            cpu_family = 'arm'
+            cpu = 'armv7l'
+            endian = 'little'
+
+            [properties]
+            needs_exe_wrapper = true
+
+            [paths]
+            prefix = '$INSTALL_PREFIX'
+        EOF
+        
+        # 为 armhf 创建构建目录
+        mkdir -p build-armhf
+        
+        # 设置交叉编译环境变量
+        export CC="arm-linux-gnueabihf-gcc"
+        export CXX="arm-linux-gnueabihf-g++"
+        export AR="arm-linux-gnueabihf-ar"
+        export STRIP="arm-linux-gnueabihf-strip"
+        export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig"
+        export PKG_CONFIG_SYSROOT_DIR="/usr/arm-linux-gnueabihf"
+        
+        # 配置 armhf 构建
+        meson setup build-armhf \
+           --cross-file cross-file.txt \
+           -Dprefix=$INSTALL_PREFIX \
+           -Dplatforms=x11 \
+           -Dbuildtype=release \
+           -Degl-native-platform=x11 \
+           -Dvulkan-beta=true \
+           -Dgallium-extra-hud=true \
+           -Dgallium-drivers=freedreno,zink \
+           -Dmediafoundation-codecs=all \
+           -Dvulkan-drivers=freedreno \
+           -Dfreedreno-kmds=kgsl \
+           -Dshader-cache=enabled \
+           -Dgles1=enabled \
+           -Dgles2=enabled \
+           -Dopengl=true \
+           -Dgbm=enabled \
+           -Dglx=dri \
+           -Degl=enabled \
+           -Dglvnd=enabled \
+           -Dmicrosoft-clc=disabled \
+           -Dllvm=enabled \
+           -Dshared-llvm=enabled \
+           -Dvideo-codecs=all
+        
+        echo "🏗️  正在构建 armhf..."
+        ninja -C build-armhf -j$(nproc)
+        
+        echo "📦 正在安装 armhf..."
+        sudo ninja -C build-armhf install
+        
+        # 验证安装
+        echo "armhf 安装验证:"
+        ls -la $INSTALL_PREFIX/lib/
+        echo "armhf 库文件架构:"
+        file $INSTALL_PREFIX/lib/*.so 2>/dev/null | head -5 || true
+
+    - name: 重命名库目录（如果构建了双架构）
+      if: env.TARGET_ARCH == 'both'
+      run: |
+        echo "🔄 重新组织库目录结构以适应双架构..."
+        
+        # 检查是否存在两个架构的库
+        cd $INSTALL_PREFIX
+        
+        if [ -d "lib" ]; then
+          # 检查 lib 目录中的文件类型
+          echo "当前 lib 目录中的文件架构:"
+          file lib/*.so 2>/dev/null | grep -E "ELF 64-bit|ELF 32-bit" || true
           
-          # 检查文件类型
-          echo "检查关键库文件的架构:"
-          find $INSTALL_PREFIX/lib -name "*.so*" | head -5 | while read -r lib; do
-            if [ -f "$lib" ]; then
-              echo "文件: $lib"
-              file "$lib" || true
+          # 分离 64 位和 32 位库
+          mkdir -p lib64 lib32
+          
+          # 移动 64 位库到 lib64
+          for file in lib/*.so*; do
+            if [ -f "$file" ]; then
+              if file "$file" | grep -q "ELF 64-bit"; then
+                mv "$file" lib64/
+                echo "移动 64 位库: $(basename $file)"
+              elif file "$file" | grep -q "ELF 32-bit"; then
+                mv "$file" lib32/
+                echo "移动 32 位库: $(basename $file)"
+              fi
             fi
           done
+          
+          # 移动子目录
+          if [ -d "lib/dri" ]; then
+            # 检查 dri 目录中的文件
+            mkdir -p lib64/dri lib32/dri
+            for file in lib/dri/*.so; do
+              if [ -f "$file" ]; then
+                if file "$file" | grep -q "ELF 64-bit"; then
+                  mv "$file" lib64/dri/
+                elif file "$file" | grep -q "ELF 32-bit"; then
+                  mv "$file" lib32/dri/
+                fi
+              fi
+            done
+            rmdir lib/dri 2>/dev/null || true
+          fi
+          
+          # 清理空目录
+          rmdir lib 2>/dev/null || true
+          
+          # 创建符号链接以保持兼容性
+          mkdir -p lib
+          ln -sf ../lib64 lib/aarch64-linux-gnu
+          ln -sf ../lib32 lib/arm-linux-gnueabihf
+          
+          echo "✅ 库目录重组完成"
+          echo "目录结构:"
+          ls -la
+          tree -L 2 2>/dev/null || echo "安装 tree 命令以查看目录树"
         fi
 
     - name: 打包构建产物
@@ -310,35 +345,30 @@ jobs:
         echo "📦 开始打包..."
         
         # 创建版本化的包名
-        PACKAGE_NAME="prootmesa-${MESA_VERSION}-${TARGET_ARCH}"
+        if [ "$TARGET_ARCH" = "both" ]; then
+          PACKAGE_NAME="prootmesa-${MESA_VERSION}-multiarch"
+          ARCH_DESC="multiarch (aarch64 + armhf)"
+        elif [ "$TARGET_ARCH" = "aarch64" ]; then
+          PACKAGE_NAME="prootmesa-${MESA_VERSION}-aarch64"
+          ARCH_DESC="aarch64"
+        elif [ "$TARGET_ARCH" = "arm-linux-gnueabihf" ]; then
+          PACKAGE_NAME="prootmesa-${MESA_VERSION}-armhf"
+          ARCH_DESC="arm-linux-gnueabihf"
+        fi
         
         # 打包完整安装目录
         cd /opt
-        tar -czvf "${HOME}/${PACKAGE_NAME}-full.tar.gz" $(basename $INSTALL_PREFIX)/
-        
-        # 仅打包 Vulkan 驱动（可选）
-        cd $INSTALL_PREFIX
-        if [ -d "lib" ]; then
-          # 查找并打包所有 Vulkan 驱动
-          find lib -name "libvulkan_*.so" -o -name "*vulkan*.so*" 2>/dev/null | while read -r file; do
-            echo "找到 Vulkan 驱动: $file"
-          done
-          tar -czvf "${HOME}/${PACKAGE_NAME}-vulkan.tar.gz" $(find lib -name "libvulkan_*.so" -o -name "*vulkan*.so*" 2>/dev/null) 2>/dev/null || true
-        fi
-        
-        # 移动回工作目录
-        cd $GITHUB_WORKSPACE
-        mv "${HOME}/${PACKAGE_NAME}-full.tar.gz" .
-        if [ -f "${HOME}/${PACKAGE_NAME}-vulkan.tar.gz" ]; then
-          mv "${HOME}/${PACKAGE_NAME}-vulkan.tar.gz" .
-        fi
+        tar -czvf "${HOME}/${PACKAGE_NAME}-full.tar.gz" mesa/
         
         # 生成校验和
+        cd $GITHUB_WORKSPACE
+        mv "${HOME}/${PACKAGE_NAME}-full.tar.gz" .
         sha256sum ${PACKAGE_NAME}-*.tar.gz > checksums.txt
         
         # 设置输出变量
         echo "PACKAGE_NAME=${PACKAGE_NAME}" >> $GITHUB_ENV
         echo "FULL_PACKAGE=${PACKAGE_NAME}-full.tar.gz" >> $GITHUB_ENV
+        echo "ARCH_DESC=${ARCH_DESC}" >> $GITHUB_ENV
         
         echo "📦 打包完成:"
         ls -lh *.tar.gz
@@ -356,13 +386,13 @@ jobs:
       if: ${{ github.event_name == 'workflow_dispatch' }}
       with:
         tag_name: prootmesa-${{ env.MESA_VERSION }}-${{ env.TARGET_ARCH }}-${{ env.BUILD_DATE }}
-        name: Mesa proot ${{ env.MESA_VERSION }} (${{ env.TARGET_ARCH }})
+        name: Mesa proot ${{ env.MESA_VERSION }} (${{ env.ARCH_DESC }})
         body: |
-          Mesa 3D Graphics Library for Termux proot (proot) on ${{ env.TARGET_ARCH }}
+          Mesa 3D Graphics Library for Termux proot (proot)
           
           构建信息:
           - **版本**: ${{ env.MESA_VERSION }}
-          - **目标架构**: ${{ env.TARGET_ARCH }}
+          - **架构**: ${{ env.ARCH_DESC }}
           - **Git 描述**: ${{ env.GIT_DESCRIBE }}
           - **提交哈希**: ${{ env.MESA_GIT_HASH }}
           - **构建日期**: ${{ env.BUILD_DATE }}
@@ -371,22 +401,43 @@ jobs:
           
           包含文件:
           - `${{ env.FULL_PACKAGE }}` - 完整 Mesa 安装包
-          - `*-vulkan.tar.gz` - 仅 Vulkan 驱动 (可选)
           - `checksums.txt` - 校验和文件
+          
+          $(if [ "${{ env.TARGET_ARCH }}" = "both" ]; then
+            echo "多架构包目录结构:"
+            echo "```"
+            echo "mesa/"
+            echo "├── bin/                 # 可执行文件"
+            echo "├── include/             # 头文件"
+            echo "├── lib/                 # 库目录"
+            echo "│   ├── aarch64-linux-gnu -> ../lib64/   # 64位库符号链接"
+            echo "│   └── arm-linux-gnueabihf -> ../lib32/ # 32位库符号链接"
+            echo "├── lib64/               # 64位 (aarch64) 库"
+            echo "│   └── dri/             # 64位 DRI 驱动"
+            echo "└── lib32/               # 32位 (armhf) 库"
+            echo "    └── dri/             # 32位 DRI 驱动"
+            echo "```"
+          fi)
           
           安装说明:
           1. 下载完整的 tar.gz 包
           2. 在 proot 环境中解压到根目录: `tar -xzf package.tar.gz -C /`
-          3. 或者解压到自定义目录并设置环境变量:
-             ```bash
-             export LD_LIBRARY_PATH=/path/to/mesa/lib:$LD_LIBRARY_PATH
-             export LIBGL_DRIVERS_PATH=/path/to/mesa/lib/dri
-             ```
+          
+          $(if [ "${{ env.TARGET_ARCH }}" = "both" ]; then
+            echo "多架构使用说明:"
+            echo "- 默认情况下，系统会自动选择合适的架构"
+            echo "- 可以手动设置环境变量来选择特定架构:"
+            echo "  ```bash"
+            echo "  # 使用 64 位库"
+            echo "  export LD_LIBRARY_PATH=/opt/mesa/lib64:/opt/mesa/lib64/dri:\$LD_LIBRARY_PATH"
+            echo "  # 或者使用 32 位库"
+            echo "  export LD_LIBRARY_PATH=/opt/mesa/lib32:/opt/mesa/lib32/dri:\$LD_LIBRARY_PATH"
+            echo "  ```"
+          fi)
           
           注意:
           - 需要 Termux 的 proot 环境 (如 prootdistro 的 Ubuntu/Debian)
           - 推荐在 proot 容器中使用
-          - 对于 arm-linux-gnueabihf 构建，需要在 32 位 ARM 环境中使用
         files: |
           ${{ env.PACKAGE_NAME }}-*.tar.gz
           checksums.txt
@@ -403,7 +454,7 @@ jobs:
         echo "提交: $MESA_GIT_HASH"
         echo "构建日期: $BUILD_DATE"
         echo "分支: $MESA_BRANCH"
-        echo "目标架构: $TARGET_ARCH"
+        echo "目标架构: $ARCH_DESC"
         echo "环境: Termux (proot)"
         echo ""
         echo "📦 生成的文件:"
@@ -417,4 +468,9 @@ jobs:
         echo "  ✓ OpenGL, OpenGL ES 1.x/2.x"
         echo "  ✓ EGL, GBM"
         echo ""
-        echo "安装目录: $INSTALL_PREFIX"
+        if [ "$TARGET_ARCH" = "both" ]; then
+          echo "多架构目录结构:"
+          echo "  /opt/mesa/lib64/    - 64位 (aarch64) 库"
+          echo "  /opt/mesa/lib32/    - 32位 (armhf) 库"
+          echo "  /opt/mesa/lib/      - 符号链接到对应架构"
+        fi
