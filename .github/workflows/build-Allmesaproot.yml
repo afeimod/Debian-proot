@@ -119,7 +119,6 @@ jobs:
             libxcb-present-dev:armhf \
             libatomic1:armhf \
             libatomic-ops-dev:armhf \
-            # 添加其他可能需要的库
             libpthread-stubs0-dev:armhf \
             libselinux1-dev:armhf \
             libunwind-dev:armhf \
