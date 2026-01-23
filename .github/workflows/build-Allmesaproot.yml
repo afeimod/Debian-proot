@@ -96,19 +96,17 @@ jobs:
             gcc-arm-linux-gnueabihf \
             g++-arm-linux-gnueabihf \
             binutils-arm-linux-gnueabihf \
-            libdrm-dev:armhf \
             libx11-dev:armhf \
-            llvm-19-dev:armhf \
             libxext-dev:armhf \
             libxfixes-dev:armhf \
             libxcb1-dev:armhf \
             libxcb-dri3-dev:armhf \
+            llvm-19-dev:armhf \
             libxcb-present-dev:armhf \
             libxcb-sync-dev:armhf \
             libxshmfence-dev:armhf \
             libxxf86vm-dev:armhf \
-            libexpat1-dev:armhf \
-            libwayland-dev:armhf
+            libexpat1-dev:armhf
         fi
 
     - name: 安装 Python 构建工具
