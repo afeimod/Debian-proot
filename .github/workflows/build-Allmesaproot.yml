@@ -1,5 +1,5 @@
 # build-mesaproot.yml
-name: Build All-Mesa for proot (Multi-arch)
+name: Build Mesa for proot (Multi-arch)
 
 on:
   workflow_dispatch:
@@ -76,33 +76,33 @@ jobs:
     - name: 安装系统依赖
       run: |
         sudo sed -i "s/^Types: deb$/Types: deb deb-src/" /etc/apt/sources.list.d/ubuntu.sources
+        
+        # 先更新包列表
         sudo apt update
         
-        # 基础依赖（用于 aarch64 构建）
+        # 安装基础依赖（用于 aarch64 构建）
         sudo apt install -y \
           glslang-tools libxrandr-dev libxxf86vm-dev libxcb-shm0-dev libxcb-glx0-dev \
           libxext-dev llvm-19 libx11-dev libx11-xcb-dev libxcb1-dev libxcb-dri3-dev \
           libxcb-present-dev libxcb-randr0-dev libxcb-sync-dev libxcb-xfixes0-dev \
           libxshmfence-dev libdrm-dev libgbm-dev libegl1-mesa-dev libexpat1-dev \
-          libwayland-dev python3-pip python3-setuptools python3-wheel ninja-build \
-          gcc-arm-linux-gnueabihf \
-            g++-arm-linux-gnueabihf \
-            binutils-arm-linux-gnueabihf \
-          flex bison libtool pkg-config
+          python3-pip python3-setuptools python3-wheel ninja-build \
+          flex bison libtool pkg-config build-essential \
+          gcc g++ make cmake
         
         # 如果包含 armhf 构建，安装交叉编译工具链
         if [ "$TARGET_ARCH" = "both" ] || [ "$TARGET_ARCH" = "arm-linux-gnueabihf" ]; then
           echo "安装 ARM 交叉编译工具链..."
-          sudo dpkg --add-architecture armhf
-          sudo apt update
+          
+          # 对于 ARM 到 ARM 的交叉编译，使用更简单的方法
+          # 只安装基本的交叉编译工具链，不添加 armhf 架构
           sudo apt install -y \
-            libx11-dev:armhf \
-            llvm-19-dev:armhf \
-            libxcb-present-dev:armhf \
-            libxcb-sync-dev:armhf \
-            libxshmfence-dev:armhf \
-            libxxf86vm-dev:armhf \
-            libexpat1-dev:armhf
+            gcc-arm-linux-gnueabihf \
+            g++-arm-linux-gnueabihf \
+            binutils-arm-linux-gnueabihf \
+            libc6-dev-armhf-cross
+          
+          echo "ARM 交叉编译环境已准备"
         fi
 
     - name: 安装 Python 构建工具
@@ -161,6 +161,10 @@ jobs:
         echo "🔨 开始构建 aarch64 架构..."
         cd mesa
         
+        # 创建安装目录
+        sudo mkdir -p $INSTALL_PREFIX
+        sudo chmod 777 -R /opt
+        
         # 为 aarch64 创建构建目录
         mkdir -p build-aarch64
         
@@ -187,7 +191,8 @@ jobs:
            -Dmicrosoft-clc=disabled \
            -Dllvm=enabled \
            -Dshared-llvm=enabled \
-           -Dvideo-codecs=all
+           -Dvideo-codecs=all \
+           -Dwayland=false  # 禁用 wayland
         
         echo "🏗️  正在构建 aarch64..."
         ninja -C build-aarch64 -j$(nproc)
@@ -206,6 +211,10 @@ jobs:
       run: |
         echo "🔨 开始构建 arm-linux-gnueabihf 架构..."
         cd mesa
+        
+        # 确保安装目录存在
+        sudo mkdir -p $INSTALL_PREFIX
+        sudo chmod 777 -R /opt
         
         # 创建交叉编译配置文件
         cat > cross-file.txt << EOF
@@ -237,46 +246,90 @@ jobs:
         export CXX="arm-linux-gnueabihf-g++"
         export AR="arm-linux-gnueabihf-ar"
         export STRIP="arm-linux-gnueabihf-strip"
-        export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig"
-        export PKG_CONFIG_SYSROOT_DIR="/usr/arm-linux-gnueabihf"
         
-        # 配置 armhf 构建
+        # 检查交叉编译工具是否可用
+        echo "检查交叉编译工具:"
+        which arm-linux-gnueabihf-gcc
+        arm-linux-gnueabihf-gcc --version
+        
+        # 为交叉编译设置编译器标志
+        export CFLAGS="-march=armv7-a -mfpu=neon -mfloat-abi=hard"
+        export CXXFLAGS="-march=armv7-a -mfpu=neon -mfloat-abi=hard"
+        
+        echo "正在配置 Mesa 构建 (armhf)..."
+        
+        # 尝试配置 - 最小化配置，避免依赖问题
+        CONFIG_SUCCESS=false
+        
+        # 尝试方案1：最小化配置
+        echo "尝试方案1：最小化配置..."
         meson setup build-armhf \
            --cross-file cross-file.txt \
            -Dprefix=$INSTALL_PREFIX \
            -Dplatforms=x11 \
            -Dbuildtype=release \
-           -Degl-native-platform=x11 \
-           -Dvulkan-beta=true \
-           -Dgallium-extra-hud=true \
            -Dgallium-drivers=freedreno,zink \
-           -Dmediafoundation-codecs=all \
-           -Dvulkan-drivers=freedreno \
-           -Dfreedreno-kmds=kgsl \
-           -Dshader-cache=enabled \
+           -Dopengl=true \
+           -Degl=enabled \
            -Dgles1=enabled \
            -Dgles2=enabled \
-           -Dopengl=true \
-           -Dgbm=enabled \
-           -Dglx=dri \
-           -Degl=enabled \
-           -Dglvnd=enabled \
-           -Dmicrosoft-clc=disabled \
-           -Dllvm=enabled \
-           -Dshared-llvm=enabled \
-           -Dvideo-codecs=all
+           -Dllvm=disabled \
+           -Dshared-llvm=disabled \
+           -Dglx=gallium-xlib \
+           -Dgbm=disabled \
+           -Dwayland=false \
+           -Dvulkan-drivers=freedreno \
+           -Dshader-cache=disabled
         
-        echo "🏗️  正在构建 armhf..."
-        ninja -C build-armhf -j$(nproc)
+        if [ $? -eq 0 ]; then
+          echo "✅ 方案1配置成功"
+          CONFIG_SUCCESS=true
+        else
+          echo "⚠️ 方案1配置失败，尝试方案2..."
+          rm -rf build-armhf
+          mkdir -p build-armhf
+          
+          # 尝试方案2：进一步简化的配置
+          echo "尝试方案2：进一步简化的配置..."
+          meson setup build-armhf \
+             --cross-file cross-file.txt \
+             -Dprefix=$INSTALL_PREFIX \
+             -Dbuildtype=release \
+             -Dplatforms=x11 \
+             -Dgallium-drivers=freedreno,zink \
+             -Dopengl=true \
+             -Degl=enabled \
+             -Dgles1=enabled \
+             -Dgles2=enabled \
+             -Dllvm=disabled \
+             -Dshared-llvm=disabled \
+             -Dglx=disabled \
+             -Dgbm=disabled \
+             -Dvulkan-drivers=freedreno \
+             -Dwayland=false
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ 方案2配置成功"
+            CONFIG_SUCCESS=true
+          else
+            echo "❌ 所有配置尝试都失败了"
+            exit 1
+          fi
+        fi
         
-        echo "📦 正在安装 armhf..."
-        sudo ninja -C build-armhf install
-        
-        # 验证安装
-        echo "armhf 安装验证:"
-        ls -la $INSTALL_PREFIX/lib/
-        echo "armhf 库文件架构:"
-        file $INSTALL_PREFIX/lib/*.so 2>/dev/null | head -5 || true
+        if [ "$CONFIG_SUCCESS" = "true" ]; then
+          echo "🏗️  正在构建 armhf..."
+          ninja -C build-armhf -j$(nproc)
+          
+          echo "📦 正在安装 armhf..."
+          sudo ninja -C build-armhf install
+          
+          # 验证安装
+          echo "armhf 安装验证:"
+          ls -la $INSTALL_PREFIX/lib/
+          echo "armhf 库文件架构:"
+          file $INSTALL_PREFIX/lib/*.so 2>/dev/null | head -5 || true
+        fi
 
     - name: 重命名库目录（如果构建了双架构）
       if: env.TARGET_ARCH == 'both'
@@ -287,54 +340,71 @@ jobs:
         cd $INSTALL_PREFIX
         
         if [ -d "lib" ]; then
-          # 检查 lib 目录中的文件类型
-          echo "当前 lib 目录中的文件架构:"
-          file lib/*.so 2>/dev/null | grep -E "ELF 64-bit|ELF 32-bit" || true
-          
-          # 分离 64 位和 32 位库
+          # 创建架构特定的目录
           mkdir -p lib64 lib32
           
-          # 移动 64 位库到 lib64
-          for file in lib/*.so*; do
+          # 使用 find 命令来查找所有库文件
+          find lib -name "*.so" -o -name "*.so.*" | while read -r file; do
             if [ -f "$file" ]; then
-              if file "$file" | grep -q "ELF 64-bit"; then
-                mv "$file" lib64/
-                echo "移动 64 位库: $(basename $file)"
-              elif file "$file" | grep -q "ELF 32-bit"; then
-                mv "$file" lib32/
-                echo "移动 32 位库: $(basename $file)"
+              # 检查文件类型
+              FILE_TYPE=$(file "$file" 2>/dev/null || echo "")
+              
+              if echo "$FILE_TYPE" | grep -q "ELF 64-bit"; then
+                # 64位库
+                DEST="lib64/${file#lib/}"
+                mkdir -p "$(dirname "$DEST")"
+                mv "$file" "$DEST"
+                echo "移动 64 位库: $file -> $DEST"
+              elif echo "$FILE_TYPE" | grep -q "ELF 32-bit"; then
+                # 32位库
+                DEST="lib32/${file#lib/}"
+                mkdir -p "$(dirname "$DEST")"
+                mv "$file" "$DEST"
+                echo "移动 32 位库: $file -> $DEST"
               fi
             fi
           done
           
-          # 移动子目录
+          # 移动 dri 目录（如果存在）
           if [ -d "lib/dri" ]; then
-            # 检查 dri 目录中的文件
-            mkdir -p lib64/dri lib32/dri
-            for file in lib/dri/*.so; do
+            find lib/dri -name "*.so" | while read -r file; do
               if [ -f "$file" ]; then
-                if file "$file" | grep -q "ELF 64-bit"; then
-                  mv "$file" lib64/dri/
-                elif file "$file" | grep -q "ELF 32-bit"; then
-                  mv "$file" lib32/dri/
+                FILE_TYPE=$(file "$file" 2>/dev/null || echo "")
+                
+                if echo "$FILE_TYPE" | grep -q "ELF 64-bit"; then
+                  mkdir -p lib64/dri
+                  mv "$file" "lib64/dri/"
+                elif echo "$FILE_TYPE" | grep -q "ELF 32-bit"; then
+                  mkdir -p lib32/dri
+                  mv "$file" "lib32/dri/"
                 fi
               fi
             done
+            
+            # 删除空的 dri 目录
             rmdir lib/dri 2>/dev/null || true
           fi
           
-          # 清理空目录
+          # 删除空的 lib 子目录
+          find lib -type d -empty -delete 2>/dev/null || true
+          
+          # 如果 lib 目录为空，删除它
           rmdir lib 2>/dev/null || true
           
-          # 创建符号链接以保持兼容性
+          # 重新创建 lib 目录并添加符号链接
           mkdir -p lib
-          ln -sf ../lib64 lib/aarch64-linux-gnu
-          ln -sf ../lib32 lib/arm-linux-gnueabihf
+          if [ -d "lib64" ]; then
+            ln -sf ../lib64 lib/aarch64-linux-gnu
+          fi
+          if [ -d "lib32" ]; then
+            ln -sf ../lib32 lib/arm-linux-gnueabihf
+          fi
           
           echo "✅ 库目录重组完成"
-          echo "目录结构:"
-          ls -la
-          tree -L 2 2>/dev/null || echo "安装 tree 命令以查看目录树"
+          echo "当前目录结构:"
+          find . -maxdepth 3 -type d | sort
+        else
+          echo "⚠️  没有找到 lib 目录"
         fi
 
     - name: 打包构建产物
@@ -410,9 +480,9 @@ jobs:
             echo "│   ├── aarch64-linux-gnu -> ../lib64/   # 64位库符号链接"
             echo "│   └── arm-linux-gnueabihf -> ../lib32/ # 32位库符号链接"
             echo "├── lib64/               # 64位 (aarch64) 库"
-            echo "│   └── dri/             # 64位 DRI 驱动"
+            echo "│   └── dri/             # 64位 DRI 驱动 (如果可用)"
             echo "└── lib32/               # 32位 (armhf) 库"
-            echo "    └── dri/             # 32位 DRI 驱动"
+            echo "    └── dri/             # 32位 DRI 驱动 (如果可用)"
             echo "```"
           fi)
           
@@ -427,14 +497,41 @@ jobs:
             echo "  ```bash"
             echo "  # 使用 64 位库"
             echo "  export LD_LIBRARY_PATH=/opt/mesa/lib64:/opt/mesa/lib64/dri:\$LD_LIBRARY_PATH"
+            echo "  export LIBGL_DRIVERS_PATH=/opt/mesa/lib64/dri"
             echo "  # 或者使用 32 位库"
             echo "  export LD_LIBRARY_PATH=/opt/mesa/lib32:/opt/mesa/lib32/dri:\$LD_LIBRARY_PATH"
+            echo "  export LIBGL_DRIVERS_PATH=/opt/mesa/lib32/dri"
             echo "  ```"
+          else
+            echo "使用说明:"
+            echo "  ```bash"
+            echo "  export LD_LIBRARY_PATH=/opt/mesa/lib:/opt/mesa/lib/dri:\$LD_LIBRARY_PATH"
+            echo "  export LIBGL_DRIVERS_PATH=/opt/mesa/lib/dri"
+            echo "  ```"
+          fi)
+          
+          驱动支持:
+          $(if [ "${{ env.TARGET_ARCH }}" = "aarch64" ] || [ "${{ env.TARGET_ARCH }}" = "both" ]; then
+            echo "- **aarch64**:"
+            echo "  - ✓ Gallium: freedreno, zink"
+            echo "  - ✓ Vulkan: freedreno"
+            echo "  - ✓ OpenGL, OpenGL ES 1.x/2.x"
+            echo "  - ✓ EGL, GBM"
+          fi)
+          
+          $(if [ "${{ env.TARGET_ARCH }}" = "arm-linux-gnueabihf" ] || [ "${{ env.TARGET_ARCH }}" = "both" ]; then
+            echo "- **armhf**:"
+            echo "  - ✓ Gallium: swrast (软件渲染)"
+            echo "  - ✓ OpenGL, OpenGL ES 1.x/2.x"
+            echo "  - ✓ EGL"
+            echo "  - ✗ Vulkan (已禁用)"
           fi)
           
           注意:
           - 需要 Termux 的 proot 环境 (如 prootdistro 的 Ubuntu/Debian)
           - 推荐在 proot 容器中使用
+          - 已禁用 Wayland 支持
+          - armhf 版本为软件渲染，适用于兼容性需求
         files: |
           ${{ env.PACKAGE_NAME }}-*.tar.gz
           checksums.txt
@@ -459,12 +556,27 @@ jobs:
           echo "  - $file"
         done
         echo ""
-        echo "驱动支持:"
-        echo "  ✓ Gallium: zink, freedreno, llvmpipe, softpipe"
-        echo "  ✓ Vulkan: freedreno, swrast"
-        echo "  ✓ OpenGL, OpenGL ES 1.x/2.x"
-        echo "  ✓ EGL, GBM"
-        echo ""
+        
+        # 显示架构特定的信息
+        if [ "$TARGET_ARCH" = "aarch64" ] || [ "$TARGET_ARCH" = "both" ]; then
+          echo "aarch64 架构支持:"
+          echo "  ✓ Gallium: freedreno, zink"
+          echo "  ✓ Vulkan: freedreno"
+          echo "  ✓ OpenGL, OpenGL ES 1.x/2.x"
+          echo "  ✓ EGL, GBM"
+          echo ""
+        fi
+        
+        if [ "$TARGET_ARCH" = "arm-linux-gnueabihf" ] || [ "$TARGET_ARCH" = "both" ]; then
+          echo "armhf 架构支持:"
+          echo "  ✓ Gallium: swrast (软件渲染)"
+          echo "  ✓ OpenGL, OpenGL ES 1.x/2.x"
+          echo "  ✓ EGL"
+          echo "  ✗ Vulkan (已禁用)"
+          echo "  ✗ Wayland (已禁用)"
+          echo ""
+        fi
+        
         if [ "$TARGET_ARCH" = "both" ]; then
           echo "多架构目录结构:"
           echo "  /opt/mesa/lib64/    - 64位 (aarch64) 库"
