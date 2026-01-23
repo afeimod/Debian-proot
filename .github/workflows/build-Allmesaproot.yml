@@ -116,7 +116,18 @@ jobs:
             libx11-xcb-dev:armhf \
             libxcb1-dev:armhf \
             libxcb-dri3-dev:armhf \
-            libxcb-present-dev:armhf
+            libxcb-present-dev:armhf \
+            libatomic1:armhf \
+            libatomic1-dev:armhf \
+            libatomic-ops-dev:armhf \
+            # 添加其他可能需要的库
+            libpthread-stubs0-dev:armhf \
+            libselinux1-dev:armhf \
+            libunwind-dev:armhf \
+            libffi-dev:armhf \
+            libudev-dev:armhf \
+            libpciaccess-dev:armhf \
+            libelf-dev:armhf
           
           echo "ARM 交叉编译环境已准备"
         fi
