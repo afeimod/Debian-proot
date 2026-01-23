@@ -90,6 +90,7 @@ jobs:
         # 如果包含 armhf 构建，安装交叉编译工具链
         if [ "$TARGET_ARCH" = "both" ] || [ "$TARGET_ARCH" = "arm-linux-gnueabihf" ]; then
           echo "安装 ARM 交叉编译工具链..."
+          sudo dpkg --add-architecture armhf
           sudo apt install -y \
             gcc-arm-linux-gnueabihf \
             g++-arm-linux-gnueabihf \
