@@ -98,7 +98,7 @@ jobs:
             binutils-arm-linux-gnueabihf \
             libdrm-dev:armhf \
             libx11-dev:armhf \
-            llvm-19-dev：armhf \
+            llvm-19-dev:armhf \
             libxext-dev:armhf \
             libxfixes-dev:armhf \
             libxcb1-dev:armhf \
