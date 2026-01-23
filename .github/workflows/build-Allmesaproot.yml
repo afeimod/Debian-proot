@@ -85,6 +85,9 @@ jobs:
           libxcb-present-dev libxcb-randr0-dev libxcb-sync-dev libxcb-xfixes0-dev \
           libxshmfence-dev libdrm-dev libgbm-dev libegl1-mesa-dev libexpat1-dev \
           libwayland-dev python3-pip python3-setuptools python3-wheel ninja-build \
+          gcc-arm-linux-gnueabihf \
+            g++-arm-linux-gnueabihf \
+            binutils-arm-linux-gnueabihf \
           flex bison libtool pkg-config
         
         # 如果包含 armhf 构建，安装交叉编译工具链
@@ -93,13 +96,17 @@ jobs:
           sudo dpkg --add-architecture armhf
           sudo apt update
           sudo apt install -y \
-            gcc-arm-linux-gnueabihf \
-            g++-arm-linux-gnueabihf \
-            binutils-arm-linux-gnueabihf \
             libx11-dev:armhf \
+            libxext-dev:armhf \
+            libxfixes-dev:armhf \
             libxcb1-dev:armhf \
             libxcb-dri3-dev:armhf \
-            llvm-19-dev:armhf
+            llvm-19-dev:armhf \
+            libxcb-present-dev:armhf \
+            libxcb-sync-dev:armhf \
+            libxshmfence-dev:armhf \
+            libxxf86vm-dev:armhf \
+            libexpat1-dev:armhf
         fi
 
     - name: 安装 Python 构建工具
