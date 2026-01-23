@@ -31,8 +31,8 @@ jobs:
     - name: 安装armhf依赖
       run: |
         sudo dpkg --add-architecture armhf
-        suso apt update
-        sudo apt install gcc-arm-linux-gnueabihf
+        sudo apt update
+        sudo apt install gcc-arm-linux-gnueabihf -y
 
     - name: 设置 Box86 版本
       id: set_version
