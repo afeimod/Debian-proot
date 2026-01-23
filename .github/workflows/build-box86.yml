@@ -27,6 +27,9 @@ jobs:
         sudo apt-get install -y \
           cmake build-essential \
           gcc git patchelf xz-utils
+          
+    - name: 安装armhf依赖
+      run: |
         sudo dpkg --add-architecture armhf
         suso apt update
         sudo apt install gcc-arm-linux-gnueabihf
