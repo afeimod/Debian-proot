@@ -271,13 +271,7 @@ jobs:
         export CXX="arm-linux-gnueabihf-g++"
         export AR="arm-linux-gnueabihf-ar"
         export STRIP="arm-linux-gnueabihf-strip"
-        export PKG_CONFIG="pkg-config"
-        export PKG_CONFIG_LIBDIR="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig"
-        export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig"
-        export PKG_CONFIG_SYSROOT_DIR="/"
         
-        # 设置链接器标志，避免链接错误架构的库
-        export LDFLAGS="-Wl,--sysroot=/usr/arm-linux-gnueabihf"
         # 检查交叉编译工具是否可用
         echo "检查交叉编译工具:"
         which arm-linux-gnueabihf-gcc
