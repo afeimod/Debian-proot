@@ -91,6 +91,7 @@ jobs:
         if [ "$TARGET_ARCH" = "both" ] || [ "$TARGET_ARCH" = "arm-linux-gnueabihf" ]; then
           echo "安装 ARM 交叉编译工具链..."
           sudo dpkg --add-architecture armhf
+          sudo apt update
           sudo apt install -y \
             gcc-arm-linux-gnueabihf \
             g++-arm-linux-gnueabihf \
