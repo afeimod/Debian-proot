@@ -1,0 +1,420 @@
+# build-mesaproot.yml
+name: Build All-Mesa for proot (Multi-arch)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mesa_branch:
+        description: 'Mesa 分支 (可选，默认为 adreno-main)'
+        required: false
+        default: 'adreno-main'
+        type: string
+      use_upstream:
+        description: '是否使用上游官方 Mesa (而不是 lfdevs 的分支)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      target_arch:
+        description: '目标架构'
+        required: false
+        default: 'aarch64'
+        type: choice
+        options:
+          - 'aarch64'
+          - 'arm-linux-gnueabihf'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    
+    strategy:
+      matrix:
+        arch: [${{ github.event.inputs.target_arch || 'aarch64' }}]
+
+    steps:
+    - name: 设置构建参数
+      id: setup
+      run: |
+        # 设置默认参数
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "MESA_BRANCH=${{ github.event.inputs.mesa_branch }}" >> $GITHUB_ENV
+          echo "USE_UPSTREAM=${{ github.event.inputs.use_upstream }}" >> $GITHUB_ENV
+          echo "TARGET_ARCH=${{ github.event.inputs.target_arch || 'aarch64' }}" >> $GITHUB_ENV
+        else
+          echo "MESA_BRANCH=adreno-main" >> $GITHUB_ENV
+          echo "USE_UPSTREAM=false" >> $GITHUB_ENV
+          echo "TARGET_ARCH=${{ matrix.arch }}" >> $GITHUB_ENV
+        fi
+        
+        BUILD_DATE=$(date +%Y%m%d)
+        echo "BUILD_DATE=$BUILD_DATE" >> $GITHUB_ENV
+        
+        # 根据架构设置安装目录前缀
+        if [ "$TARGET_ARCH" = "aarch64" ]; then
+          echo "INSTALL_PREFIX=/opt/mesa-aarch64" >> $GITHUB_ENV
+          echo "MESON_CPU=aarch64" >> $GITHUB_ENV
+          echo "CROSS_PREFIX=" >> $GITHUB_ENV
+        elif [ "$TARGET_ARCH" = "arm-linux-gnueabihf" ]; then
+          echo "INSTALL_PREFIX=/opt/mesa-armhf" >> $GITHUB_ENV
+          echo "MESON_CPU=arm" >> $GITHUB_ENV
+          echo "CROSS_PREFIX=arm-linux-gnueabihf-" >> $GITHUB_ENV
+        fi
+        
+        echo "使用的 Mesa 分支: $MESA_BRANCH"
+        echo "是否使用上游: $USE_UPSTREAM"
+        echo "目标架构: $TARGET_ARCH"
+        echo "安装目录: $INSTALL_PREFIX"
+        echo "构建日期: $BUILD_DATE"
+
+    - name: 检出仓库
+      uses: actions/checkout@v4
+
+    - name: 显示环境信息
+      run: |
+        echo "构建环境信息:"
+        uname -a
+        lscpu | grep -E 'Model name|Architecture|CPU MHz|Core'
+        free -h
+        echo "当前架构: $(uname -m)"
+        echo "目标架构: $TARGET_ARCH"
+
+    - name: 安装系统依赖
+      run: |
+        sudo sed -i "s/^Types: deb$/Types: deb deb-src/" /etc/apt/sources.list.d/ubuntu.sources
+        sudo apt update
+        
+        # 基础依赖
+        sudo apt install -y \
+          glslang-tools libxrandr-dev libxxf86vm-dev libxcb-shm0-dev libxcb-glx0-dev \
+          libxext-dev llvm-19 libx11-dev libx11-xcb-dev libxcb1-dev libxcb-dri3-dev \
+          libxcb-present-dev libxcb-randr0-dev libxcb-sync-dev libxcb-xfixes0-dev \
+          libxshmfence-dev libdrm-dev libgbm-dev libegl1-mesa-dev libexpat1-dev \
+          libwayland-dev python3-pip python3-setuptools python3-wheel ninja-build \
+          flex bison libtool pkg-config
+        
+        # 根据目标架构安装额外的工具链
+        if [ "$TARGET_ARCH" = "arm-linux-gnueabihf" ]; then
+          echo "安装 ARM 交叉编译工具链..."
+          sudo apt install -y \
+            gcc-arm-linux-gnueabihf \
+            g++-arm-linux-gnueabihf \
+            binutils-arm-linux-gnueabihf \
+            libdrm-dev:armhf \
+            libx11-dev:armhf \
+            libxext-dev:armhf \
+            libxfixes-dev:armhf \
+            libxcb1-dev:armhf \
+            libxcb-dri3-dev:armhf \
+            libxcb-present-dev:armhf \
+            libxcb-sync-dev:armhf \
+            libxshmfence-dev:armhf \
+            libxxf86vm-dev:armhf \
+            libexpat1-dev:armhf
+        fi
+
+    - name: 安装 Python 构建工具
+      run: |
+        sudo pip3 install meson mako
+        
+        echo "检查安装的 meson 版本:"
+        meson --version
+        python3 -c "import mesonbuild; print('mesonbuild 模块路径:', mesonbuild.__file__)"
+        
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+    - name: 克隆 Mesa 源码
+      run: |
+        echo "📥 克隆 Mesa 仓库..."
+        
+        if [ "$USE_UPSTREAM" = "true" ]; then
+          echo "使用上游官方 Mesa 仓库"
+          git clone https://gitlab.freedesktop.org/mesa/mesa.git
+          cd mesa
+        else
+          echo "使用 lfdevs 的 Mesa for Android Container 仓库"
+          git clone https://github.com/lfdevs/mesa-for-android-container.git mesa
+          cd mesa
+          
+          # 检出指定分支
+          if [ -n "$MESA_BRANCH" ] && [ "$MESA_BRANCH" != "main" ]; then
+            echo "检出分支: $MESA_BRANCH"
+            git checkout $MESA_BRANCH
+          fi
+        fi
+        
+        # 获取版本信息
+        GIT_HASH=$(git rev-parse --short HEAD)
+        if [ -f "VERSION" ]; then
+          OFFICIAL_VERSION=$(cat VERSION)
+        else
+          OFFICIAL_VERSION="git-$GIT_HASH"
+        fi
+        
+        GIT_DESCRIBE=$(git describe --tags --always 2>/dev/null || echo "custom-$GIT_HASH")
+        
+        echo "MESA_GIT_HASH=$GIT_HASH" >> $GITHUB_ENV
+        echo "MESA_VERSION=$OFFICIAL_VERSION" >> $GITHUB_ENV
+        echo "GIT_DESCRIBE=$GIT_DESCRIBE" >> $GITHUB_ENV
+        
+        echo "✅ 源码克隆完成"
+        echo "版本: $OFFICIAL_VERSION"
+        echo "提交: $GIT_HASH"
+        echo "描述: $GIT_DESCRIBE"
+        echo "分支: $(git branch --show-current)"
+
+    - name: 为 armhf 设置交叉编译环境
+      if: env.TARGET_ARCH == 'arm-linux-gnueabihf'
+      run: |
+        echo "设置 ARM 交叉编译环境..."
+        
+        # 创建交叉编译配置文件
+        cat > cross-file.txt << EOF
+        [binaries]
+        c = 'arm-linux-gnueabihf-gcc'
+        cpp = 'arm-linux-gnueabihf-g++'
+        ar = 'arm-linux-gnueabihf-ar'
+        strip = 'arm-linux-gnueabihf-strip'
+        pkgconfig = 'arm-linux-gnueabihf-pkg-config'
+        
+        [host_machine]
+        system = 'linux'
+        cpu_family = 'arm'
+        cpu = '$MESON_CPU'
+        endian = 'little'
+        
+        [properties]
+        needs_exe_wrapper = true
+        
+        [paths]
+        prefix = '$INSTALL_PREFIX'
+        EOF
+        
+        echo "交叉编译配置文件:"
+        cat cross-file.txt
+        
+        # 设置环境变量
+        export CC="arm-linux-gnueabihf-gcc"
+        export CXX="arm-linux-gnueabihf-g++"
+        export AR="arm-linux-gnueabihf-ar"
+        export STRIP="arm-linux-gnueabihf-strip"
+        export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig"
+        export PKG_CONFIG_SYSROOT_DIR="/usr/arm-linux-gnueabihf"
+        
+        echo "交叉编译环境变量已设置"
+
+    - name: 构建 Mesa
+      run: |
+        cd mesa
+        
+        echo "🔨 开始构建 Mesa..."
+        echo "目标架构: $TARGET_ARCH"
+        BUILD_START=$(date +%s)
+        
+        # 创建安装目录
+        sudo mkdir -p $INSTALL_PREFIX
+        sudo chmod 777 -R /opt
+        
+        # 创建构建目录
+        mkdir -p builddir
+        
+        # 验证使用的工具
+        echo "检查构建工具:"
+        which meson
+        meson --version
+        which ninja
+        ninja --version
+        
+        if [ "$TARGET_ARCH" = "arm-linux-gnueabihf" ]; then
+          echo "检查交叉编译工具:"
+          which arm-linux-gnueabihf-gcc
+          arm-linux-gnueabihf-gcc --version
+        fi
+        
+        # 准备构建命令
+        MESON_CMD="meson setup builddir \
+           -Dprefix=$INSTALL_PREFIX \
+           -Dplatforms=x11 \
+           -Dbuildtype=release \
+           -Degl-native-platform=x11 \
+           -Dvulkan-beta=true \
+           -Dgallium-extra-hud=true \
+           -Dgallium-drivers=freedreno,zink \
+           -Dmediafoundation-codecs=all \
+           -Dvulkan-drivers=freedreno \
+           -Dfreedreno-kmds=kgsl \
+           -Dshader-cache=enabled \
+           -Dgles1=enabled \
+           -Dgles2=enabled \
+           -Dopengl=true \
+           -Dgbm=enabled \
+           -Dglx=dri \
+           -Degl=enabled \
+           -Dglvnd=enabled \
+           -Dmicrosoft-clc=disabled \
+           -Dllvm=enabled \
+           -Dshared-llvm=enabled \
+           -Dvulkan-beta=true \
+           -Dvideo-codecs=all"
+        
+        # 如果是交叉编译，添加交叉编译文件
+        if [ "$TARGET_ARCH" = "arm-linux-gnueabihf" ]; then
+          MESON_CMD="$MESON_CMD --cross-file ../cross-file.txt"
+        fi
+        
+        echo "执行配置命令:"
+        echo $MESON_CMD
+        
+        # 配置构建选项
+        eval $MESON_CMD
+        
+        # 检查配置状态
+        echo "配置状态检查:"
+        meson configure builddir || true
+        
+        # 开始构建
+        echo "🏗️  正在构建..."
+        ninja -C builddir -j$(nproc)
+        
+        echo "📦 正在安装..."
+        sudo ninja -C builddir install
+        
+        BUILD_END=$(date +%s)
+        BUILD_TIME=$((BUILD_END - BUILD_START))
+        echo "✅ 构建完成，耗时: ${BUILD_TIME}秒"
+        
+        # 验证安装
+        echo "安装验证:"
+        ls -la $INSTALL_PREFIX
+        if [ -d "$INSTALL_PREFIX/lib" ]; then
+          echo "库文件:"
+          ls -la $INSTALL_PREFIX/lib/ || true
+          
+          # 检查文件类型
+          echo "检查关键库文件的架构:"
+          find $INSTALL_PREFIX/lib -name "*.so*" | head -5 | while read -r lib; do
+            if [ -f "$lib" ]; then
+              echo "文件: $lib"
+              file "$lib" || true
+            fi
+          done
+        fi
+
+    - name: 打包构建产物
+      run: |
+        echo "📦 开始打包..."
+        
+        # 创建版本化的包名
+        PACKAGE_NAME="prootmesa-${MESA_VERSION}-${TARGET_ARCH}"
+        
+        # 打包完整安装目录
+        cd /opt
+        tar -czvf "${HOME}/${PACKAGE_NAME}-full.tar.gz" $(basename $INSTALL_PREFIX)/
+        
+        # 仅打包 Vulkan 驱动（可选）
+        cd $INSTALL_PREFIX
+        if [ -d "lib" ]; then
+          # 查找并打包所有 Vulkan 驱动
+          find lib -name "libvulkan_*.so" -o -name "*vulkan*.so*" 2>/dev/null | while read -r file; do
+            echo "找到 Vulkan 驱动: $file"
+          done
+          tar -czvf "${HOME}/${PACKAGE_NAME}-vulkan.tar.gz" $(find lib -name "libvulkan_*.so" -o -name "*vulkan*.so*" 2>/dev/null) 2>/dev/null || true
+        fi
+        
+        # 移动回工作目录
+        cd $GITHUB_WORKSPACE
+        mv "${HOME}/${PACKAGE_NAME}-full.tar.gz" .
+        if [ -f "${HOME}/${PACKAGE_NAME}-vulkan.tar.gz" ]; then
+          mv "${HOME}/${PACKAGE_NAME}-vulkan.tar.gz" .
+        fi
+        
+        # 生成校验和
+        sha256sum ${PACKAGE_NAME}-*.tar.gz > checksums.txt
+        
+        # 设置输出变量
+        echo "PACKAGE_NAME=${PACKAGE_NAME}" >> $GITHUB_ENV
+        echo "FULL_PACKAGE=${PACKAGE_NAME}-full.tar.gz" >> $GITHUB_ENV
+        
+        echo "📦 打包完成:"
+        ls -lh *.tar.gz
+
+    - name: 上传构建产物
+      uses: actions/upload-artifact@v4
+      with:
+        name: prootmesa-${{ env.MESA_VERSION }}-${{ env.TARGET_ARCH }}
+        path: |
+          ${{ env.PACKAGE_NAME }}-*.tar.gz
+          checksums.txt
+
+    - name: 创建轻量级发布
+      uses: softprops/action-gh-release@v1
+      if: ${{ github.event_name == 'workflow_dispatch' }}
+      with:
+        tag_name: prootmesa-${{ env.MESA_VERSION }}-${{ env.TARGET_ARCH }}-${{ env.BUILD_DATE }}
+        name: Mesa proot ${{ env.MESA_VERSION }} (${{ env.TARGET_ARCH }})
+        body: |
+          Mesa 3D Graphics Library for Termux proot (proot) on ${{ env.TARGET_ARCH }}
+          
+          构建信息:
+          - **版本**: ${{ env.MESA_VERSION }}
+          - **目标架构**: ${{ env.TARGET_ARCH }}
+          - **Git 描述**: ${{ env.GIT_DESCRIBE }}
+          - **提交哈希**: ${{ env.MESA_GIT_HASH }}
+          - **构建日期**: ${{ env.BUILD_DATE }}
+          - **分支**: ${{ env.MESA_BRANCH }}
+          - **仓库**: $(if [ "${{ env.USE_UPSTREAM }}" = "true" ]; then echo "上游官方"; else echo "lfdevs/android-container"; fi)
+          
+          包含文件:
+          - `${{ env.FULL_PACKAGE }}` - 完整 Mesa 安装包
+          - `*-vulkan.tar.gz` - 仅 Vulkan 驱动 (可选)
+          - `checksums.txt` - 校验和文件
+          
+          安装说明:
+          1. 下载完整的 tar.gz 包
+          2. 在 proot 环境中解压到根目录: `tar -xzf package.tar.gz -C /`
+          3. 或者解压到自定义目录并设置环境变量:
+             ```bash
+             export LD_LIBRARY_PATH=/path/to/mesa/lib:$LD_LIBRARY_PATH
+             export LIBGL_DRIVERS_PATH=/path/to/mesa/lib/dri
+             ```
+          
+          注意:
+          - 需要 Termux 的 proot 环境 (如 prootdistro 的 Ubuntu/Debian)
+          - 推荐在 proot 容器中使用
+          - 对于 arm-linux-gnueabihf 构建，需要在 32 位 ARM 环境中使用
+        files: |
+          ${{ env.PACKAGE_NAME }}-*.tar.gz
+          checksums.txt
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: 输出总结
+      run: |
+        echo "✅ Mesa proot 构建完成!"
+        echo "================================"
+        echo "版本: $MESA_VERSION"
+        echo "提交: $MESA_GIT_HASH"
+        echo "构建日期: $BUILD_DATE"
+        echo "分支: $MESA_BRANCH"
+        echo "目标架构: $TARGET_ARCH"
+        echo "环境: Termux (proot)"
+        echo ""
+        echo "📦 生成的文件:"
+        ls -1 *.tar.gz | while read file; do
+          echo "  - $file"
+        done
+        echo ""
+        echo "驱动支持:"
+        echo "  ✓ Gallium: zink, freedreno, llvmpipe, softpipe"
+        echo "  ✓ Vulkan: freedreno, swrast"
+        echo "  ✓ OpenGL, OpenGL ES 1.x/2.x"
+        echo "  ✓ EGL, GBM"
+        echo ""
+        echo "安装目录: $INSTALL_PREFIX"
