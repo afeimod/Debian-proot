@@ -191,8 +191,8 @@ jobs:
            -Dmicrosoft-clc=disabled \
            -Dllvm=enabled \
            -Dshared-llvm=enabled \
-           -Dvideo-codecs=all \
-           -Dwayland=false  # 禁用 wayland
+           -Dvulkan-beta=true \
+           -Dvideo-codecs=all
         
         echo "🏗️  正在构建 aarch64..."
         ninja -C build-aarch64 -j$(nproc)
@@ -277,7 +277,6 @@ jobs:
            -Dshared-llvm=disabled \
            -Dglx=gallium-xlib \
            -Dgbm=disabled \
-           -Dwayland=false \
            -Dvulkan-drivers=freedreno \
            -Dshader-cache=disabled
         
@@ -305,8 +304,7 @@ jobs:
              -Dshared-llvm=disabled \
              -Dglx=disabled \
              -Dgbm=disabled \
-             -Dvulkan-drivers=freedreno \
-             -Dwayland=false
+             -Dvulkan-drivers=freedreno
           
           if [ $? -eq 0 ]; then
             echo "✅ 方案2配置成功"
