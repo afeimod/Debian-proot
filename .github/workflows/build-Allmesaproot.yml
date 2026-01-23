@@ -101,6 +101,21 @@ jobs:
             g++-arm-linux-gnueabihf \
             binutils-arm-linux-gnueabihf \
             libc6-dev-armhf-cross
+          sudo dpkg --add-architecture armhf
+          sudo apt update
+          sudo apt install -y \
+            libssl-dev:armhf \
+            libxml2-dev:armhf \
+            zlib1g-dev:armhf \
+            libexpat1-dev:armhf \
+            libdrm-dev:armhf \
+            libgbm-dev:armhf \
+            libx11-dev:armhf \
+            libxext-dev:armhf \
+            libx11-xcb-dev:armhf \
+            libxcb1-dev:armhf \
+            libxcb-dri3-dev:armhf \
+            libxcb-present-dev:armhf
           
           echo "ARM 交叉编译环境已准备"
         fi
