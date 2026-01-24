@@ -297,17 +297,14 @@ jobs:
            -Dvulkan-beta=true \
            -Dgallium-extra-hud=true \
            -Dgallium-drivers=freedreno,zink \
-           -Dmediafoundation-codecs=all \
            -Dvulkan-drivers=freedreno \
            -Dshader-cache=enabled \
            -Dgles1=enabled \
            -Dgles2=enabled \
            -Dopengl=true \
-           -Dglx=dri \
            -Dmicrosoft-clc=disabled \
            -Dllvm=disabled \
            -Dshared-llvm=disabled \
-           -Dvulkan-beta=true \
            -Dvideo-codecs=all
         
         if [ $? -eq 0 ]; then
