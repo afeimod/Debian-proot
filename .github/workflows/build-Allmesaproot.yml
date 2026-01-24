@@ -278,7 +278,7 @@ jobs:
         echo "尝试简化配置..."
         meson setup build-armhf \
            --cross-file cross-file.txt \
-           -prefix=$INSTALL_PREFIX \
+           -Dprefix=$INSTALL_PREFIX \
            -Dplatforms=x11 \
            -Dbuildtype=release \
            -Degl-native-platform=x11 \
