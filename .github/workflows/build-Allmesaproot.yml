@@ -278,29 +278,27 @@ jobs:
         echo "尝试简化配置..."
         meson setup build-armhf \
            --cross-file cross-file.txt \
-           -Dprefix=$INSTALL_PREFIX \
-           -Dbuildtype=release \
+           -prefix=$INSTALL_PREFIX \
            -Dplatforms=x11 \
+           -Dbuildtype=release \
+           -Degl-native-platform=x11 \
            -Dgallium-drivers=freedreno,zink \
+           -Dmediafoundation-codecs=all \
            -Dvulkan-drivers=freedreno \
-           -Dopengl=true \
-           -Degl=enabled \
+           -Dfreedreno-kmds=kgsl \
+           -Dshader-cache=enabled \
            -Dgles1=enabled \
            -Dgles2=enabled \
-           -Dglx=dri \
+           -Dopengl=true \
            -Dgbm=enabled \
-           -Dshared-glapi=enabled \
+           -Dglx=dri \
+           -Degl=enabled \
+           -Dglvnd=disabled \
+           -Dmicrosoft-clc=disabled \
            -Dllvm=disabled \
            -Dshared-llvm=disabled \
-           -Dglvnd=false \
-           -Dmicrosoft-clc=disabled \
-           -Dvideo-codecs=all \
-           -Dshader-cache=enabled \
-           -Dglx-read-only-text=false \
-           -Dgallium-extra-hud=true \
-           -Dvalgrind=disabled \
-           -Dsse2=false \
-           -Dlibunwind=disabled
+           -Dvulkan-beta=true \
+           -Dvideo-codecs=all
         
         if [ $? -eq 0 ]; then
           echo "✅ 配置成功"
