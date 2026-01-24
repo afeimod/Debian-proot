@@ -387,67 +387,7 @@ jobs:
           file $INSTALL_PREFIX/lib/*.so 2>/dev/null | head -5 || true
         fi
 
-    - name: 重命名库目录（如果构建了双架构）
-      if: env.TARGET_ARCH == 'both'
-      run: |
-        echo "🔄 重新组织库目录结构以适应双架构..."
-    
-        # 检查是否存在两个架构的库
-        cd $INSTALL_PREFIX
-    
-        if [ -d "lib" ]; then
-          # 创建架构特定的目录
-          mkdir -p lib/aarch64-linux-gnu lib/arm-linux-gnueabihf
-      
-          # 使用 find 命令来查找所有库文件
-          find lib -maxdepth 1 -name "*.so" -o -name "*.so.*" | while read -r file; do
-            if [ -f "$file" ]; then
-              # 检查文件类型
-              FILE_TYPE=$(file "$file" 2>/dev/null || echo "")
-          
-              if echo "$FILE_TYPE" | grep -q "ELF 64-bit"; then
-                # 64位库
-                DEST="lib/aarch64-linux-gnu/$(basename "$file")"
-                mv "$file" "$DEST"
-                echo "移动 64 位库: $file -> $DEST"
-              elif echo "$FILE_TYPE" | grep -q "ELF 32-bit"; then
-                # 32位库
-                DEST="lib/arm-linux-gnueabihf/$(basename "$file")"
-                mv "$file" "$DEST"
-                echo "移动 32 位库: $file -> $DEST"
-              fi
-            fi
-          done
-      
-          # 移动 dri 目录（如果存在）
-          if [ -d "lib/dri" ]; then
-            find lib/dri -name "*.so" | while read -r file; do
-              if [ -f "$file" ]; then
-                FILE_TYPE=$(file "$file" 2>/dev/null || echo "")
-            
-                if echo "$FILE_TYPE" | grep -q "ELF 64-bit"; then
-                  mkdir -p lib/aarch64-linux-gnu/dri
-                  mv "$file" "lib/aarch64-linux-gnu/dri/"
-                elif echo "$FILE_TYPE" | grep -q "ELF 32-bit"; then
-                  mkdir -p lib/arm-linux-gnueabihf/dri
-                  mv "$file" "lib/arm-linux-gnueabihf/dri/"
-                fi
-              fi
-            done
-        
-            # 删除空的 dri 目录
-            rmdir lib/dri 2>/dev/null || true
-          fi
-      
-          # 删除空的 lib 子目录（除了我们创建的两个架构目录）
-          find lib -mindepth 1 -maxdepth 1 -type d ! -name "aarch64-linux-gnu" ! -name "arm-linux-gnueabihf" -empty -exec rmdir {} \;
-      
-          echo "✅ 库目录重组完成"
-          echo "当前目录结构:"
-          find . -maxdepth 3 -type d | sort
-        else
-          echo "⚠️  没有找到 lib 目录"
-        fi
+
 
     - name: 打包构建产物
       run: |
