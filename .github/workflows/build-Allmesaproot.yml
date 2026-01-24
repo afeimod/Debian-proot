@@ -226,7 +226,7 @@ jobs:
            -Degl-native-platform=x11 \
            -Dvulkan-beta=true \
            -Dgallium-extra-hud=true \
-           -Dgallium-drivers=freedreno,zink \
+           -Dgallium-drivers=zink,freedreno,llvmpipe,virgl \
            -Dmediafoundation-codecs=all \
            -Dvulkan-drivers=freedreno \
            -Dfreedreno-kmds=kgsl \
@@ -303,6 +303,7 @@ jobs:
         echo "尝试简化配置..."
         meson setup build-armhf \
            --cross-file cross-file.txt \
+           --libdir=arm-linux-gnueabihf \
            -Dprefix=$INSTALL_PREFIX \
            -Dplatforms=x11 \
            -Dbuildtype=release \
@@ -335,23 +336,30 @@ jobs:
           
           # 进一步简化的配置
           meson setup build-armhf \
-             --cross-file cross-file.txt \
-             -Dprefix=$INSTALL_PREFIX \
-             -Dbuildtype=release \
-             -Dplatforms=x11 \
-             -Dgallium-drivers=freedreno,zink \
-             -Dvulkan-drivers= \
-             -Dopengl=true \
-             -Degl=enabled \
-             -Dgles1=enabled \
-             -Dgles2=enabled \
-             -Dglx=disabled \
-             -Dgbm=enabled \
-             -Dshared-glapi=enabled \
-             -Dllvm=disabled \
-             -Dshared-llvm=disabled \
-             -Dglvnd=false \
-             -Dshader-cache=enabled
+           --cross-file cross-file.txt \
+           --libdir=arm-linux-gnueabihf \
+           -Dprefix=$INSTALL_PREFIX \
+           -Dplatforms=x11 \
+           -Dbuildtype=release \
+           -Degl-native-platform=x11 \
+           -Dgallium-drivers=freedreno,zink \
+           -Dmediafoundation-codecs=all \
+           -Dvulkan-drivers=freedreno \
+           -Dfreedreno-kmds=kgsl \
+           -Dshader-cache=enabled \
+           -Dgles1=enabled \
+           -Dgles2=enabled \
+           -Dopengl=true \
+           -Dgbm=enabled \
+           -Dglx=dri \
+           -Degl=enabled \
+           -Dglvnd=disabled \
+           -Dmicrosoft-clc=disabled \
+           -Dllvm=disabled \
+           -Dshared-llvm=disabled \
+           -Dvulkan-beta=true \
+           -Dvideo-codecs=all
+        
         
           if [ $? -eq 0 ]; then
             echo "✅ 简化配置成功"
