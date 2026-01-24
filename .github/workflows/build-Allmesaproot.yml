@@ -221,28 +221,38 @@ jobs:
         # 配置 aarch64 构建
         meson setup build-aarch64 \
            -Dprefix=$INSTALL_PREFIX \
-           -Dplatforms=x11 \
            -Dbuildtype=release \
-           -Degl-native-platform=x11 \
-           -Dvulkan-beta=true \
-           -Dgallium-extra-hud=true \
-           -Dgallium-drivers=zink,freedreno,llvmpipe,virgl \
-           -Dmediafoundation-codecs=all \
-           -Dvulkan-drivers=freedreno \
-           -Dfreedreno-kmds=kgsl \
-           -Dshader-cache=enabled \
-           -Dgles1=enabled \
-           -Dgles2=enabled \
-           -Dopengl=true \
-           -Dgbm=enabled \
-           -Dglx=dri \
-           -Degl=enabled \
-           -Dglvnd=enabled \
-           -Dmicrosoft-clc=disabled \
-           -Dllvm=enabled \
-           -Dshared-llvm=enabled \
-           -Dvulkan-beta=true \
-           -Dvideo-codecs=all
+            -Doptimization=3 \
+            -Db_lto=true \
+            -Dplatforms=x11 \
+            -Degl-native-platform=x11 \
+            -Dglx=dri \
+            -Dglx-direct=true \
+            -Dopengl=true \
+            -Dgles1=enabled \
+            -Dgles2=enabled \
+            -Dglvnd=disabled \
+            -Degl=enabled \
+            -Dllvm=enabled \
+            -Dshared-llvm=enabled \
+            -Dshader-cache=enabled \
+            -Dshared-glapi=enabled \
+            -Dxlib-lease=enabled \
+            -Dvulkan-beta=true \
+            -Dlibunwind=disabled \
+            -Dvalgrind=disabled \
+            -Dmicrosoft-clc=disabled \
+            -Dgallium-rusticl=false \
+            -Dgallium-extra-hud=true \
+            -Dgallium-drivers=zink,freedreno,llvmpipe,softpipe \
+            -Dgallium-rusticl-enable-drivers=freedreno \
+            -Dshader-cache-default=true \
+            -Dvulkan-drivers=freedreno,swrast \
+            -Dfreedreno-kmds=msm,kgsl \
+            -Dvideo-codecs=all \
+            -Dmediafoundation-codecs=all \
+            -Dgbm=enabled \
+            -Dtools=drm-shim,freedreno
         
         echo "🏗️  正在构建 aarch64..."
         ninja -C build-aarch64 -j$(nproc)
@@ -303,7 +313,7 @@ jobs:
         echo "尝试简化配置..."
         meson setup build-armhf \
            --cross-file cross-file.txt \
-           --libdir=arm-linux-gnueabihf \
+           --libdir=lib/arm-linux-gnueabihf \
            -Dprefix=$INSTALL_PREFIX \
            -Dplatforms=x11 \
            -Dbuildtype=release \
