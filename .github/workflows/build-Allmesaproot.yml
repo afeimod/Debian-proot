@@ -100,7 +100,9 @@ jobs:
             gcc-arm-linux-gnueabihf \
             g++-arm-linux-gnueabihf \
             binutils-arm-linux-gnueabihf \
-            pkg-config-arm-linux-gnueabihf
+            libc6-dev-armhf-cross
+          sudo dpkg --add-architecture armhf
+          sudo apt update
             
           # 安装 Mesa 构建所需的所有 armhf 依赖
           # XCB 相关依赖
