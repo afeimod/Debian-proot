@@ -231,7 +231,7 @@ jobs:
         echo "aarch64 库文件架构:"
         file $INSTALL_PREFIX/lib/*.so 2>/dev/null | head -5 || true
 
-    - name: 构建 arm-linux-gnueabihf 架构
+        - name: 构建 arm-linux-gnueabihf 架构
       if: env.TARGET_ARCH == 'arm-linux-gnueabihf' || env.TARGET_ARCH == 'both'
       run: |
         echo "🔨 开始构建 arm-linux-gnueabihf 架构..."
@@ -249,6 +249,7 @@ jobs:
             ar = 'arm-linux-gnueabihf-ar'
             strip = 'arm-linux-gnueabihf-strip'
             pkgconfig = 'pkg-config'
+            cmake = 'cmake'
 
             [host_machine]
             system = 'linux'
@@ -258,9 +259,28 @@ jobs:
 
             [properties]
             needs_exe_wrapper = true
+            pkg_config_libdir = [
+                '/usr/lib/arm-linux-gnueabihf/pkgconfig',
+                '/usr/share/pkgconfig',
+                '/usr/local/lib/pkgconfig',
+                '/usr/local/share/pkgconfig'
+            ]
+            c_args = [
+                '-I/usr/include/arm-linux-gnueabihf',
+                '-march=armv7-a',
+                '-mfpu=neon',
+                '-mfloat-abi=hard'
+            ]
+            c_link_args = [
+                '-L/usr/lib/arm-linux-gnueabihf',
+                '-Wl,-rpath-link=/usr/lib/arm-linux-gnueabihf'
+            ]
 
             [paths]
             prefix = '$INSTALL_PREFIX'
+            libdir = 'lib'
+            bindir = 'bin'
+            includedir = 'include'
         EOF
         
         # 为 armhf 创建构建目录
@@ -271,70 +291,100 @@ jobs:
         export CXX="arm-linux-gnueabihf-g++"
         export AR="arm-linux-gnueabihf-ar"
         export STRIP="arm-linux-gnueabihf-strip"
+        export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig"
+        export PKG_CONFIG_LIBDIR="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig"
+        export LIBRARY_PATH="/usr/lib/arm-linux-gnueabihf:$LIBRARY_PATH"
+        export LD_LIBRARY_PATH="/usr/lib/arm-linux-gnueabihf:$LD_LIBRARY_PATH"
+        export CFLAGS="-march=armv7-a -mfpu=neon -mfloat-abi=hard -I/usr/include/arm-linux-gnueabihf"
+        export CXXFLAGS="-march=armv7-a -mfpu=neon -mfloat-abi=hard -I/usr/include/arm-linux-gnueabihf"
+        export LDFLAGS="-L/usr/lib/arm-linux-gnueabihf -Wl,-rpath-link=/usr/lib/arm-linux-gnueabihf"
         
         # 检查交叉编译工具是否可用
         echo "检查交叉编译工具:"
         which arm-linux-gnueabihf-gcc
         arm-linux-gnueabihf-gcc --version
         
-        # 为交叉编译设置编译器标志
-        export CFLAGS="-march=armv7-a -mfpu=neon -mfloat-abi=hard"
-        export CXXFLAGS="-march=armv7-a -mfpu=neon -mfloat-abi=hard"
+        # 检查目标架构库路径
+        echo "检查目标架构库路径:"
+        ls -la /usr/lib/arm-linux-gnueabihf/libz.* 2>/dev/null || echo "未找到 armhf 的 libz"
+        echo "主机架构库路径 (应该避免使用):"
+        ls -la /usr/lib/aarch64-linux-gnu/libz.* 2>/dev/null || echo "未找到 aarch64 的 libz"
         
         echo "正在配置 Mesa 构建 (armhf)..."
         
-        # 尝试配置 - 最小化配置，避免依赖问题
+        # 尝试配置 - 使用更简化的配置以减少依赖
         CONFIG_SUCCESS=false
         
-        # 尝试方案1：最小化配置
-        echo "尝试方案1：最小化配置..."
+        # 尝试方案：简化的配置，禁用更多可选功能
+        echo "尝试简化配置..."
         meson setup build-armhf \
            --cross-file cross-file.txt \
            -Dprefix=$INSTALL_PREFIX \
-           -Dplatforms=x11 \
            -Dbuildtype=release \
-           -Degl-native-platform=x11 \
-           -Dvulkan-beta=true \
-           -Dgallium-extra-hud=true \
+           -Dplatforms=x11 \
            -Dgallium-drivers=freedreno,zink \
            -Dvulkan-drivers=freedreno \
-           -Dshader-cache=enabled \
+           -Dopengl=true \
+           -Degl=enabled \
            -Dgles1=enabled \
            -Dgles2=enabled \
-           -Dopengl=true \
-           -Dmicrosoft-clc=disabled \
+           -Dglx=dri \
+           -Dgbm=enabled \
+           -Dshared-glapi=enabled \
            -Dllvm=disabled \
            -Dshared-llvm=disabled \
-           -Dvideo-codecs=all
+           -Dglvnd=false \
+           -Dmicrosoft-clc=disabled \
+           -Dvideo-codecs=all \
+           -Dshader-cache=enabled \
+           -Dglx-read-only-text=false \
+           -Dgallium-extra-hud=true \
+           -Dgallium-nine=false \
+           -Dgallium-omx=disabled \
+           -Dgallium-opencl=disabled \
+           -Dgallium-va=disabled \
+           -Dgallium-vdpau=disabled \
+           -Dgallium-xa=disabled \
+           -Dgallium-xvmc=disabled \
+           -Dintel-clc=disabled \
+           -Dlmsensors=disabled \
+           -Dopencl-spirv=false \
+           -Dvalgrind=disabled \
+           -Dvulkan-beta=false \
+           -Dzstd=disabled \
+           -Dsse2=false \
+           -Dlibunwind=disabled
         
         if [ $? -eq 0 ]; then
-          echo "✅ 方案1配置成功"
+          echo "✅ 配置成功"
           CONFIG_SUCCESS=true
         else
-          echo "⚠️ 方案1配置失败，尝试方案2..."
+          echo "❌ 配置失败，尝试进一步简化..."
           rm -rf build-armhf
           mkdir -p build-armhf
           
-          # 尝试方案2：进一步简化的配置
-          echo "尝试方案2：进一步简化的配置..."
+          # 进一步简化的配置
           meson setup build-armhf \
              --cross-file cross-file.txt \
              -Dprefix=$INSTALL_PREFIX \
              -Dbuildtype=release \
              -Dplatforms=x11 \
              -Dgallium-drivers=freedreno,zink \
+             -Dvulkan-drivers= \
              -Dopengl=true \
              -Degl=enabled \
              -Dgles1=enabled \
              -Dgles2=enabled \
+             -Dglx=disabled \
+             -Dgbm=enabled \
+             -Dshared-glapi=enabled \
              -Dllvm=disabled \
              -Dshared-llvm=disabled \
-             -Dglx=disabled \
-             -Dgbm=disabled \
-             -Dvulkan-drivers=freedreno
-          
+             -Dglvnd=false \
+             -Dshader-cache=enabled
+        
           if [ $? -eq 0 ]; then
-            echo "✅ 方案2配置成功"
+            echo "✅ 简化配置成功"
             CONFIG_SUCCESS=true
           else
             echo "❌ 所有配置尝试都失败了"
@@ -344,7 +394,18 @@ jobs:
         
         if [ "$CONFIG_SUCCESS" = "true" ]; then
           echo "🏗️  正在构建 armhf..."
-          ninja -C build-armhf -j$(nproc)
+          # 尝试构建，如果失败则回退到单线程构建
+          if ninja -C build-armhf -j$(nproc); then
+            echo "✅ 并行构建成功"
+          else
+            echo "⚠️ 并行构建失败，尝试单线程构建..."
+            if ninja -C build-armhf -j1; then
+              echo "✅ 单线程构建成功"
+            else
+              echo "❌ 构建失败"
+              exit 1
+            fi
+          fi
           
           echo "📦 正在安装 armhf..."
           sudo ninja -C build-armhf install
