@@ -298,8 +298,6 @@ jobs:
            -Dshader-cache=enabled \
            -Dglx-read-only-text=false \
            -Dgallium-extra-hud=true \
-           -Dgallium-nine=false \
-           -Dgallium-omx=disabled \
            -Dgallium-opencl=disabled \
            -Dgallium-va=disabled \
            -Dgallium-vdpau=disabled \
@@ -309,8 +307,6 @@ jobs:
            -Dlmsensors=disabled \
            -Dopencl-spirv=false \
            -Dvalgrind=disabled \
-           -Dvulkan-beta=false \
-           -Dzstd=disabled \
            -Dsse2=false \
            -Dlibunwind=disabled
         
