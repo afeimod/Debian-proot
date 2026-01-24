@@ -100,32 +100,55 @@ jobs:
             gcc-arm-linux-gnueabihf \
             g++-arm-linux-gnueabihf \
             binutils-arm-linux-gnueabihf \
-            libc6-dev-armhf-cross
-          sudo dpkg --add-architecture armhf
-          sudo apt update
+            pkg-config-arm-linux-gnueabihf
+            
+          # 安装 Mesa 构建所需的所有 armhf 依赖
+          # XCB 相关依赖
           sudo apt install -y \
-            zlib1g-dev:armhf \
-            libssl-dev:armhf \
-            libxml2-dev:armhf \
-            zlib1g-dev:armhf \
-            libexpat1-dev:armhf \
-            libdrm-dev:armhf \
-            libgbm-dev:armhf \
-            libx11-dev:armhf \
-            libxext-dev:armhf \
-            libx11-xcb-dev:armhf \
             libxcb1-dev:armhf \
+            libxcb-glx0-dev:armhf \
+            libxcb-dri2-0-dev:armhf \
             libxcb-dri3-dev:armhf \
             libxcb-present-dev:armhf \
+            libxcb-sync-dev:armhf \
+            libxcb-shm0-dev:armhf \
+            libxcb-xfixes0-dev:armhf \
+            libxcb-randr0-dev:armhf \
+            libxcb-xkb-dev:armhf
+            
+          # X11 相关依赖
+          sudo apt install -y \
+            libx11-dev:armhf \
+            libx11-xcb-dev:armhf \
+            libxext-dev:armhf \
+            libxdamage-dev:armhf \
+            libxfixes-dev:armhf \
+            libxxf86vm-dev:armhf \
+            libxrandr-dev:armhf \
+            libxshmfence-dev:armhf
+            
+          # DRM/GBM 相关依赖
+          sudo apt install -y \
+            libdrm-dev:armhf \
+            libgbm-dev:armhf \
+            libegl1-mesa-dev:armhf \
+            libglvnd-dev:armhf
+            
+          # 基础库依赖
+          sudo apt install -y \
+            zlib1g-dev:armhf \
+            libexpat1-dev:armhf \
+            libpthread-stubs0-dev:armhf \
             libatomic1:armhf \
             libatomic-ops-dev:armhf \
-            libpthread-stubs0-dev:armhf \
             libselinux1-dev:armhf \
             libunwind-dev:armhf \
             libffi-dev:armhf \
             libudev-dev:armhf \
             libpciaccess-dev:armhf \
-            libelf-dev:armhf
+            libelf-dev:armhf \
+            libssl-dev:armhf \
+            libxml2-dev:armhf
           
           echo "ARM 交叉编译环境已准备"
         fi
