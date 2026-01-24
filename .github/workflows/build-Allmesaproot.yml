@@ -231,7 +231,7 @@ jobs:
         echo "aarch64 库文件架构:"
         file $INSTALL_PREFIX/lib/*.so 2>/dev/null | head -5 || true
 
-        - name: 构建 arm-linux-gnueabihf 架构
+    - name: 构建 arm-linux-gnueabihf 架构
       if: env.TARGET_ARCH == 'arm-linux-gnueabihf' || env.TARGET_ARCH == 'both'
       run: |
         echo "🔨 开始构建 arm-linux-gnueabihf 架构..."
