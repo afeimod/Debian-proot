@@ -244,6 +244,9 @@ jobs:
         # 创建交叉编译配置文件
         wget -O cross-file.txt https://github.com/afeimod/linbox/raw/main/path/cross-file.txt
         
+        echo "生成的 cross-file.txt 内容:"
+        cat cross-file.txt
+        
         # 为 armhf 创建构建目录
         mkdir -p build-armhf
         
@@ -254,11 +257,6 @@ jobs:
         export STRIP="arm-linux-gnueabihf-strip"
         export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig"
         export PKG_CONFIG_LIBDIR="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig"
-        export LIBRARY_PATH="/usr/lib/arm-linux-gnueabihf:$LIBRARY_PATH"
-        export LD_LIBRARY_PATH="/usr/lib/arm-linux-gnueabihf:$LD_LIBRARY_PATH"
-        export CFLAGS="-march=armv7-a -mfpu=neon -mfloat-abi=hard -I/usr/include/arm-linux-gnueabihf"
-        export CXXFLAGS="-march=armv7-a -mfpu=neon -mfloat-abi=hard -I/usr/include/arm-linux-gnueabihf"
-        export LDFLAGS="-L/usr/lib/arm-linux-gnueabihf -Wl,-rpath-link=/usr/lib/arm-linux-gnueabihf"
         
         # 检查交叉编译工具是否可用
         echo "检查交叉编译工具:"
@@ -425,7 +423,7 @@ jobs:
                   mkdir -p lib32/dri
                   mv "$file" "lib32/dri/"
                 fi
-              fi
+              done
             done
             
             # 删除空的 dri 目录
