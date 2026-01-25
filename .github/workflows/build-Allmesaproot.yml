@@ -1,5 +1,5 @@
 # build-mesaproot.yml
-name: Build Mesa for proot (ALL)
+name: Build Mesa for proot (Multi-arch)
 
 on:
   workflow_dispatch:
@@ -223,7 +223,6 @@ jobs:
            -Dprefix=$INSTALL_PREFIX \
            -Dbuildtype=release \
             -Doptimization=3 \
-            -Db_lto=true \
             -Dplatforms=x11 \
             -Degl-native-platform=x11 \
             -Dglx=dri \
