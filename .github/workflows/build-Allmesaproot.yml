@@ -1,5 +1,5 @@
 # build-mesaproot.yml
-name: Build Mesa for proot (Multi-arch)
+name: Build Mesa for proot (ALL)
 
 on:
   workflow_dispatch:
