@@ -17,8 +17,8 @@ on:
         - bleeding-edge
 
 env:
-  LLVMMINGW_DATE: 20260324
-  LLVMMINGW_NAME: llvm-mingw-20260324-ucrt-ubuntu-22.04-x86_64
+  LLVMMINGW_DATE: 20260311
+  LLVMMINGW_NAME: llvm-mingw-20260311-ucrt-ubuntu-22.04-x86_64
   WINE64_DIR: /opt/wine64
   WINE_SOURCE_DIR: /opt/wine-src
   DEBIAN_FRONTEND: noninteractive
@@ -307,9 +307,7 @@ jobs:
           export PKG_CONFIG_SYSROOT_DIR=/
           export CFLAGS="-O3 -pipe"
           export CXXFLAGS="-O3 -pipe"
-          export CROSSCFLAGS="-O3 -pipe"
-          export CROSSCXXFLAGS="-O3 -pipe"
-          export LDFLAGS="-s"
+          export LDFLAGS="-s -Wl,-z,max-page-size=4096 -Wl,-z,common-page-size=4096"
           export WINE_NLS_DIR=/opt/wine64-native/nls
 
           echo "使用 Wine64 构建目录（作为工具目录）: /opt/wine64-native"
@@ -321,33 +319,8 @@ jobs:
             --enable-archs=arm64ec,aarch64,i386 \
             --enable-tools \
             --disable-tests \
-            --with-x \
             --with-vulkan \
-            --with-alsa \
-            --with-pulse \
-            --with-freetype \
-            --with-fontconfig \
             --with-gstreamer \
-            --with-gettext \
-            --with-sdl \
-            --enable-nls \
-            --disable-win16 \
-            --disable-tests \
-            --without-capi \
-            --without-oss \
-            --without-cups \
-            --without-dbus \
-            --without-coreaudio \
-            --without-gphoto \
-            --without-osmesa \
-            --without-sane \
-            --without-pcap \
-            --without-pcsclite \
-            --without-udev \
-            --without-unwind \
-            --without-usb \
-            --without-v4l2 \
-            --without-wayland \
             --host=aarch64-linux-gnu \
             host_alias=aarch64-linux-gnu \
             build_alias=x86_64-linux-gnu \
