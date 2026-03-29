@@ -1,4 +1,4 @@
-name: Proton 测试ARM64EC 构建（专用版）
+name: Proton ARM64EC 构建（Winlator 专用版）
 
 on:
   workflow_dispatch:
@@ -253,22 +253,25 @@ jobs:
           echo "wine-tools 构建完成"
 
       # ------------------------------------------------------------
-      # 11. 构建 android_sysvshm 库
+      # 11. 配置 Winlator 专用路径（跳过 android_sysvshm）
       # ------------------------------------------------------------
-      - name: 构建 android_sysvshm 库
+      - name: 配置 Winlator 专用路径
         run: |
           cd wine-source
-          if [ -d "android/android_sysvshm" ]; then
-            bash build-scripts/build-step-arm64ec.sh --build-sysvshm
-          fi
+          
+          
+          
+          # 【关键】跳过 android_sysvshm 构建（避免 _r_debug 冲突）
+          echo "=== 跳过 android_sysvshm 构建（避免 _r_debug 冲突）==="
+          sed -i 's|bash build-scripts/build-step-arm64ec.sh --build-sysvshm|# 跳过 android_sysvshm 构建 - 避免 _r_debug 冲突|g' build-scripts/build-step-arm64ec.sh
+          
+          
+          
+          echo "=== 路径修改完成 ==="
+          grep -E "^export (install_dir|RUNTIME_PATH|LDFLAGS|OUTPUT_DIR)" build-scripts/build-step-arm64ec.sh | head -5
 
       # ------------------------------------------------------------
-      # 12. 修改构建脚本为 Winlator 专用路径
-      # ------------------------------------------------------------
-
-
-      # ------------------------------------------------------------
-      # 13. 验证所有必需的补丁文件存在
+      # 12. 验证所有必需的补丁文件存在
       # ------------------------------------------------------------
       - name: 验证补丁文件
         run: |
@@ -293,7 +296,7 @@ jobs:
           done
 
       # ------------------------------------------------------------
-      # 14. 配置构建
+      # 13. 配置构建
       # ------------------------------------------------------------
       - name: 配置 ARM64EC 构建
         id: configure_build
@@ -301,6 +304,12 @@ jobs:
         run: |
           cd wine-source
           set -o pipefail
+          
+          # 【关键】强制设置 Winlator 专用 LDFLAGS
+          echo "=== 强制设置 Winlator 专用 LDFLAGS ==="
+          export LDFLAGS="-s -Wl,--dynamic-linker=/data/data/com.winlator/files/imagefs/usr/lib/ld-linux-aarch64.so.1 -Wl,-rpath=/data/data/com.winlator/files/imagefs/usr/lib"
+          echo "LDFLAGS=$LDFLAGS"
+          
           bash -e build-scripts/build-step-arm64ec.sh --configure 2>&1 | tee configure-run.log
           test -f Makefile
 
@@ -319,15 +328,21 @@ jobs:
           exit 1
 
       # ------------------------------------------------------------
-      # 15. 构建 Proton
+      # 14. 构建 Proton
       # ------------------------------------------------------------
       - name: 构建 Proton ARM64EC
         run: |
           cd wine-source
+          
+          # 【关键】强制设置 Winlator 专用 LDFLAGS
+          echo "=== 强制设置 Winlator 专用 LDFLAGS ==="
+          export LDFLAGS="-s -Wl,--dynamic-linker=/data/data/com.winlator/files/imagefs/usr/lib/ld-linux-aarch64.so.1 -Wl,-rpath=/data/data/com.winlator/files/imagefs/usr/lib"
+          echo "LDFLAGS=$LDFLAGS"
+          
           bash build-scripts/build-step-arm64ec.sh --build
 
       # ------------------------------------------------------------
-      # 16. 安装 Proton
+      # 15. 安装 Proton
       # ------------------------------------------------------------
       - name: 安装 Proton
         run: |
@@ -360,7 +375,7 @@ jobs:
           readelf -l "$HOME/compiled-files-aarch64/bin/wine" 2>/dev/null | grep -i interpreter || true
 
       # ------------------------------------------------------------
-      # 17. 打包 wine 内容
+      # 16. 打包 wine 内容
       # ------------------------------------------------------------
       - name: 打包 wine 内容
         run: |
@@ -395,7 +410,7 @@ jobs:
           ls -lh output/
 
       # ------------------------------------------------------------
-      # 18. 上传构建产物
+      # 17. 上传构建产物
       # ------------------------------------------------------------
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
@@ -406,7 +421,7 @@ jobs:
           retention-days: 30
 
       # ------------------------------------------------------------
-      # 19. 发布到 GitHub Release
+      # 18. 发布到 GitHub Release
       # ------------------------------------------------------------
       - name: 发布到 GitHub Release
         if: github.event_name == 'workflow_dispatch'
