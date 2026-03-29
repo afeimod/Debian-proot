@@ -1,0 +1,427 @@
+name: Proton ARM64EC 构建（基于 GameNative 成功案例）
+
+on:
+  workflow_dispatch:
+    inputs:
+      proton_branch:
+        description: 'Proton 分支'
+        required: false
+        default: 'proton_10.0'
+        type: choice
+        options:
+          - proton_10.0
+          - proton_9.0
+          - experimental_10.0
+          - bleeding-edge
+      target_app_id:
+        description: '目标 Android App ID'
+        required: false
+        default: 'app.gamenative'
+        type: choice
+        options:
+          - app.gamenative
+          - com.winlator.cmod
+
+env:
+  # llvm-mingw 版本 - 使用验证过的版本
+  LLVMMINGW_DATE: 20250920
+  LLVMMINGW_NAME: llvm-mingw-20250920-ucrt-ubuntu-22.04-x86_64
+  # NDK 版本
+  NDK_VERSION: 27.3.13750724
+  # Termuxfs 版本
+  TERMUXFS_VERSION: build-20260218
+
+permissions:
+  contents: write
+
+jobs:
+  build-proton-arm64ec:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      # ------------------------------------------------------------
+      # 1. 检查代码库并清理磁盘空间
+      # ------------------------------------------------------------
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 清理磁盘空间
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h
+
+      # ------------------------------------------------------------
+      # 2. 安装基础构建依赖
+      # ------------------------------------------------------------
+      - name: 安装构建依赖
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            git \
+            wget \
+            curl \
+            unzip \
+            flex \
+            bison \
+            gettext \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            mingw-w64 \
+            gcc-multilib \
+            g++-multilib \
+            libfreetype6-dev \
+            libfreetype6-dev:i386 \
+            libpng-dev \
+            libpng-dev:i386 \
+            zlib1g-dev \
+            zlib1g-dev:i386 \
+            zstd \
+            xz-utils \
+            python3-zstandard \
+            patch
+
+      # ------------------------------------------------------------
+      # 3. 获取 Proton 源码和 GameNative 补丁
+      # ------------------------------------------------------------
+      - name: 克隆 Wine 源码
+        run: |
+          rm -rf wine-source
+          PROTON_BRANCH="${{ github.event.inputs.proton_branch || 'proton_10.0' }}"
+          
+          # 首先尝试克隆 GameNative/proton-wine
+          git clone --depth=1 --branch "$PROTON_BRANCH" \
+            https://github.com/GameNative/proton-wine wine-source \
+            || {
+              # 如果失败，回退到 ValveSoftware/wine
+              echo "GameNative 仓库克隆失败，回退到 ValveSoftware/wine"
+              git clone --depth=1 --branch "$PROTON_BRANCH" \
+                https://github.com/ValveSoftware/wine wine-source \
+                || {
+                  git clone --depth=1 https://github.com/ValveSoftware/wine wine-source
+                  git -C wine-source fetch --depth=1 origin "$PROTON_BRANCH"
+                  git -C wine-source checkout FETCH_HEAD
+                }
+            }
+          
+          echo "Proton 分支: $PROTON_BRANCH"
+          git -C wine-source rev-parse HEAD
+
+      # ------------------------------------------------------------
+      # 4. 应用 Android 构建脚本和补丁
+      # ------------------------------------------------------------
+      - name: 应用 Android 构建脚本
+        run: |
+          cd wine-source
+          
+          # 复制 Android 补丁目录
+          if [ -d "../proton-wine-proton_10.0/android" ]; then
+            cp -r ../proton-wine-proton_10.0/android .
+            echo "Android 补丁目录已复制"
+          fi
+          
+          # 复制构建脚本
+          if [ -d "../proton-wine-proton_10.0/build-scripts" ]; then
+            cp -r ../proton-wine-proton_10.0/build-scripts .
+            echo "构建脚本已复制"
+          fi
+          
+          # 复制 GE Second Pass 补丁（如果存在）
+          if [ -d "../proton-arm64-nightlies-main/ge-second-pass" ]; then
+            cp -r ../proton-arm64-nightlies-main/ge-second-pass .
+          fi
+          
+          # 复制必要脚本
+          if [ -d "../proton-arm64-nightlies-main/scripts" ]; then
+            cp -r ../proton-arm64-nightlies-main/scripts .
+            echo "构建辅助脚本已复制"
+          fi
+          
+          # 应用 test-bylaws 补丁覆盖
+          if [ -d "android/patches/test-bylaws" ]; then
+            rm -f android/patches/test-bylaws/dlls_wow64_syscall_c.patch
+            rm -f android/patches/test-bylaws/dlls_ntdll_signal_arm64ec_c.patch
+            
+            if [ -f "ge-second-pass/test-bylaws/dlls_wow64_syscall_c.patch" ]; then
+              cp ge-second-pass/test-bylaws/dlls_wow64_syscall_c.patch \
+                android/patches/dlls_wow64_syscall_c.patch
+              cp ge-second-pass/test-bylaws/dlls_wow64_syscall_c.patch \
+                android/patches/test-bylaws/dlls_wow64_syscall_c.patch
+            fi
+            
+            if [ -f "ge-second-pass/test-bylaws/dlls_ntdll_signal_arm64ec_c.patch" ]; then
+              cp ge-second-pass/test-bylaws/dlls_ntdll_signal_arm64ec_c.patch \
+                android/patches/test-bylaws/dlls_ntdll_signal_arm64ec_c.patch
+            fi
+            
+            echo "test-bylaws 补丁已应用"
+          fi
+          
+          # 修复行尾符
+          find android/patches -type f -name "*.patch" -exec sed -i 's/\r$//' {} +
+
+      # ------------------------------------------------------------
+      # 5. 下载 llvm-mingw 交叉编译工具链
+      # ------------------------------------------------------------
+      - name: 下载 llvm-mingw 工具链
+        run: |
+          LLVM_DIR="$HOME/toolchains/${{ env.LLVMMINGW_NAME }}"
+          if [ ! -f "$LLVM_DIR/bin/llvm-dlltool" ]; then
+            echo "下载 llvm-mingw..."
+            mkdir -p "$HOME/toolchains"
+            cd "$HOME/toolchains"
+            wget -q https://github.com/bylaws/llvm-mingw/releases/download/${{ env.LLVMMINGW_DATE }}/${{ env.LLVMMINGW_NAME }}.tar.xz
+            tar -xf ${{ env.LLVMMINGW_NAME }}.tar.xz
+            rm -f ${{ env.LLVMMINGW_NAME }}.tar.xz
+          else
+            echo "llvm-mingw 已安装，跳过下载"
+          fi
+          echo "$HOME/toolchains/${{ env.LLVMMINGW_NAME }}/bin" >> $GITHUB_PATH
+
+      # ------------------------------------------------------------
+      # 6. 设置 Android NDK
+      # ------------------------------------------------------------
+      - name: 设置 Android NDK
+        run: |
+          NDK_DIR="$HOME/Android/Sdk/ndk/${{ env.NDK_VERSION }}"
+          if [ ! -d "$NDK_DIR" ]; then
+            echo "下载 Android NDK..."
+            mkdir -p "$HOME/Android/Sdk/ndk"
+            cd "$HOME/Android/Sdk/ndk"
+            wget -q https://dl.google.com/android/repository/android-ndk-r27d-linux.zip
+            unzip -q android-ndk-r27d-linux.zip
+            mv android-ndk-r27d ${{ env.NDK_VERSION }}
+            rm -f android-ndk-r27d-linux.zip
+          else
+            echo "NDK 已安装，跳过下载"
+          fi
+
+      # ------------------------------------------------------------
+      # 7. 下载 Termux 文件系统
+      # ------------------------------------------------------------
+      - name: 下载 Termuxfs
+        run: |
+          TERMUX_DIR="$HOME/termuxfs/aarch64"
+          if [ ! -d "$TERMUX_DIR/data/data/com.termux/files/usr/include" ]; then
+            echo "下载 Termuxfs..."
+            mkdir -p "$TERMUX_DIR"
+            cd "$TERMUX_DIR"
+            wget -q "https://github.com/GameNative/termux-on-gha/releases/download/${{ env.TERMUXFS_VERSION }}/termuxfs-aarch64.tar"
+            tar -xf termuxfs-aarch64.tar
+            rm -f termuxfs-aarch64.tar
+          else
+            echo "Termuxfs 已存在，跳过下载"
+          fi
+
+      # ------------------------------------------------------------
+      # 8. 运行 autogen.sh
+      # ------------------------------------------------------------
+      - name: 运行 autogen.sh
+        run: |
+          cd wine-source
+          bash autogen.sh
+
+      # ------------------------------------------------------------
+      # 9. 缓存 wine-tools
+      # ------------------------------------------------------------
+      - name: 缓存 wine-tools
+        id: cache-wine-tools
+        uses: actions/cache@v4
+        with:
+          path: wine-source/wine-tools
+          key: wine-tools-${{ hashFiles('wine-source/configure.ac', 'wine-source/configure') }}
+          restore-keys: wine-tools-
+
+      # ------------------------------------------------------------
+      # 10. 构建 wine-tools
+      # ------------------------------------------------------------
+      - name: 构建 wine-tools
+        if: steps.cache-wine-tools.outputs.cache-hit != 'true'
+        run: |
+          cd wine-source
+          mkdir -p wine-tools
+          cd wine-tools
+          ../configure --without-x --without-gstreamer --without-vulkan --without-wayland --without-xinput2
+          make -j$(nproc) __tooldeps__ nls/all
+          echo "wine-tools 构建完成"
+
+      # ------------------------------------------------------------
+      # 11. 构建 android_sysvshm 库
+      # ------------------------------------------------------------
+      - name: 构建 android_sysvshm 库
+        run: |
+          cd wine-source
+          if [ -d "android/android_sysvshm" ]; then
+            bash build-scripts/build-step-arm64ec.sh --build-sysvshm
+          fi
+
+      # ------------------------------------------------------------
+      # 12. 配置构建
+      # ------------------------------------------------------------
+      - name: 配置 ARM64EC 构建
+        id: configure_build
+        continue-on-error: true
+        run: |
+          cd wine-source
+          
+          # 设置目标 App ID 和安装路径
+          TARGET_APP_ID="${{ github.event.inputs.target_app_id || 'app.gamenative' }}"
+          INSTALL_DIR="/data/data/${TARGET_APP_ID}/files/imagefs/opt/wine"
+          RUNTIME_PATH="/data/data/${TARGET_APP_ID}/files/imagefs/usr"
+          
+          # 修改构建脚本中的路径
+          sed -i "s|export install_dir=.*|export install_dir=${INSTALL_DIR}|" build-scripts/build-step-arm64ec.sh
+          sed -i "s|export RUNTIME_PATH=.*|export RUNTIME_PATH=\"${RUNTIME_PATH}\"|" build-scripts/build-step-arm64ec.sh
+          sed -i "s|export deps=.*|export deps=\"\$HOME/termuxfs/aarch64/data/data/com.termux/files/usr\"|" build-scripts/build-step-arm64ec.sh
+          
+          set -o pipefail
+          bash -e build-scripts/build-step-arm64ec.sh --configure 2>&1 | tee configure-run.log
+          test -f Makefile
+
+      - name: 显示配置错误日志
+        if: steps.configure_build.outcome == 'failure'
+        run: |
+          cd wine-source
+          echo "配置失败，显示日志:"
+          if [ -f ./configure-run.log ]; then
+            tail -n 250 ./configure-run.log || true
+          fi
+          find . -maxdepth 2 \( -name config.log -o -name configure.log \) -print || true
+          if [ -f ./config.log ]; then
+            tail -n 250 ./config.log || true
+          fi
+          exit 1
+
+      # ------------------------------------------------------------
+      # 13. 构建 Proton
+      # ------------------------------------------------------------
+      - name: 构建 Proton ARM64EC
+        run: |
+          cd wine-source
+          bash build-scripts/build-step-arm64ec.sh --build
+
+      # ------------------------------------------------------------
+      # 14. 安装 Proton
+      # ------------------------------------------------------------
+      - name: 安装 Proton
+        run: |
+          TARGET_APP_ID="${{ github.event.inputs.target_app_id || 'app.gamenative' }}"
+          sudo mkdir -p "/data/data/${TARGET_APP_ID}/files/imagefs/opt"
+          sudo chmod -R 777 /data/data
+          
+          cd wine-source
+          bash build-scripts/build-step-arm64ec.sh --install
+          
+          OUTPUT_DIR="$HOME/compiled-files-aarch64"
+          echo "=== 输出目录 bin 内容 ==="
+          ls -la "$OUTPUT_DIR/bin/" || true
+          echo "=== wine 二进制文件类型 ==="
+          file "$OUTPUT_DIR/bin/wine" 2>/dev/null || true
+          file "$OUTPUT_DIR/bin/wineserver" 2>/dev/null || true
+
+      # ------------------------------------------------------------
+      # 15. 下载 prefixPack.txz
+      # ------------------------------------------------------------
+      - name: 下载 prefixPack
+        run: |
+          OUTPUT_DIR="$HOME/compiled-files-aarch64"
+          wget -q "https://github.com/GameNative/bionic-prefix-files/raw/main/prefixPack-arm64ec.txz" \
+            -O "$OUTPUT_DIR/prefixPack.txz"
+
+      # ------------------------------------------------------------
+      # 16. 生成 profile.json 并打包
+      # ------------------------------------------------------------
+      - name: 生成 profile.json 并打包
+        run: |
+          OUTPUT_DIR="$HOME/compiled-files-aarch64"
+          GIT_HASH=$(git -C wine-source rev-parse --short HEAD)
+          GIT_DATE=$(git -C wine-source log -1 --format='%cd' --date=format:'%Y%m%d')
+          PROTON_BRANCH="${{ github.event.inputs.proton_branch || 'proton_10.0' }}"
+          VERSION="proton-${PROTON_BRANCH}-${GIT_DATE}-${GIT_HASH}-arm64ec"
+          
+          mkdir -p "$GITHUB_WORKSPACE/output"
+          
+          # 生成 profile.json
+          cat > "$OUTPUT_DIR/profile.json" << EOF
+          {
+            "type": "Proton",
+            "versionName": "${VERSION}",
+            "versionCode": 1,
+            "description": "Proton ${PROTON_BRANCH} ARM64EC 构建 @ ${GIT_HASH} (${GIT_DATE})",
+            "files": [],
+            "wine": {
+              "binPath": "bin",
+              "libPath": "lib",
+              "prefixPack": "prefixPack.txz"
+            }
+          }
+          EOF
+          
+          # 创建 WCP 包
+          if [ -f "$GITHUB_WORKSPACE/scripts/create-proton-wcp.sh" ]; then
+            bash "$GITHUB_WORKSPACE/scripts/create-proton-wcp.sh" \
+              "$OUTPUT_DIR" \
+              "$GITHUB_WORKSPACE/output/proton-${VERSION}.wcp" \
+              "10.0.99-arm64ec" \
+              "1" \
+              "Proton ${PROTON_BRANCH} ARM64EC ${GIT_DATE} (${GIT_HASH})"
+          fi
+          
+          # 也创建一个简单的 tar.xz 压缩包
+          cd "$OUTPUT_DIR"
+          tar cJf "$GITHUB_WORKSPACE/output/proton-${VERSION}.tar.xz" \
+            bin lib share prefixPack.txz profile.json
+          
+          cd "$GITHUB_WORKSPACE"
+          sha256sum "output/proton-${VERSION}.tar.xz" > "output/proton-${VERSION}.tar.xz.sha256"
+          
+          ls -lh output/
+
+      # ------------------------------------------------------------
+      # 17. 上传构建产物
+      # ------------------------------------------------------------
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: Proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-ARM64EC
+          path: |
+            output/*
+          retention-days: 30
+
+      # ------------------------------------------------------------
+      # 18. 发布到 GitHub Release
+      # ------------------------------------------------------------
+      - name: 发布到 GitHub Release
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: proton-${{ github.event.inputs.proton_branch || 'proton_10.0' }}-arm64ec
+          name: Proton ${{ github.event.inputs.proton_branch || 'proton_10.0' }} (ARM64EC)
+          body: |
+            # Proton ${{ github.event.inputs.proton_branch || 'proton_10.0' }} - ARM64EC 构建
+
+            ## 构建信息
+            - **Proton 分支**: ${{ github.event.inputs.proton_branch || 'proton_10.0' }}
+            - **目标架构**: ARM64EC (arm64ec, aarch64, i386)
+            - **平台**: Android Termux / Winlator
+            - **构建时间**: ${{ github.run_date }}
+            - **提交哈希**: ${{ github.sha }}
+
+            ## 包含组件
+            - ✓ ARM64EC 原生 Proton 可执行文件
+            - ✓ 支持运行 32/64 位 Windows 应用程序
+            - ✓ 包含 prefixPack 默认前缀
+
+            ## 安装说明
+            解压 tar.xz 文件，将内容放置在 Termux 的合适位置。
+          files: |
+            output/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
