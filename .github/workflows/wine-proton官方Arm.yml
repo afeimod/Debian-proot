@@ -170,7 +170,7 @@ jobs:
           cd ${{ env.WINE_SOURCE_DIR }}
 
           echo "处理 Proton 分支: $PROTON_BRANCH"
-          git clone https://github.com/ValveSoftware/wine.git source
+          git clone https://github.com/GameNative/proton-wine.git source
           cd source
           git checkout "$PROTON_BRANCH"
 
@@ -215,21 +215,7 @@ jobs:
           echo "补丁应用成功，清理临时文件"
           rm fix-build_ffmpeg.patch
       # ------------------------------------------------------------
-      # 7.5. 修补 wineboot.c 以支持 ARM64
-      # ------------------------------------------------------------
-      - name: 修补 wineboot.c 以跳过 ARM64 上的 initialize_xstate_features 调用
-        run: |
-          cd ${{ env.WINE_SOURCE_DIR }}/source
-          wget -q https://github.com/afeimod/linbox/raw/main/path/fix-wineboot.patch
-          patch -p1 < fix-wineboot.patch
-          rm fix-wineboot.patch
       
-      - name: 修补arm64ec相关
-        run: |
-          cd ${{ env.WINE_SOURCE_DIR }}/source
-          wget -q https://github.com/afeimod/linbox/raw/main/path/skip-wdscore-arm64ec.patch
-          patch -p1 < skip-wdscore-arm64ec.patch
-          rm skip-wdscore-arm64ec.patch
       # 8. 生成 configure 脚本
       # ------------------------------------------------------------
       - name: 生成 configure 脚本
