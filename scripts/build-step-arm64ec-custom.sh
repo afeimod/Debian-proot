@@ -257,7 +257,13 @@ do
     rm -rf $OUTPUT_DIR/lib
     rm -rf $OUTPUT_DIR/share
     mkdir -p $OUTPUT_DIR
-    make -j$(nproc)
+    set -o pipefail
+          make -s -j$(nproc) 2>&1 | tee build_cross.log
+          if [ $? -ne 0 ]; then
+              echo "❌ 编译失败，最后200行日志："
+              tail -n 200 build_cross.log
+              exit 1
+          fi
 
     # 检查 wine 二进制文件是否生成且大小正常
     if [ -f "./wine" ]; then
