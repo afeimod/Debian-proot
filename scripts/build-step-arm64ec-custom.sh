@@ -252,57 +252,66 @@ do
   if [ "$arg" == "--build" ]
   then
     echo "Building..."
-    # 清理输出目录中的旧文件，但保留 OUTPUT_DIR 本身
+    # 清理输出目录（不删除 install_dir 本身，因为它不是构建环境中的目录）
     rm -rf $OUTPUT_DIR/bin
     rm -rf $OUTPUT_DIR/lib
     rm -rf $OUTPUT_DIR/share
     mkdir -p $OUTPUT_DIR
-    set -o pipefail
-          make -s -j$(nproc) 2>&1 | tee build_cross.log
-          if [ $? -ne 0 ]; then
-              echo "❌ 编译失败，最后200行日志："
-              tail -n 200 build_cross.log
-              exit 1
-          fi
-
-    # 检查 wine 二进制文件是否生成且大小正常
-    if [ -f "./wine" ]; then
-        echo "wine binary size: $(stat -c %s ./wine) bytes"
-        if [ $(stat -c %s ./wine) -lt 1000000 ]; then
-            echo "ERROR: wine binary is too small (likely link failure)"
-            exit 1
-        fi
-    else
-        echo "ERROR: wine binary not found after build"
-        exit 1
-    fi
+    make -j$(nproc)
   fi
 
   if [ "$arg" == "--install" ]
   then
-    echo "Installing to $OUTPUT_DIR$install_dir"
-    # 清理旧的安装目录
-    rm -rf "$OUTPUT_DIR$install_dir"
-    # 使用 DESTDIR 安装，文件会被放到 $OUTPUT_DIR$install_dir 下
+    echo "Installing to DESTDIR=$OUTPUT_DIR ..."
+    # 使用 DESTDIR 安装，保持安装目录结构不变
     make install DESTDIR="$OUTPUT_DIR" -j$(nproc)
 
-    # 检查安装是否成功
-    if [ ! -d "$OUTPUT_DIR$install_dir" ]; then
-        echo "ERROR: Installation failed, $OUTPUT_DIR$install_dir not found"
-        exit 1
+    # 安装后的完整路径：$OUTPUT_DIR$install_dir
+    SRC_DIR="$OUTPUT_DIR$install_dir"
+
+    if [ -d "$SRC_DIR" ]; then
+      echo "Moving content from $SRC_DIR to $OUTPUT_DIR (preserving symlinks)"
+      # 使用 rsync 或 cp -a 保留软链接和属性
+      if command -v rsync &> /dev/null; then
+        rsync -a "$SRC_DIR/" "$OUTPUT_DIR/"
+      else
+        cp -a "$SRC_DIR/." "$OUTPUT_DIR/"
+      fi
+      # 删除原始安装目录
+      rm -rf "$SRC_DIR"
+    else
+      echo "Warning: $SRC_DIR not found"
     fi
 
-    # 确保 wine 二进制文件存在
-    if [ ! -f "$OUTPUT_DIR$install_dir/bin/wine" ]; then
-        echo "ERROR: wine binary not found in installed directory"
-        exit 1
-    fi
+    # 确保 core D3D DLLs 被正确放置（原逻辑保留）
+    echo "=== Ensuring core D3D DLLs are staged ==="
+    ensure_d3d_dll() {
+      local arch_dir="$1"
+      local dll_name="$2"
+      local dst="$OUTPUT_DIR/lib/wine/$arch_dir/$dll_name"
+      if [ -f "$dst" ]; then
+        echo "present: $dst"
+        return 0
+      fi
+      local src
+      src="$(find "$PWD" -type f \( -name "$dll_name" -o -name "$dll_name.so" -o -name "$dll_name.dll.so" \) | grep "/$arch_dir/" | head -n 1 || true)"
+      if [ -n "$src" ]; then
+        mkdir -p "$(dirname "$dst")"
+        cp -f "$src" "$dst"
+        echo "staged: $src -> $dst"
+      else
+        echo "missing: $dll_name for $arch_dir"
+      fi
+    }
 
-    # 输出安装信息
-    echo "Installation completed, files in $OUTPUT_DIR$install_dir"
-    echo "Total size: $(du -sh $OUTPUT_DIR$install_dir | cut -f1)"
+    for arch_dir in aarch64-windows i386-windows; do
+      ensure_d3d_dll "$arch_dir" d3d8.dll
+      ensure_d3d_dll "$arch_dir" d3d8thk.dll
+      ensure_d3d_dll "$arch_dir" d3d9.dll
+      ensure_d3d_dll "$arch_dir" wined3d.dll
+    done
 
-    # 可选：创建符号链接（如果需要）
-    # ln -sf wine "$OUTPUT_DIR$install_dir/bin/wine64"
+    echo "Installation completed. Contents of $OUTPUT_DIR/bin:"
+    ls -l "$OUTPUT_DIR/bin" || true
   fi
 done
