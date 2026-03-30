@@ -1,0 +1,61 @@
+diff --git a/programs/explorer/startmenu.c b/programs/explorer/startmenu.c
+index 63120026dad..86de73d1fd6 100644
+--- a/programs/explorer/startmenu.c
++++ b/programs/explorer/startmenu.c
+@@ -51,6 +51,7 @@ static struct list items = LIST_INIT(items);
+ static struct menu_item root_menu;
+ static struct menu_item public_startmenu;
+ static struct menu_item user_startmenu;
++static BOOL shutting_down;
+ 
+ #define MENU_ID_RUN 1
+ #define MENU_ID_EXIT 2
+@@ -137,6 +138,9 @@ static BOOL shell_folder_is_empty(IShellFolder* folder)
+     IEnumIDList* enumidl;
+     LPITEMIDLIST pidl=NULL;
+ 
++    if (shutting_down)
++        return TRUE;
++
+     if (IShellFolder_EnumObjects(folder, NULL, SHCONTF_NONFOLDERS, &enumidl) == S_OK)
+     {
+         if (IEnumIDList_Next(enumidl, 1, &pidl, NULL) == S_OK)
+@@ -317,6 +321,9 @@ static void add_folder_contents(struct menu_item* parent)
+ {
+     IEnumIDList* enumidl;
+ 
++    if (shutting_down)
++        return;
++
+     if (IShellFolder_EnumObjects(parent->folder, NULL,
+         SHCONTF_FOLDERS|SHCONTF_NONFOLDERS, &enumidl) == S_OK)
+     {
+@@ -357,6 +364,9 @@ static void destroy_menus(void)
+ 
+ static void fill_menu(struct menu_item* item)
+ {
++    if (shutting_down)
++        return;
++
+     if (!item->menu_filled)
+     {
+         add_folder_contents(item);
+@@ -392,7 +402,10 @@ static void shut_down(HWND hwnd)
+     LoadStringW(NULL, IDS_EXIT_PROMPT, prompt, ARRAY_SIZE(prompt));
+     ret = MessageBoxW(hwnd, prompt, L"Wine", MB_YESNO|MB_ICONQUESTION|MB_SYSTEMMODAL);
+     if (ret == IDYES)
++    {
++        shutting_down = TRUE;
+         ExitWindows(0, 0);
++    }
+ }
+ 
+ LRESULT menu_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+@@ -453,6 +466,7 @@ void do_startmenu(HWND hwnd)
+     WCHAR label[64];
+ 
+     destroy_menus();
++    shutting_down = FALSE;
+ 
+     TRACE( "creating start menu\n" );
+ 
