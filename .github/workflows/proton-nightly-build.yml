@@ -20,7 +20,7 @@ on:
         type: choice
         options:
           - app.gamenative
-          - com.winlator.cmod
+          - com.winlator
       wine_ref:
         description: 'Valve wine ref (branch/tag/commit)'
         required: false
@@ -542,12 +542,7 @@ jobs:
             ensure_d3d_dll "$arch_dir" wined3d.dll
           done
 
-      - name: Download prefixPack.txz
-        run: |
-          wget -q "https://github.com/GameNative/bionic-prefix-files/raw/main/${{ matrix.prefix_pack }}" \
-            -O "$HOME/${{ matrix.output_dir }}/prefixPack.txz"
-
-      - name: Generate profile.json files and package
+      - name: Generate profile.json and package
         run: |
           OUTPUT_DIR="$HOME/${{ matrix.output_dir }}"
           GIT_HASH=$(git -C wine-source rev-parse --short HEAD)
@@ -560,19 +555,15 @@ jobs:
           PROTON_VERSION_CODE=1
           WINE_VERSION_CODE=0
 
+          # 1. 为 Proton 生成 profile.json
           python3 scripts/generate_profile.py \
             "${OUTPUT_DIR}/profile.json" \
             "${PROFILE_VERSION}" \
             "${PROTON_VERSION_CODE}" \
             "${DISPLAY_NAME}"
 
-          bash "$GITHUB_WORKSPACE/scripts/create-proton-wcp.sh" \
-            "$OUTPUT_DIR" \
-            "$GITHUB_WORKSPACE/output/proton-${VERSION}.wcp" \
-            "${PROFILE_VERSION}" \
-            "${PROTON_VERSION_CODE}" \
-            "${DISPLAY_NAME}"
-
+          # 2. 仅为 Wine 生成一个 profile.json (可选，根据实际需要保留或删除)
+          # 注意：这里覆盖了上一步的文件，最终只保留 Wine 的配置。如果您需要Proton的配置，请调整逻辑。
           python3 scripts/generate_profile.py \
             "${OUTPUT_DIR}/profile.json" \
             "${PROFILE_VERSION}" \
@@ -580,16 +571,19 @@ jobs:
             "${DISPLAY_NAME}" \
             wine
 
+          # 3. 将构建好的 Wine/Proton 文件（bin, lib, share目录）和 profile.json 直接打包
+          # 这里使用 tar 打包整个输出目录，您可以根据需要调整包含的文件
           cd "$OUTPUT_DIR"
-          tar cJf "$GITHUB_WORKSPACE/output/proton-wine-${VERSION}.wcp.xz" \
-            bin lib share prefixPack.txz profile.json
+          tar cJf "$GITHUB_WORKSPACE/output/proton-wine-${VERSION}.tar.xz" \
+            .
 
           cd "$GITHUB_WORKSPACE"
-          sha256sum "output/proton-wine-${VERSION}.wcp.xz" > "output/proton-wine-${VERSION}.wcp.xz.sha256"
+          # 为压缩包生成校验和
+          sha256sum "output/proton-wine-${VERSION}.tar.xz" > "output/proton-wine-${VERSION}.tar.xz.sha256"
 
-          WCP_SHA=$(cut -d' ' -f1 "output/proton-${VERSION}.wcp.sha256")
-          WCPXZ_SHA=$(cut -d' ' -f1 "output/proton-wine-${VERSION}.wcp.xz.sha256")
+          TARXZ_SHA=$(cut -d' ' -f1 "output/proton-wine-${VERSION}.tar.xz.sha256")
 
+          # 更新元数据文件，反映新的产物
           cat > "output/metadata-${{ matrix.arch_id }}.json" <<EOF
           {
             "arch": "${{ matrix.arch_id }}",
@@ -597,13 +591,10 @@ jobs:
             "gitDate": "${GIT_DATE}",
             "version": "${VERSION}",
             "profileVersion": "${PROFILE_VERSION}",
-            "wcpFile": "proton-${VERSION}.wcp",
-            "wcpSha": "${WCP_SHA}",
-            "wcpxzFile": "proton-wine-${VERSION}.wcp.xz",
-            "wcpxzSha": "${WCPXZ_SHA}"
+            "tarxzFile": "proton-wine-${VERSION}.tar.xz",
+            "tarxzSha": "${TARXZ_SHA}"
           }
           EOF
-
           ls -lh output/
 
       - name: Upload artifacts
@@ -665,13 +656,11 @@ jobs:
           artifacts = latest.get("artifacts", {})
           prev_arm = artifacts.get("arm64ec", {})
 
-          prev_arm_wcp = prev_arm.get("wcp", {}).get("sha256") or latest.get("wcp", {}).get("sha256", "")
-          prev_arm_wcpxz = prev_arm.get("wcpxz", {}).get("sha256") or latest.get("wcpxz", {}).get("sha256", "")
+          prev_arm_tarxz = prev_arm.get("tarxz", {}).get("sha256") or latest.get("tarxz", {}).get("sha256", "")
 
           should_release = (
               arm["gitHash"] != latest.get("gitHash", "")
-              or arm["wcpSha"] != prev_arm_wcp
-              or arm["wcpxzSha"] != prev_arm_wcpxz
+              or arm["tarxzSha"] != prev_arm_tarxz
           )
 
           outputs = {
@@ -688,10 +677,8 @@ jobs:
           print(json.dumps({
               "previousGitHash": latest.get("gitHash", ""),
               "currentGitHash": arm["gitHash"],
-              "previousArmWcpSha": prev_arm_wcp,
-              "currentArmWcpSha": arm["wcpSha"],
-              "previousArmWcpxzSha": prev_arm_wcpxz,
-              "currentArmWcpxzSha": arm["wcpxzSha"],
+              "previousArmTarxzSha": prev_arm_tarxz,
+              "currentArmTarxzSha": arm["tarxzSha"],
               "shouldRelease": should_release,
           }, indent=2))
           PY
@@ -700,8 +687,7 @@ jobs:
         if: steps.detect_changes.outputs.should_release == 'true'
         run: |
           mkdir -p release
-          find artifacts -name "*.wcp" -exec cp {} release/ \;
-          find artifacts -name "*.wcp.xz" -exec cp {} release/ \;
+          find artifacts -name "*.tar.xz" -exec cp {} release/ \;
           ls -lah release/
 
       - name: Create GitHub Release
@@ -738,25 +724,17 @@ jobs:
               "versionName": arm["version"],
               "date": arm["gitDate"],
               "gitHash": arm["gitHash"],
-              "wcp": {
-                  "fileName": arm["wcpFile"],
-                  "sha256": arm["wcpSha"],
-              },
-              "wcpxz": {
-                  "fileName": arm["wcpxzFile"],
-                  "sha256": arm["wcpxzSha"],
+              "tarxz": {
+                  "fileName": arm["tarxzFile"],
+                  "sha256": arm["tarxzSha"],
               },
               "artifacts": {
                   "arm64ec": {
                       "versionName": arm["version"],
                       "profileVersion": arm["profileVersion"],
-                      "wcp": {
-                          "fileName": arm["wcpFile"],
-                          "sha256": arm["wcpSha"],
-                      },
-                      "wcpxz": {
-                          "fileName": arm["wcpxzFile"],
-                          "sha256": arm["wcpxzSha"],
+                      "tarxz": {
+                          "fileName": arm["tarxzFile"],
+                          "sha256": arm["tarxzSha"],
                       },
                   },
               },
@@ -788,18 +766,3 @@ jobs:
           rm -rf "$RUNNER_TEMP"/* || true
           echo "=== Disk usage after cleanup ==="
           df -h
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
