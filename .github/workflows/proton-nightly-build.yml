@@ -16,7 +16,7 @@ on:
       target_app_id:
         description: 'Target Android app id for hardcoded wine paths'
         required: false
-        default: 'app.gamenative'
+        default: 'com.winlator'
         type: choice
         options:
           - app.gamenative
@@ -98,6 +98,13 @@ jobs:
     timeout-minutes: 360
     permissions:
       contents: write
+    # 全局编译优化标志（所有步骤共享）
+    env:
+      CFLAGS: "-O3 -pipe"
+      CXXFLAGS: "-O3 -pipe"
+      CROSSCFLAGS: "-O3 -pipe"
+      CROSSCXXFLAGS: "-O3 -pipe"
+      LDFLAGS: "-s -Wl,--dynamic-linker=/data/data/com.winlator/files/imagefs/usr/lib/ld-linux-aarch64.so.1 -Wl,-rpath=/data/data/com.winlator/files/imagefs/usr/lib"
     strategy:
       fail-fast: false
       matrix:
@@ -107,7 +114,7 @@ jobs:
             build_script: build-step-arm64ec.sh
             output_dir: compiled-files-aarch64
             prefix_pack: prefixPack-arm64ec.txz
-            profile_version: 10.0.99-arm64ec
+            profile_version: arm64ec
             display_arch: ARM64EC
             sysvshm: true
 
@@ -339,7 +346,7 @@ jobs:
 
           PROFILE_VERSION="${{ matrix.profile_version }}"
           TARGET_APP_ID="${{ github.event.inputs.target_app_id || 'app.gamenative' }}"
-          INSTALL_DIR="/data/data/${TARGET_APP_ID}/files/imagefs/opt/proton-${PROFILE_VERSION}"
+          INSTALL_DIR="/data/data/${TARGET_APP_ID}/files/imagefs/opt/${PROFILE_VERSION}-wine"
           RUNTIME_PATH="/data/data/${TARGET_APP_ID}/files/imagefs/usr"
           echo "Using target_app_id=$TARGET_APP_ID"
           echo "Using profile_version=$PROFILE_VERSION"
@@ -348,15 +355,23 @@ jobs:
           sed -i "s|export install_dir=.*|export install_dir=${INSTALL_DIR}|" "wine-source/build-scripts/${{ matrix.build_script }}"
           sed -i "s|export RUNTIME_PATH=.*|export RUNTIME_PATH=\"${RUNTIME_PATH}\"|" "wine-source/build-scripts/${{ matrix.build_script }}"
 
-      - name: 修复 winlator 路径问题
+          # 将 target_app_id 写入环境变量，供后续修复步骤使用
+          echo "TARGET_APP_ID=$TARGET_APP_ID" >> $GITHUB_ENV
+
+      # 旧的硬编码修复步骤可以删除，或者保留但改为使用 TARGET_APP_ID
+      - name: 修复 winlator 路径问题（使用 target_app_id）
         run: |
           cd wine-source
-          find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.in" -o -name "*.spec" \) -exec grep -l "/tmp" {} \; | xargs sed -i 's|/tmp/|/data/data/com.winlator/files/imagefs/usr/tmp/|g'
-          find server -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"/tmp"|"/data/data/com.winlator/files/imagefs/usr/tmp"|g' {} +
-          find . -name "file.c" -exec sed -i 's|"/tmp"|"/data/data/com.winlator/files/imagefs/usr/tmp"|g' {} +
-          find . -name "loader.c" -exec sed -i 's|"/tmp"|"/data/data/com.winlator/files/imagefs/usr/tmp"|g' {} +
-          find . -name "server.c" -exec sed -i 's|"/tmp"|"/data/data/com.winlator/files/imagefs/usr/tmp"|g' {} +
-          echo "路径修复完成"
+          ANDROID_DATA_PREFIX="/data/data/${TARGET_APP_ID}/files/imagefs/usr"
+          # 替换所有出现的 "/tmp" 或 "/tmp/" 为目标路径
+          # 先替换字符串字面量，再替换路径
+          find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.in" -o -name "*.spec" \) -exec grep -l "/tmp" {} \; | xargs sed -i "s|/tmp/|${ANDROID_DATA_PREFIX}/tmp/|g"
+          find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.in" -o -name "*.spec" \) -exec grep -l '"/tmp"' {} \; | xargs sed -i 's|"/tmp"|"'"${ANDROID_DATA_PREFIX}/tmp"'"|g'
+          find server -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i "s|/tmp|${ANDROID_DATA_PREFIX}/tmp|g" {} +
+          find . -name "file.c" -exec sed -i "s|/tmp|${ANDROID_DATA_PREFIX}/tmp|g" {} +
+          find . -name "loader.c" -exec sed -i "s|/tmp|${ANDROID_DATA_PREFIX}/tmp|g" {} +
+          find . -name "server.c" -exec sed -i "s|/tmp|${ANDROID_DATA_PREFIX}/tmp|g" {} +
+          echo "路径修复完成（使用 ${TARGET_APP_ID}）"
 
       - name: Download and extract termuxfs for ${{ matrix.termux_arch }}
         run: |
@@ -422,11 +437,12 @@ jobs:
           cd wine-source
           mkdir -p wine-tools
           cd wine-tools
-          export CFLAGS="-O3 -pipe"
-          export CXXFLAGS="-O3 -pipe"
-          export CROSSCFLAGS="-O3 -pipe"
-          export CROSSCXXFLAGS="-O3 -pipe"
-          export LDFLAGS="-s -Wl,--dynamic-linker=/data/data/com.winlator/files/imagefs/usr/lib/ld-linux-aarch64.so.1 -Wl,-rpath=/data/data/com.winlator/files/imagefs/usr/lib"
+          # 显式导出编译标志（全局 env 已定义，这里再导出确保 make 能读取）
+          export CFLAGS="$CFLAGS"
+          export CXXFLAGS="$CXXFLAGS"
+          export CROSSCFLAGS="$CROSSCFLAGS"
+          export CROSSCXXFLAGS="$CROSSCXXFLAGS"
+          export LDFLAGS="$LDFLAGS"
           ../configure --without-x --without-gstreamer --without-vulkan --without-wayland --without-xinput2
           make -j$(nproc) __tooldeps__ nls/all
 
@@ -442,6 +458,12 @@ jobs:
         run: |
           cd wine-source
           set -o pipefail
+          # 确保编译标志被导出，供 configure 和后续编译使用
+          export CFLAGS="$CFLAGS"
+          export CXXFLAGS="$CXXFLAGS"
+          export CROSSCFLAGS="$CROSSCFLAGS"
+          export CROSSCXXFLAGS="$CROSSCXXFLAGS"
+          export LDFLAGS="$LDFLAGS"
           bash -e "build-scripts/${{ matrix.build_script }}" --configure 2>&1 | tee configure-run.log
           test -f Makefile
 
@@ -472,6 +494,11 @@ jobs:
       - name: Build Proton
         run: |
           cd wine-source
+          export CFLAGS="$CFLAGS"
+          export CXXFLAGS="$CXXFLAGS"
+          export CROSSCFLAGS="$CROSSCFLAGS"
+          export CROSSCXXFLAGS="$CROSSCXXFLAGS"
+          export LDFLAGS="$LDFLAGS"
           bash "build-scripts/${{ matrix.build_script }}" --build
 
       - name: Collect shell32 debug bundle
@@ -498,10 +525,15 @@ jobs:
         run: |
           PROFILE_VERSION="${{ matrix.profile_version }}"
           TARGET_APP_ID="${{ github.event.inputs.target_app_id || 'app.gamenative' }}"
-          sudo mkdir -p "/data/data/${TARGET_APP_ID}/files/imagefs/opt/proton-${PROFILE_VERSION}"
+          sudo mkdir -p "/data/data/${TARGET_APP_ID}/files/imagefs/opt/${PROFILE_VERSION}-wine"
           sudo chmod -R 777 /data/data
 
           cd wine-source
+          export CFLAGS="$CFLAGS"
+          export CXXFLAGS="$CXXFLAGS"
+          export CROSSCFLAGS="$CROSSCFLAGS"
+          export CROSSCXXFLAGS="$CROSSCXXFLAGS"
+          export LDFLAGS="$LDFLAGS"
           bash "build-scripts/${{ matrix.build_script }}" --install
 
           OUTPUT_DIR="$HOME/${{ matrix.output_dir }}"
@@ -566,5 +598,3 @@ jobs:
           name: shell32-debug-${{ matrix.arch_id }}
           path: output/shell32-debug-${{ matrix.arch_id }}/
           retention-days: 30
-
-
