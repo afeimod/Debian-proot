@@ -68,17 +68,11 @@ jobs:
     outputs:
       resolved_hash: ${{ steps.upstream_check.outputs.resolved_hash }}
       resolved_short_hash: ${{ steps.upstream_check.outputs.resolved_short_hash }}
-      skip_build: ${{ steps.upstream_check.outputs.skip_build }}
     steps:
-      - name: Checkout this repo
-        uses: actions/checkout@v4
-
       - name: Check upstream bleeding-edge head
         id: upstream_check
         run: |
           WINE_REF="${{ github.event.inputs.wine_ref || 'bleeding-edge' }}"
-          FORCE_BUILD="${{ inputs.force_build && 'true' || 'false' }}"
-          PREV_GIT_HASH="$(python3 -c 'import json; d=json.load(open("latest.json")); print(d.get("gitHash",""))')"
 
           if printf '%s' "$WINE_REF" | grep -Eq '^[0-9a-fA-F]{7,40}$'; then
             REMOTE_FULL_HASH="$WINE_REF"
@@ -92,27 +86,14 @@ jobs:
           fi
 
           REMOTE_SHORT_HASH="$(printf '%s' "$REMOTE_FULL_HASH" | cut -c1-7)"
-          SKIP_BUILD=false
-          if [ "$FORCE_BUILD" != 'true' ] && [ "$REMOTE_SHORT_HASH" = "$PREV_GIT_HASH" ]; then
-            SKIP_BUILD=true
-          fi
 
           echo "resolved_hash=$REMOTE_FULL_HASH" >> "$GITHUB_OUTPUT"
           echo "resolved_short_hash=$REMOTE_SHORT_HASH" >> "$GITHUB_OUTPUT"
-          echo "skip_build=$SKIP_BUILD" >> "$GITHUB_OUTPUT"
-          echo "Previous gitHash: $PREV_GIT_HASH"
-          echo "Remote   gitHash: $REMOTE_SHORT_HASH"
-          echo "force_build=$FORCE_BUILD"
-          echo "skip_build=$SKIP_BUILD"
-
-      - name: Stop early when upstream is unchanged
-        if: steps.upstream_check.outputs.skip_build == 'true'
-        run: |
-          echo "Skipping build: upstream bleeding-edge HEAD matches latest.json"
+          echo "Wine ref: $WINE_REF"
+          echo "Wine hash: $REMOTE_SHORT_HASH"
 
   build:
     needs: prepare
-    if: needs.prepare.outputs.skip_build != 'true'
     runs-on: ${{ github.event.inputs.runner || 'ubuntu-24.04' }}
     timeout-minutes: 360
     permissions:
@@ -542,59 +523,19 @@ jobs:
             ensure_d3d_dll "$arch_dir" wined3d.dll
           done
 
-      - name: Generate profile.json and package
+      - name: Package Wine build
         run: |
           OUTPUT_DIR="$HOME/${{ matrix.output_dir }}"
           GIT_HASH=$(git -C wine-source rev-parse --short HEAD)
           GIT_DATE=$(git -C wine-source log -1 --format='%cd' --date=format:'%Y%m%d')
-          VERSION="proton-bleeding-edge-${GIT_DATE}-${GIT_HASH}-${{ matrix.arch_id }}"
-          PROFILE_VERSION="${{ matrix.profile_version }}"
-          DISPLAY_NAME="Proton bleeding-edge ${{ matrix.display_arch }} ${GIT_DATE} (${GIT_HASH})"
+          VERSION="wine-bleeding-edge-${GIT_DATE}-${GIT_HASH}-${{ matrix.arch_id }}"
 
           mkdir -p "$GITHUB_WORKSPACE/output"
-          PROTON_VERSION_CODE=1
-          WINE_VERSION_CODE=0
-
-          # 1. 为 Proton 生成 profile.json
-          python3 scripts/generate_profile.py \
-            "${OUTPUT_DIR}/profile.json" \
-            "${PROFILE_VERSION}" \
-            "${PROTON_VERSION_CODE}" \
-            "${DISPLAY_NAME}"
-
-          # 2. 仅为 Wine 生成一个 profile.json (可选，根据实际需要保留或删除)
-          # 注意：这里覆盖了上一步的文件，最终只保留 Wine 的配置。如果您需要Proton的配置，请调整逻辑。
-          python3 scripts/generate_profile.py \
-            "${OUTPUT_DIR}/profile.json" \
-            "${PROFILE_VERSION}" \
-            "${WINE_VERSION_CODE}" \
-            "${DISPLAY_NAME}" \
-            wine
-
-          # 3. 将构建好的 Wine/Proton 文件（bin, lib, share目录）和 profile.json 直接打包
-          # 这里使用 tar 打包整个输出目录，您可以根据需要调整包含的文件
           cd "$OUTPUT_DIR"
-          tar cJf "$GITHUB_WORKSPACE/output/proton-wine-${VERSION}.tar.xz" \
-            .
+          tar cJf "$GITHUB_WORKSPACE/output/${VERSION}.tar.xz" .
 
           cd "$GITHUB_WORKSPACE"
-          # 为压缩包生成校验和
-          sha256sum "output/proton-wine-${VERSION}.tar.xz" > "output/proton-wine-${VERSION}.tar.xz.sha256"
-
-          TARXZ_SHA=$(cut -d' ' -f1 "output/proton-wine-${VERSION}.tar.xz.sha256")
-
-          # 更新元数据文件，反映新的产物
-          cat > "output/metadata-${{ matrix.arch_id }}.json" <<EOF
-          {
-            "arch": "${{ matrix.arch_id }}",
-            "gitHash": "${GIT_HASH}",
-            "gitDate": "${GIT_DATE}",
-            "version": "${VERSION}",
-            "profileVersion": "${PROFILE_VERSION}",
-            "tarxzFile": "proton-wine-${VERSION}.tar.xz",
-            "tarxzSha": "${TARXZ_SHA}"
-          }
-          EOF
+          sha256sum "output/${VERSION}.tar.xz" > "output/${VERSION}.tar.xz.sha256"
           ls -lh output/
 
       - name: Upload artifacts
@@ -611,158 +552,4 @@ jobs:
           path: output/shell32-debug-${{ matrix.arch_id }}/
           retention-days: 30
 
-  release:
-    needs:
-      - prepare
-      - build
-    if: needs.prepare.outputs.skip_build != 'true'
-    runs-on: ${{ github.event.inputs.runner || 'ubuntu-24.04' }}
-    permissions:
-      contents: write
 
-    steps:
-      - name: Checkout this repo
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Detect release-worthy changes
-        id: detect_changes
-        run: |
-          python3 <<'PY'
-          import glob
-          import json
-          import os
-          from pathlib import Path
-
-          metas = {}
-          for path in glob.glob("artifacts/**/metadata-*.json", recursive=True):
-              data = json.loads(Path(path).read_text())
-              metas[data["arch"]] = data
-
-          if "arm64ec" not in metas:
-              raise SystemExit("missing metadata file for: arm64ec")
-
-          arm = metas["arm64ec"]
-          latest = json.loads(Path("latest.json").read_text())
-          run_suffix = os.environ['GITHUB_RUN_NUMBER']
-          release_tag = f"bleeding-edge-{arm['gitDate']}-{arm['gitHash']}-run{run_suffix}"
-
-          artifacts = latest.get("artifacts", {})
-          prev_arm = artifacts.get("arm64ec", {})
-
-          prev_arm_tarxz = prev_arm.get("tarxz", {}).get("sha256") or latest.get("tarxz", {}).get("sha256", "")
-
-          should_release = (
-              arm["gitHash"] != latest.get("gitHash", "")
-              or arm["tarxzSha"] != prev_arm_tarxz
-          )
-
-          outputs = {
-              "git_hash": arm["gitHash"],
-              "git_date": arm["gitDate"],
-              "release_tag": release_tag,
-              "should_release": "true" if should_release else "false",
-          }
-
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-              for key, value in outputs.items():
-                  fh.write(f"{key}={value}\n")
-
-          print(json.dumps({
-              "previousGitHash": latest.get("gitHash", ""),
-              "currentGitHash": arm["gitHash"],
-              "previousArmTarxzSha": prev_arm_tarxz,
-              "currentArmTarxzSha": arm["tarxzSha"],
-              "shouldRelease": should_release,
-          }, indent=2))
-          PY
-
-      - name: Prepare release files
-        if: steps.detect_changes.outputs.should_release == 'true'
-        run: |
-          mkdir -p release
-          find artifacts -name "*.tar.xz" -exec cp {} release/ \;
-          ls -lah release/
-
-      - name: Create GitHub Release
-        if: steps.detect_changes.outputs.should_release == 'true'
-        run: |
-          GIT_HASH="${{ steps.detect_changes.outputs.git_hash }}"
-          GIT_DATE="${{ steps.detect_changes.outputs.git_date }}"
-          TAG="${{ steps.detect_changes.outputs.release_tag }}"
-          TITLE="Proton bleeding-edge ARM64EC (${GIT_DATE})"
-          NOTES="Built from ValveSoftware/wine bleeding-edge @ ${GIT_HASH} with GameNative Android build scripts. Includes ARM64EC packages in the same release. Automated bleeding-edge build; use at your own risk."
-          gh release create "$TAG" release/* \
-            --title "$TITLE" \
-            --notes "$NOTES" \
-            --prerelease \
-            || gh release upload "$TAG" release/* --clobber
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Update latest.json
-        if: steps.detect_changes.outputs.should_release == 'true'
-        run: |
-          python3 <<'PY'
-          import glob
-          import json
-          from pathlib import Path
-
-          metas = {}
-          for path in glob.glob("artifacts/**/metadata-*.json", recursive=True):
-              data = json.loads(Path(path).read_text())
-              metas[data["arch"]] = data
-
-          arm = metas["arm64ec"]
-          data = {
-              "versionName": arm["version"],
-              "date": arm["gitDate"],
-              "gitHash": arm["gitHash"],
-              "tarxz": {
-                  "fileName": arm["tarxzFile"],
-                  "sha256": arm["tarxzSha"],
-              },
-              "artifacts": {
-                  "arm64ec": {
-                      "versionName": arm["version"],
-                      "profileVersion": arm["profileVersion"],
-                      "tarxz": {
-                          "fileName": arm["tarxzFile"],
-                          "sha256": arm["tarxzSha"],
-                      },
-                  },
-              },
-              "releaseTag": "${{ steps.detect_changes.outputs.release_tag }}",
-          }
-          Path("latest.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-          print(json.dumps(data, indent=2))
-          PY
-
-      - name: Commit latest.json
-        if: steps.detect_changes.outputs.should_release == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add latest.json
-          GIT_DATE="${{ steps.detect_changes.outputs.git_date }}"
-          git diff --staged --quiet || git commit -m "chore: update latest.json for bleeding-edge ${GIT_DATE}"
-          git pull --rebase origin HEAD
-          git push
-
-      - name: Cleanup runner workspace
-        if: ${{ always() && contains(runner.labels, 'self-hosted') }}
-        run: |
-          set +e
-          echo "=== Disk usage before cleanup ==="
-          df -h
-          rm -rf "$GITHUB_WORKSPACE/wine-source" "$GITHUB_WORKSPACE/gamenative-src" "$GITHUB_WORKSPACE/artifacts" "$GITHUB_WORKSPACE/release" || true
-          rm -rf "$HOME/compiled-files-aarch64" "$HOME/compiled-files-x86_64" "$HOME/wine-staging" || true
-          rm -rf "$RUNNER_TEMP"/* || true
-          echo "=== Disk usage after cleanup ==="
-          df -h
