@@ -1,0 +1,27 @@
+--- a/dlls/winex11.drv/mouse.c
++++ b/dlls/winex11.drv/mouse.c
+@@ -1482,6 +1482,22 @@
+     struct x11drv_thread_data *data = x11drv_init_thread_data();
+     POINT pos = virtual_screen_to_root( x, y );
+ 
++#ifdef __ANDROID__
++    /*
++     * Some games force relative mouse mode by constantly recentering the X11
++     * pointer with SetCursorPos(). On Android, that fights the normal absolute
++     * pointer stream from the host and makes touch / absolute mouse input feel
++     * broken. Allow Android frontends to disable the warp path explicitly so
++     * MotionNotify continues to deliver the real absolute coordinates.
++     */
++    if (getenv( "WINE_ANDROID_ABSOLUTE_MOUSE" ) && atoi( getenv( "WINE_ANDROID_ABSOLUTE_MOUSE" ) ))
++    {
++        TRACE( "ignoring warp to %d,%d due to WINE_ANDROID_ABSOLUTE_MOUSE\n", x, y );
++        return TRUE;
++    }
++#endif
++
+     if (keyboard_grabbed)
+     {
+         WARN( "refusing to warp to %u, %u\n", (int)pos.x, (int)pos.y );
+
+
+

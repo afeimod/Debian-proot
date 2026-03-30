@@ -1,0 +1,57 @@
+diff --git a/dlls/winex11.drv/keyboard.c b/dlls/winex11.drv/keyboard.c
+index 8ae840b..18a749e 100644
+--- a/dlls/winex11.drv/keyboard.c
++++ b/dlls/winex11.drv/keyboard.c
+@@ -1338,17 +1338,24 @@ BOOL X11DRV_KeyEvent( HWND hwnd, XEvent *xev )
+ {
+     XKeyEvent *event = &xev->xkey;
+     char buf[24];
+     char *Str = buf;
+     KeySym keysym = 0;
+     WORD vkey = 0, bScan;
+     DWORD dwFlags;
+     int ascii_chars;
++#ifdef __ANDROID__
++    /* DirectInput titles need real key/scancode transitions. Let Android's
++     * on-screen keyboard feed text through its normal path, but bypass the XIM
++     * short-circuit for live gameplay events so they still reach Wine input. */
++    XIC xic = NULL;
++#else
+     XIC xic = X11DRV_get_ic( hwnd );
++#endif
+     DWORD event_time = EVENT_x11_time_to_win32_time(event->time);
+     struct x11drv_win_data *data;
+     Status status = 0;
+ 
+     TRACE_(key)("type %d, window %lx, state 0x%04x, keycode %u\n",
+ 		event->type, event->window, event->state, event->keycode);
+ 
+     if (event->type == KeyPress && (data = get_win_data( hwnd )))
+@@ -1375,20 +1382,27 @@ BOOL X11DRV_KeyEvent( HWND hwnd, XEvent *xev )
+     }
+     else
+         ascii_chars = XLookupString(event, buf, sizeof(buf), &keysym, NULL);
+ 
+     TRACE_(key)("nbyte = %d, status %d\n", ascii_chars, status);
+ 
+     if (status == XLookupChars)
+     {
++        /* Android gameplay windows still need a normal key event even when XIM
++         * resolves printable text, otherwise old DirectInput titles can end up
++         * receiving IME text without any keyboard/scancode input. */
+         xim_set_result_string( hwnd, Str, ascii_chars );
++#ifndef __ANDROID__
+         if (buf != Str)
+             free( Str );
+         return TRUE;
++#else
++        TRACE_(key)( "continuing key dispatch after XLookupChars on Android\n" );
++#endif
+     }
+ 
+     pthread_mutex_lock( &kbd_mutex );
+ 
+     /* If XKB extensions are used, the state mask for AltGr will use the group
+        index instead of the modifier mask. The group index is set in bits
+        13-14 of the state field in the XKeyEvent structure. So if AltGr is
+        pressed, look if the group index is different than 0. From XKB

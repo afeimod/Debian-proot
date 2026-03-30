@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""
+Patch build-step-arm64ec.sh so required Android/GameNative patches either apply,
+are already present, or fail the build.
+
+For drift-prone patches we try, in order:
+1) reverse-check for already-applied
+2) git apply with loose whitespace/context
+3) git apply 3-way
+4) GNU patch (fuzzy line-offset application)
+Then fail if none work.
+
+test-bylaws patches keep a marker-based already-applied fast path because
+reverse-checks can fail under heavy drift even when the content is present.
+"""
+import sys
+
+path = sys.argv[1] if len(sys.argv) > 1 else 'build-scripts/build-step-arm64ec.sh'
+
+with open(path) as f:
+    txt = f.read()
+
+txt = txt.replace(
+    'git apply ./android/patches/$patch',
+    # For test-bylaws patches: use grep-based marker check as primary already-applied
+    # detection. git apply -R --check fails when context has drifted even if the
+    # patch content is present, causing false "critical patch failed" errors.
+    # The markers here are unique symbols introduced by each patch.
+    'if [[ "$patch" == test-bylaws/* ]]; then '
+    '_patch_marker=""; '
+    'case "$patch" in '
+    '  test-bylaws/dlls_ntdll_signal_arm64ec_c.patch) _patch_marker="ARM64EC_NT_XCONTEXT" _patch_file="dlls/ntdll/signal_arm64ec.c" ;; '
+    '  test-bylaws/dlls_ntdll_signal_arm64_c.patch)   _patch_marker="RtlWow64SuspendThread" _patch_file="dlls/ntdll/signal_arm64.c" ;; '
+    '  test-bylaws/dlls_ntdll_signal_x86_64_c.patch)  _patch_marker="RtlWow64SuspendThread" _patch_file="dlls/ntdll/signal_x86_64.c" ;; '
+    '  test-bylaws/dlls_ntdll_ntdll_spec.patch)        _patch_marker="RtlWow64SuspendThread" _patch_file="dlls/ntdll/ntdll.spec" ;; '
+    '  test-bylaws/dlls_ntdll_ntdll_misc_h.patch)      _patch_marker="pWow64SuspendLocalThread" _patch_file="dlls/ntdll/ntdll_misc.h" ;; '
+    '  test-bylaws/server_thread_h.patch)              _patch_marker="bypass_proc_suspend" _patch_file="server/thread.h" ;; '
+    '  test-bylaws/server_thread_c.patch)              _patch_marker="bypass_proc_suspend" _patch_file="server/thread.c" ;; '
+    '  test-bylaws/server_process_c.patch)             _patch_marker="bypass_proc_suspend" _patch_file="server/process.c" ;; '
+    '  test-bylaws/dlls_ntdll_unix_thread_c.patch)     _patch_marker="BYPASS_PROCESS_FREEZE" _patch_file="dlls/ntdll/unix/thread.c" ;; '
+    '  test-bylaws/include_winternl_h.patch)           _patch_marker="ProcessFexHardwareTso" _patch_file="include/winternl.h" ;; '
+    'esac; '
+    'if [[ -n "$_patch_marker" ]] && grep -qF "$_patch_marker" "$_patch_file" 2>/dev/null; then '
+    '  echo "ALREADY APPLIED (skipped): $patch"; '
+    'elif git apply --ignore-whitespace -C1 --check ./android/patches/$patch 2>/dev/null'
+    ' && git apply --ignore-whitespace -C1 ./android/patches/$patch; then '
+    '  echo "Applied: $patch"; '
+    'elif git apply --3way --ignore-space-change ./android/patches/$patch 2>/dev/null; then '
+    '  echo "Applied (3way): $patch"; '
+    'elif patch -p1 --forward --batch --ignore-whitespace -i ./android/patches/$patch 2>/dev/null; then '
+    '  echo "Applied (patch): $patch"; '
+    'elif git apply --ignore-whitespace -C1 -R --check ./android/patches/$patch 2>/dev/null; then '
+    '  echo "ALREADY APPLIED (skipped): $patch"; '
+    'else '
+    '  echo "ERROR: critical patch failed: $patch"; exit 1; '
+    'fi; '
+    'else '
+    'if git apply --ignore-whitespace -C1 -R --check ./android/patches/$patch 2>/dev/null; then '
+    '  echo "ALREADY APPLIED (skipped): $patch"; '
+    'elif git apply --ignore-whitespace -C1 --check ./android/patches/$patch 2>/dev/null'
+    ' && git apply --ignore-whitespace -C1 ./android/patches/$patch; then '
+    '  echo "Applied: $patch"; '
+    'elif git apply --3way --ignore-space-change ./android/patches/$patch 2>/dev/null; then '
+    '  echo "Applied (3way): $patch"; '
+    'elif patch -p1 --forward --batch --ignore-whitespace -i ./android/patches/$patch 2>/dev/null; then '
+    '  echo "Applied (patch): $patch"; '
+    'else '
+    '  echo "ERROR: required patch failed: $patch"; exit 1; '
+    'fi; '
+    'fi'
+)
+
+txt = txt.replace(
+    '    done\n  fi',
+    '    done\n    if [ -x ./config.status ]; then ./config.status; fi\n  fi'
+)
+
+with open(path, 'w') as f:
+    f.write(txt)
+
+print(f"Patched {path}")

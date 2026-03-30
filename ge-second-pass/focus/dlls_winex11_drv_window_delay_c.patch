@@ -1,0 +1,34 @@
+diff --git a/dlls/winex11.drv/window.c b/dlls/winex11.drv/window.c
+index ebbd48f..5897380 100644
+--- a/dlls/winex11.drv/window.c
++++ b/dlls/winex11.drv/window.c
+@@ -968,6 +968,9 @@ static const UINT config_notify_mask = (1 << NET_WM_STATE_MAXIMIZED) | (1 << NET
+ 
+ static BOOL window_needs_mwm_hints_change_delay( struct x11drv_win_data *data )
+ {
++#ifdef __ANDROID__
++    return FALSE;
++#endif
+     if (data->pending_state.wm_state == WithdrawnState) return FALSE; /* window is unmapped, should be safe to make any change */
+     if (!data->configure_serial && !data->net_wm_state_serial) return FALSE; /* no other requests are pending, should be safe */
+     /* check whether we have a pending configure, either directly or because of a _NET_WM_STATE change which might trigger one  */
+@@ -978,6 +981,9 @@ static BOOL window_needs_mwm_hints_change_delay( struct x11drv_win_data *data )
+ 
+ static BOOL window_needs_net_wm_state_change_delay( struct x11drv_win_data *data )
+ {
++#ifdef __ANDROID__
++    return FALSE;
++#endif
+     if (data->pending_state.wm_state == WithdrawnState) return FALSE; /* window is unmapped, should be safe to make any change */
+     if (!data->configure_serial && !data->mwm_hints_serial) return FALSE; /* no other requests are pending, should be safe */
+     /* check whether we have a pending configure, either directly or because _MOTIF_WM_HINTS decoration changed */
+@@ -988,6 +994,9 @@ static BOOL window_needs_net_wm_state_change_delay( struct x11drv_win_data *data
+ 
+ static BOOL window_needs_config_change_delay( struct x11drv_win_data *data )
+ {
++#ifdef __ANDROID__
++    return FALSE;
++#endif
+     if (!data->managed || data->embedded) return FALSE; /* window is not managed or is embedded, safe to make changes */
+     if (data->pending_state.wm_state == WithdrawnState) return FALSE; /* window is unmapped, should be safe to make any change */
+     if (data->configure_serial) return TRUE; /* another config update is pending, wait for it to complete */

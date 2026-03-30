@@ -1,0 +1,22 @@
+diff --git a/dlls/winex11.drv/keyboard.c b/dlls/winex11.drv/keyboard.c
+index 3907828..65d368b 100644
+--- a/dlls/winex11.drv/keyboard.c
++++ b/dlls/winex11.drv/keyboard.c
+@@ -1380,10 +1380,17 @@ BOOL X11DRV_KeyEvent( HWND hwnd, XEvent *xev )
+ 
+     if (status == XLookupChars)
+     {
++        /* Android gameplay windows still need a normal key event even when XIM
++         * resolves printable text, otherwise old DirectInput titles can end up
++         * receiving IME text without any keyboard/scancode input. */
+         xim_set_result_string( hwnd, Str, ascii_chars );
++#ifndef __ANDROID__
+         if (buf != Str)
+             free( Str );
+         return TRUE;
++#else
++        TRACE_(key)( "continuing key dispatch after XLookupChars on Android\n" );
++#endif
+     }
+ 
+     pthread_mutex_lock( &kbd_mutex );

@@ -1,0 +1,135 @@
+diff --git a/dlls/wineandroid.drv/window.c b/dlls/wineandroid.drv/window.c
+index 76aeadc6d6f..adf918a8644 100644
+--- a/dlls/wineandroid.drv/window.c
++++ b/dlls/wineandroid.drv/window.c
+@@ -40,6 +40,7 @@
+ #include "winbase.h"
+ #include "wingdi.h"
+ #include "winuser.h"
++#include "ntuser.h"
+ 
+ #include "android.h"
+ #include "wine/server.h"
+@@ -174,6 +175,27 @@ static struct java_event *current_event;
+ static int event_pipe[2];
+ static DWORD desktop_tid;
+ 
++static BOOL android_relative_mouse_enabled(void)
++{
++    const char *value = getenv( "WINE_ANDROID_RELATIVE_MOUSE" );
++    return value && atoi( value );
++}
++
++static BOOL android_input_debug_enabled(void)
++{
++    const char *value = getenv( "WINE_INPUT_POLL_DEBUG" );
++    return value && atoi( value );
++}
++
++static BOOL android_relative_mouse_active( HWND capture )
++{
++    RECT clip;
++
++    if (!capture || !android_relative_mouse_enabled()) return FALSE;
++    if (!NtUserGetClipCursor( &clip )) return FALSE;
++    return !EqualRect( &clip, &virtual_screen_rect );
++}
++
+ /***********************************************************************
+  *           send_event
+  */
+@@ -263,9 +285,14 @@ void surface_changed( JNIEnv *env, jobject obj, jint win, jobject surface, jbool
+ jboolean motion_event( JNIEnv *env, jobject obj, jint win, jint action, jint x, jint y, jint state, jint vscroll )
+ {
+     static LONG button_state;
++    static POINT last_pos;
++    static HWND last_hwnd;
++    static BOOL have_last_pos;
+     union event_data data;
++    HWND capture;
++    BOOL relative;
+     int prev_state;
+-
++    int delta_x = 0, delta_y = 0;
+     int mask = action & AMOTION_EVENT_ACTION_MASK;
+ 
+     if (!( mask == AMOTION_EVENT_ACTION_DOWN ||
+@@ -282,6 +309,8 @@ jboolean motion_event( JNIEnv *env, jobject obj, jint win, jint action, jint x,
+     if (mask == AMOTION_EVENT_ACTION_BUTTON_RELEASE) state |= 0x80000000;
+ 
+     prev_state = InterlockedExchange( &button_state, state );
++    capture = get_capture_window();
++    relative = android_relative_mouse_active( capture );
+ 
+     data.type = MOTION_EVENT;
+     data.motion.hwnd = LongToHandle( win );
+@@ -291,11 +320,28 @@ jboolean motion_event( JNIEnv *env, jobject obj, jint win, jint action, jint x,
+     data.motion.input.mi.mouseData   = 0;
+     data.motion.input.mi.time        = 0;
+     data.motion.input.mi.dwExtraInfo = 0;
+-    data.motion.input.mi.dwFlags     = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
++    data.motion.input.mi.dwFlags     = 0;
++
++    if (relative)
++    {
++        if (have_last_pos && last_hwnd == data.motion.hwnd)
++        {
++            delta_x = x - last_pos.x;
++            delta_y = y - last_pos.y;
++        }
++        data.motion.input.mi.dx = delta_x;
++        data.motion.input.mi.dy = delta_y;
++    }
++    else
++    {
++        data.motion.input.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
++    }
++
+     switch (action & AMOTION_EVENT_ACTION_MASK)
+     {
+     case AMOTION_EVENT_ACTION_DOWN:
+     case AMOTION_EVENT_ACTION_BUTTON_PRESS:
++        if (!relative) data.motion.input.mi.dwFlags |= MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
+         if ((state & ~prev_state) & AMOTION_EVENT_BUTTON_PRIMARY)
+             data.motion.input.mi.dwFlags |= MOUSEEVENTF_LEFTDOWN;
+         if ((state & ~prev_state) & AMOTION_EVENT_BUTTON_SECONDARY)
+@@ -308,6 +354,7 @@ jboolean motion_event( JNIEnv *env, jobject obj, jint win, jint action, jint x,
+     case AMOTION_EVENT_ACTION_UP:
+     case AMOTION_EVENT_ACTION_CANCEL:
+     case AMOTION_EVENT_ACTION_BUTTON_RELEASE:
++        if (!relative) data.motion.input.mi.dwFlags |= MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
+         if ((prev_state & ~state) & AMOTION_EVENT_BUTTON_PRIMARY)
+             data.motion.input.mi.dwFlags |= MOUSEEVENTF_LEFTUP;
+         if ((prev_state & ~state) & AMOTION_EVENT_BUTTON_SECONDARY)
+@@ -318,15 +365,31 @@ jboolean motion_event( JNIEnv *env, jobject obj, jint win, jint action, jint x,
+             data.motion.input.mi.dwFlags |= MOUSEEVENTF_LEFTUP;
+         break;
+     case AMOTION_EVENT_ACTION_SCROLL:
++        if (!relative) data.motion.input.mi.dwFlags |= MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
+         data.motion.input.mi.dwFlags |= MOUSEEVENTF_WHEEL;
+         data.motion.input.mi.mouseData = vscroll < 0 ? -WHEEL_DELTA : WHEEL_DELTA;
+         break;
+     case AMOTION_EVENT_ACTION_MOVE:
+     case AMOTION_EVENT_ACTION_HOVER_MOVE:
++        data.motion.input.mi.dwFlags |= MOUSEEVENTF_MOVE;
++        if (!relative) data.motion.input.mi.dwFlags |= MOUSEEVENTF_ABSOLUTE;
+         break;
+     default:
+         return JNI_FALSE;
+     }
++
++    if (android_input_debug_enabled())
++    {
++        p__android_log_print( ANDROID_LOG_INFO, "wine",
++                              "INPUTDBG android.motion mode=%s hwnd=%p capture=%p action=%d pos=%d,%d delta=%d,%d flags=%#x buttons=%#x",
++                              relative ? "relative" : "absolute", data.motion.hwnd, capture, mask, x, y,
++                              delta_x, delta_y, (unsigned int)data.motion.input.mi.dwFlags, (unsigned int)state );
++    }
++
++    last_pos.x = x;
++    last_pos.y = y;
++    last_hwnd = data.motion.hwnd;
++    have_last_pos = TRUE;
+     send_event( &data );
+     return JNI_TRUE;
+ }

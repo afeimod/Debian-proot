@@ -1,0 +1,67 @@
+--- a/dlls/dinput/keyboard.c
++++ b/dlls/dinput/keyboard.c
+@@ -126,6 +126,12 @@
+ 
+     scan_code = ri->data.keyboard.MakeCode & 0xff;
+     if (ri->data.keyboard.Flags & RI_KEY_E0) scan_code |= 0x100;
++
++    if (GetEnvironmentVariableA( "WINE_DINPUT_INSTANCE_DEBUG", NULL, 0 ))
++        ERR( "INPUTDBG dinput.kbd_raw iface=%p impl=%p state=%p vkey=%#x scan=%#x flags=%#x wparam=%Ix lparam=%Ix\n",
++             iface, impl, impl->base.device_state, (unsigned int)ri->data.keyboard.VKey,
++             (unsigned int)scan_code, (unsigned int)ri->data.keyboard.Flags, wparam, lparam );
++
+     keyboard_handle_event( impl, ri->data.keyboard.VKey, scan_code, ri->data.keyboard.Flags & RI_KEY_BREAK );
+ }
+ 
+@@ -143,6 +149,11 @@
+ 
+     scan_code = hook->scanCode & 0xff;
+     if (hook->flags & LLKHF_EXTENDED) scan_code |= 0x100;
++
++    if (GetEnvironmentVariableA( "WINE_DINPUT_INSTANCE_DEBUG", NULL, 0 ))
++        ERR( "INPUTDBG dinput.kbd_hook iface=%p impl=%p state=%p msg=%#Ix vk=%#lx scan=%#x flags=%#lx\n",
++             iface, impl, impl->base.device_state, wparam, hook->vkCode, (unsigned int)scan_code, hook->flags );
++
+     keyboard_handle_event( impl, hook->vkCode, scan_code, hook->flags & LLKHF_UP );
+ 
+     return impl->base.dwCoopLevel & DISCL_EXCLUSIVE;
+--- a/dlls/dinput/mouse.c
++++ b/dlls/dinput/mouse.c
+@@ -128,6 +128,12 @@
+ 
+     rel.x = ri->data.mouse.lLastX;
+     rel.y = ri->data.mouse.lLastY;
++
++    if (GetEnvironmentVariableA( "WINE_DINPUT_INSTANCE_DEBUG", NULL, 0 ))
++        ERR( "INPUTDBG dinput.mouse_raw iface=%p impl=%p state=%p flags=%#x buttons=%#x raw=(%ld,%ld) wparam=%Ix lparam=%Ix\n",
++             iface, impl, impl->base.device_state, (unsigned int)ri->data.mouse.usFlags,
++             (unsigned int)ri->data.mouse.usButtonFlags, rel.x, rel.y, wparam, lparam );
++
+     if (ri->data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE)
+     {
+         GetCursorPos( &pt );
+@@ -202,6 +208,10 @@
+     DWORD seq;
+ 
+     TRACE( "iface %p, msg %#Ix, x %+ld, y %+ld\n", iface, wparam, hook->pt.x, hook->pt.y );
++
++    if (GetEnvironmentVariableA( "WINE_DINPUT_INSTANCE_DEBUG", NULL, 0 ))
++        ERR( "INPUTDBG dinput.mouse_hook iface=%p impl=%p state=%p msg=%#Ix pt=(%ld,%ld) extra=%#Ix flags=%#lx\n",
++             iface, impl, impl->base.device_state, wparam, hook->pt.x, hook->pt.y, hook->dwExtraInfo, hook->flags );
+ 
+     EnterCriticalSection( &impl->base.crit );
+     seq = impl->base.dinput->evsequence++;
+--- a/dlls/dinput/device.c
++++ b/dlls/dinput/device.c
+@@ -1453,6 +1453,11 @@
+     HRESULT hr;
+ 
+     TRACE( "iface %p, size %lu, data %p.\n", iface, size, data );
++
++    if (GetEnvironmentVariableA( "WINE_DINPUT_INSTANCE_DEBUG", NULL, 0 ))
++        ERR( "INPUTDBG dinput.get_state_ptr iface=%p impl=%p state=%p size=%lu status=%u user_size=%lu dev_size=%lu raw=%u coop=%#lx\n",
++             iface, impl, impl->device_state, size, impl->status, impl->user_format.dwDataSize,
++             impl->device_format.dwDataSize, impl->use_raw_input, impl->dwCoopLevel );
+ 
+     if (!data) return DIERR_INVALIDPARAM;
+ 

@@ -1,0 +1,67 @@
+From 6559c43fe15e55749aa1f39df98e97c24835b012 Mon Sep 17 00:00:00 2001
+From: Elizabeth Figura <zfigura@codeweavers.com>
+Date: Fri, 18 Apr 2025 14:23:35 -0500
+Subject: [PATCH] ntdll: Validate fd type in IOCTL_AFD_WINE_COMPLETE_ASYNC.
+
+---
+ dlls/ntdll/unix/socket.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntdll/unix/socket.c b/dlls/ntdll/unix/socket.c
+index 74ff284e920..0f882545f8e 100644
+--- a/dlls/ntdll/unix/socket.c
++++ b/dlls/ntdll/unix/socket.c
+@@ -1758,46 +1758,50 @@ NTSTATUS sock_ioctl( HANDLE handle, HANDLE event, PIO_APC_ROUTINE apc, void *apc
+ 
+         case IOCTL_AFD_WINE_TRANSMIT:
+         {
+             const struct afd_transmit_params *params = in_buffer;
+ 
+             if ((status = server_get_unix_fd( handle, 0, &fd, &needs_close, NULL, NULL )))
+                 return status;
+ 
+             if (in_size < sizeof(*params))
+             {
+                 status = STATUS_BUFFER_TOO_SMALL;
+                 break;
+             }
+             status = sock_transmit( handle, event, apc, apc_user, io, fd, params );
+             if (needs_close) close( fd );
+             return status;
+         }
+ 
+         case IOCTL_AFD_WINE_COMPLETE_ASYNC:
+         {
++            enum server_fd_type type;
++
+             if (in_size != sizeof(NTSTATUS))
+                 return STATUS_BUFFER_TOO_SMALL;
+ 
+-            if ((status = server_get_unix_fd( handle, 0, &fd, &needs_close, NULL, &options )))
++            if ((status = server_get_unix_fd( handle, 0, &fd, &needs_close, &type, &options )))
+                 return status;
+             if (needs_close) close( fd );
++            if (type != FD_TYPE_SOCKET)
++                return STATUS_INVALID_DEVICE_REQUEST;
+ 
+             status = *(NTSTATUS *)in_buffer;
+             file_complete_async( handle, options, event, apc, apc_user, io, status, 0 );
+             return status;
+         }
+ 
+         case IOCTL_AFD_WINE_FIONREAD:
+         {
+             int value;
+ 
+             if (out_size < sizeof(int))
+             {
+                 status = STATUS_BUFFER_TOO_SMALL;
+                 break;
+             }
+ 
+             if ((status = server_get_unix_fd( handle, 0, &fd, &needs_close, NULL, &options )))
+                 return status;
+ 
+ #ifdef linux
+-- 
+2.49.0
