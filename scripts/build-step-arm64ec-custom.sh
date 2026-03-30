@@ -12,8 +12,10 @@ export WIN_ARCH="arm64ec,aarch64,i386"
 export OUTPUT_DIR="${OUTPUT_DIR}"
 
 export deps="${TERMUXFS_ROOT}/data/data/com.termux/files/usr"
+# 最终安装路径（设备上的实际路径）
+export install_dir="/data/data/${TARGET_APP_ID}/files/imagefs/opt/${PROFILE_VERSION}-wine"
+# 运行时库路径（设备上的实际路径）
 export RUNTIME_PATH="/data/data/${TARGET_APP_ID}/files/imagefs/usr"
-export install_dir="${deps}/../opt/${PROFILE_VERSION}-wine"
 
 # 工具链路径（与原有保持一致）
 export TOOLCHAIN="$HOME/Android/Sdk/ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64/bin"
@@ -250,26 +252,51 @@ do
   if [ "$arg" == "--build" ]
   then
     echo "Building..."
+    # 清理输出目录中的旧文件，但保留 OUTPUT_DIR 本身
     rm -rf $OUTPUT_DIR/bin
     rm -rf $OUTPUT_DIR/lib
     rm -rf $OUTPUT_DIR/share
-    rm -rf $install_dir
+    mkdir -p $OUTPUT_DIR
     make -j$(nproc)
+
+    # 检查 wine 二进制文件是否生成且大小正常
+    if [ -f "./wine" ]; then
+        echo "wine binary size: $(stat -c %s ./wine) bytes"
+        if [ $(stat -c %s ./wine) -lt 1000000 ]; then
+            echo "ERROR: wine binary is too small (likely link failure)"
+            exit 1
+        fi
+    else
+        echo "ERROR: wine binary not found after build"
+        exit 1
+    fi
   fi
 
   if [ "$arg" == "--install" ]
   then
-    echo "Installing..."
-    mkdir -p $OUTPUT_DIR/bin
-    mkdir -p $OUTPUT_DIR/lib
-    mkdir -p $OUTPUT_DIR/share
-    mkdir -p $install_dir
-    make install -j$(nproc)
-    cp -r $install_dir/bin/wine* $OUTPUT_DIR/bin
-    cp -r $install_dir/bin/reg* $OUTPUT_DIR/bin
-    cp -r $install_dir/bin/msi* $OUTPUT_DIR/bin
-    cp -r $install_dir/bin/notepad $OUTPUT_DIR/bin
-    cp -r $install_dir/lib/wine  $OUTPUT_DIR/lib
-    cp -r $install_dir/share/wine  $OUTPUT_DIR/share
+    echo "Installing to $OUTPUT_DIR$install_dir"
+    # 清理旧的安装目录
+    rm -rf "$OUTPUT_DIR$install_dir"
+    # 使用 DESTDIR 安装，文件会被放到 $OUTPUT_DIR$install_dir 下
+    make install DESTDIR="$OUTPUT_DIR" -j$(nproc)
+
+    # 检查安装是否成功
+    if [ ! -d "$OUTPUT_DIR$install_dir" ]; then
+        echo "ERROR: Installation failed, $OUTPUT_DIR$install_dir not found"
+        exit 1
+    fi
+
+    # 确保 wine 二进制文件存在
+    if [ ! -f "$OUTPUT_DIR$install_dir/bin/wine" ]; then
+        echo "ERROR: wine binary not found in installed directory"
+        exit 1
+    fi
+
+    # 输出安装信息
+    echo "Installation completed, files in $OUTPUT_DIR$install_dir"
+    echo "Total size: $(du -sh $OUTPUT_DIR$install_dir | cut -f1)"
+
+    # 可选：创建符号链接（如果需要）
+    # ln -sf wine "$OUTPUT_DIR$install_dir/bin/wine64"
   fi
 done
