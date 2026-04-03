@@ -1,9 +1,8 @@
 #!/bin/bash
-# 自定义构建脚本，支持通过环境变量覆盖路径
+# 自定义构建脚本 – 已去除硬编码 Android 路径，适配容器标准路径
 
-# 设置默认值，允许外部传入环境变量覆盖
+# 设置默认值（不再需要 TARGET_APP_ID）
 : ${TERMUXFS_ROOT:="$HOME/termuxfs/aarch64"}
-: ${TARGET_APP_ID:="com.winlator"}
 : ${PROFILE_VERSION:="arm64ec"}
 : ${OUTPUT_DIR:="$HOME/compiled-files-aarch64"}
 
@@ -12,10 +11,10 @@ export WIN_ARCH="arm64ec,aarch64,i386"
 export OUTPUT_DIR="${OUTPUT_DIR}"
 
 export deps="${TERMUXFS_ROOT}/data/data/com.termux/files/usr"
-# 最终安装路径（设备上的实际路径）
-export install_dir="/data/data/${TARGET_APP_ID}/files/imagefs/opt/${PROFILE_VERSION}-wine"
-# 运行时库路径（设备上的实际路径）
-export RUNTIME_PATH="/data/data/${TARGET_APP_ID}/files/imagefs/usr"
+# 最终安装路径（容器内的实际路径）
+export install_dir="/opt/${PROFILE_VERSION}-wine"
+# 运行时库路径（容器内的实际路径）
+export RUNTIME_PATH="/usr"
 
 # 工具链路径（与原有保持一致）
 export TOOLCHAIN="$HOME/Android/Sdk/ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64/bin"
@@ -252,7 +251,6 @@ do
   if [ "$arg" == "--build" ]
   then
     echo "Building..."
-    # 清理输出目录（不删除 install_dir 本身，因为它不是构建环境中的目录）
     rm -rf $OUTPUT_DIR/bin
     rm -rf $OUTPUT_DIR/lib
     rm -rf $OUTPUT_DIR/share
@@ -263,27 +261,22 @@ do
   if [ "$arg" == "--install" ]
   then
     echo "Installing to DESTDIR=$OUTPUT_DIR ..."
-    # 使用 DESTDIR 安装，保持安装目录结构不变
     make install DESTDIR="$OUTPUT_DIR" -j$(nproc)
 
-    # 安装后的完整路径：$OUTPUT_DIR$install_dir
     SRC_DIR="$OUTPUT_DIR$install_dir"
 
     if [ -d "$SRC_DIR" ]; then
       echo "Moving content from $SRC_DIR to $OUTPUT_DIR (preserving symlinks)"
-      # 使用 rsync 或 cp -a 保留软链接和属性
       if command -v rsync &> /dev/null; then
         rsync -a "$SRC_DIR/" "$OUTPUT_DIR/"
       else
         cp -a "$SRC_DIR/." "$OUTPUT_DIR/"
       fi
-      # 删除原始安装目录
       rm -rf "$SRC_DIR"
     else
       echo "Warning: $SRC_DIR not found"
     fi
 
-    # 确保 core D3D DLLs 被正确放置（原逻辑保留）
     echo "=== Ensuring core D3D DLLs are staged ==="
     ensure_d3d_dll() {
       local arch_dir="$1"
