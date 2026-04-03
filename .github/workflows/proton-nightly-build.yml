@@ -13,14 +13,6 @@ on:
         options:
           - ubuntu-24.04
           - self-hosted
-      target_app_id:
-        description: 'Target Android app id for hardcoded wine paths'
-        required: false
-        default: 'com.winlator'
-        type: choice
-        options:
-          - app.gamenative
-          - com.winlator
       wine_ref:
         description: 'Valve wine ref (branch/tag/commit)'
         required: false
@@ -98,13 +90,13 @@ jobs:
     timeout-minutes: 360
     permissions:
       contents: write
-    # 全局编译优化标志（所有步骤共享）
+    # 全局编译优化标志（所有步骤共享）– 已去除硬编码 Android 路径
     env:
       CFLAGS: "-O3 -pipe"
       CXXFLAGS: "-O3 -pipe"
       CROSSCFLAGS: "-O3 -pipe"
       CROSSCXXFLAGS: "-O3 -pipe"
-      LDFLAGS: "-s -Wl,--dynamic-linker=/data/data/com.winlator/files/imagefs/usr/lib/ld-linux-aarch64.so.1 -Wl,-rpath=/data/data/com.winlator/files/imagefs/usr/lib"
+      LDFLAGS: "-s -Wl,--dynamic-linker=/usr/lib/ld-linux-aarch64.so.1 -Wl,-rpath=/usr/lib"
     strategy:
       fail-fast: false
       matrix:
@@ -195,9 +187,8 @@ jobs:
           cp scripts/build-step-arm64ec-custom.sh wine-source/build-scripts/build-step-arm64ec.sh
           chmod +x wine-source/build-scripts/build-step-arm64ec.sh
 
-          # 导出环境变量供构建脚本使用
+          # 导出环境变量供构建脚本使用（不再需要 TARGET_APP_ID）
           echo "TERMUXFS_ROOT=$HOME/termuxfs/aarch64" >> $GITHUB_ENV
-          echo "TARGET_APP_ID=${{ github.event.inputs.target_app_id || 'com.winlator' }}" >> $GITHUB_ENV
           echo "PROFILE_VERSION=${{ matrix.profile_version }}" >> $GITHUB_ENV
           echo "OUTPUT_DIR=$HOME/compiled-files-aarch64" >> $GITHUB_ENV
 
@@ -354,23 +345,6 @@ jobs:
             'test-bylaws/dlls_ntdll_signal_arm64ec_c.patch (repo-owned override copied to test-bylaws)'
           fi
 
-          # 将 target_app_id 写入环境变量，供后续修复步骤使用
-          echo "TARGET_APP_ID=${{ github.event.inputs.target_app_id || 'com.winlator' }}" >> $GITHUB_ENV
-
-      # 修复 winlator 路径问题（使用 target_app_id）
-      - name: 修复 winlator 路径问题（使用 target_app_id）
-        run: |
-          cd wine-source
-          ANDROID_DATA_PREFIX="/data/data/${TARGET_APP_ID}/files/imagefs/usr"
-          # 替换所有出现的 "/tmp" 或 "/tmp/" 为目标路径
-          find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.in" -o -name "*.spec" \) -exec grep -l "/tmp" {} \; | xargs sed -i "s|/tmp/|${ANDROID_DATA_PREFIX}/tmp/|g"
-          find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.in" -o -name "*.spec" \) -exec grep -l '"/tmp"' {} \; | xargs sed -i 's|"/tmp"|"'"${ANDROID_DATA_PREFIX}/tmp"'"|g'
-          find server -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i "s|/tmp|${ANDROID_DATA_PREFIX}/tmp|g" {} +
-          find . -name "file.c" -exec sed -i "s|/tmp|${ANDROID_DATA_PREFIX}/tmp|g" {} +
-          find . -name "loader.c" -exec sed -i "s|/tmp|${ANDROID_DATA_PREFIX}/tmp|g" {} +
-          find . -name "server.c" -exec sed -i "s|/tmp|${ANDROID_DATA_PREFIX}/tmp|g" {} +
-          echo "路径修复完成（使用 ${TARGET_APP_ID}）"
-
       - name: Download and extract termuxfs for ${{ matrix.termux_arch }}
         run: |
           TERMUX_DIR="$HOME/termuxfs/${{ matrix.termux_arch }}"
@@ -435,7 +409,6 @@ jobs:
           cd wine-source
           mkdir -p wine-tools
           cd wine-tools
-          # 显式导出编译标志（全局 env 已定义，这里再导出确保 make 能读取）
           export CFLAGS="$CFLAGS"
           export CXXFLAGS="$CXXFLAGS"
           export CROSSCFLAGS="$CROSSCFLAGS"
@@ -456,7 +429,6 @@ jobs:
         run: |
           cd wine-source
           set -o pipefail
-          # 确保编译标志被导出，供 configure 和后续编译使用
           export CFLAGS="$CFLAGS"
           export CXXFLAGS="$CXXFLAGS"
           export CROSSCFLAGS="$CROSSCFLAGS"
@@ -522,9 +494,8 @@ jobs:
       - name: Install Proton
         run: |
           PROFILE_VERSION="${{ matrix.profile_version }}"
-          TARGET_APP_ID="${{ github.event.inputs.target_app_id || 'com.winlator' }}"
-          sudo mkdir -p "/data/data/${TARGET_APP_ID}/files/imagefs/opt/${PROFILE_VERSION}-wine"
-          sudo chmod -R 777 /data/data
+          sudo mkdir -p "/opt/${PROFILE_VERSION}-wine"
+          sudo chmod 777 /opt
 
           cd wine-source
           export CFLAGS="$CFLAGS"
