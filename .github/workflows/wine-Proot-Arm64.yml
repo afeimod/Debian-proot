@@ -1,4 +1,4 @@
-name: Wine Winlator ARM64构建（基于 llvm-mingw，Debian 12 容器）
+name: Wine Proot ARM64构建（基于 llvm-mingw，Debian 12 容器）
 
 on:
   schedule:
