@@ -8,10 +8,10 @@ on:
       proton_branch:
         description: 'Proton 分支'
         required: false
-        default: 'proton_10.0'
+        default: 'proton_11.0'
         type: choice
         options:
-        - proton_10.0
+        - proton_11.0
         - proton_9.0
         - experimental_10.0
         - bleeding-edge
@@ -170,7 +170,7 @@ jobs:
           cd ${{ env.WINE_SOURCE_DIR }}
 
           echo "处理 Proton 分支: $PROTON_BRANCH"
-          git clone https://github.com/GameNative/proton-wine.git source
+          git clone https://github.com/afeimod/wine.git source
           cd source
           git checkout "$PROTON_BRANCH"
 
@@ -205,32 +205,7 @@ jobs:
           fi
           echo "复制完成"
 
-      # ========== 新增：运行所有 Python 修复脚本 ==========
-      - name: 运行 Python 修复脚本
-        run: |
-          cd ${{ env.WINE_SOURCE_DIR }}/source
-          echo "=== 运行 fix_wineboot_c.py ==="
-          python3 scripts/fix_wineboot_c.py .
-          echo "=== 运行 fix_wdscore.py ==="
-          python3 scripts/fix_wdscore.py .
-          echo "=== 运行 fix_mouse_c.py ==="
-          python3 scripts/fix_mouse_c.py .
-          echo "所有修复脚本执行完成"
-          # 【关键】运行 fix_fsync.py
-          echo "运行 fix_fsync.py..."
-          python3 scripts/fix_fsync.py .
-          echo "fix_fsync.py 执行完成"
-          
-          # 【关键】运行 fix_virtual_c.py
-          echo "运行 fix_virtual_c.py..."
-          python3 scripts/fix_virtual_c.py .
-          echo "fix_virtual_c.py 执行完成"
-          
-          # 【关键】运行 fix_window_c.py
-          echo "运行 fix_window_c.py..."
-          python3 scripts/fix_window_c.py .
-          echo "fix_window_c.py 执行完成"
-
+      
       # ------------------------------------------------------------
       - name: 下载并应用 fix-build_ffmpeg.patch
         run: |
@@ -248,31 +223,7 @@ jobs:
           echo "补丁应用成功，清理临时文件"
           rm fix-build_ffmpeg.patch
 
-      - name: 修补 winnt.h 中的 MemoryBarrier 实现
-        run: |
-          cd ${{ env.WINE_SOURCE_DIR }}/source
-          # 备份原文件
-          cp include/winnt.h include/winnt.h.bak
-          # 将 MemoryBarrier 函数体中的 InterlockedOr 替换为 __sync_synchronize()
-          sed -i '/static FORCEINLINE void MemoryBarrier(void)/,/^}/ {
-              s/InterlockedOr(&dummy, 0);/__sync_synchronize();/
-          }' include/winnt.h
-          echo "MemoryBarrier 已修补为 __sync_synchronize()"
-          
-      - name: 修补 wineboot.c 以跳过 ARM64 上的 initialize_xstate_features 调用
-        run: |
-          cd ${{ env.WINE_SOURCE_DIR }}/source
-          wget -q https://github.com/afeimod/linbox/raw/main/path/fix-wineboot.patch
-          patch -p1 < fix-wineboot.patch
-          rm fix-wineboot.patch
-      # 8. 生成 configure 脚本
-      # ------------------------------------------------------------
-      - name: 生成 configure 脚本
-        run: |
-          cd ${{ env.WINE_SOURCE_DIR }}/source
-          if [ ! -f "configure" ]; then
-            ./autogen.sh
-          fi
+      
 
       # ------------------------------------------------------------
       # 9. 构建 native wine64 工具和 NLS（带完整备份）
