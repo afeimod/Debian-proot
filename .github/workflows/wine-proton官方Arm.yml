@@ -18,8 +18,8 @@ on:
         - bleeding-edge
 
 env:
-  LLVMMINGW_DATE: 20260324
-  LLVMMINGW_NAME: llvm-mingw-20260324-ucrt-ubuntu-22.04-x86_64
+  LLVMMINGW_DATE: 20251202
+  LLVMMINGW_NAME: llvm-mingw-20251202-ucrt-ubuntu-22.04-x86_64
   WINE64_DIR: /opt/wine64
   WINE_SOURCE_DIR: /opt/wine-src
   DEBIAN_FRONTEND: noninteractive
