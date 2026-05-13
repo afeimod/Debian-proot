@@ -274,7 +274,7 @@ jobs:
       # ------------------------------------------------------------
       # 11. 交叉编译 ARM64 WOW64（使用 bash 执行）
       # ------------------------------------------------------------
-      - name: 交叉编译 ARM64 WOW64
+      - name: 交叉编译 ARM64 WOW64（修复 syswow64 问题）
         run: |
           cd ${{ env.WINE_SOURCE_DIR }}/source
           mkdir -p build-arm64
@@ -293,10 +293,14 @@ jobs:
           echo "使用 Wine64 构建目录（作为工具目录）: /opt/wine64-native"
           echo "WINE_NLS_DIR=$WINE_NLS_DIR"
 
+          # 修复: 启用完整的 ARM64 架构支持
+          # - aarch64: 构建原生 ARM64 Linux ELF 可执行文件（wine, wineserver 等）
+          # - arm64ec: 构建 Windows PE 格式的 ARM64EC 可执行文件
+          # - i386/x86_64: 构建 WOW64 兼容层（syswow64）
           ../configure \
             --prefix=/tmp/wine-install-wow64 \
             --with-mingw=clang \
-            --enable-archs=arm64ec,aarch64,i386 \
+            --enable-archs=aarch64,arm64ec,i386,x86_64 \
             --enable-tools \
             --disable-tests \
             --with-x \
@@ -424,7 +428,70 @@ jobs:
               fi
           done
 
+          # 关键修复: 确保 i386 (WOW64) 的 syswow64 DLL 被正确复制
+          echo "=== 修复: 复制 i386 syswow64 DLL 到安装目录 ==="
           
+          # 查找所有架构的 DLL 目录
+          I386_WIN_DIR="$BUILD_DIR/dlls/i386-windows"
+          I386_LIB_DIR="$BUILD_DIR/dlls/i386"
+          ARM64EC_WIN_DIR="$BUILD_DIR/dlls/arm64ec-windows"
+          
+          # 复制 arm64ec Windows PE DLL
+          if [ -d "$ARM64EC_WIN_DIR" ]; then
+              mkdir -p "$TARGET_PREFIX/lib/wine/arm64ec-windows"
+              echo "复制 arm64ec DLL..."
+              cp -v "$ARM64EC_WIN_DIR"/*.dll "$TARGET_PREFIX/lib/wine/arm64ec-windows/" 2>/dev/null || echo "无 arm64ec DLL 或已存在"
+          fi
+          
+          # 复制 i386 Windows PE DLL (syswow64 内容)
+          if [ -d "$I386_WIN_DIR" ]; then
+              mkdir -p "$TARGET_PREFIX/lib/wine/i386-windows"
+              echo "找到 i386 DLL 目录，复制到 i386-windows..."
+              cp -v "$I386_WIN_DIR"/*.dll "$TARGET_PREFIX/lib/wine/i386-windows/" 2>/dev/null || echo "无额外 DLL 或已存在"
+          else
+              echo "警告: 未找到 dlls/i386-windows 目录，尝试其他位置..."
+              # 尝试从 build 目录搜索
+              found_i386=$(find "$BUILD_DIR" -type d -name "i386-windows" 2>/dev/null | head -1)
+              if [ -n "$found_i386" ]; then
+                  mkdir -p "$TARGET_PREFIX/lib/wine/i386-windows"
+                  cp -v "$found_i386"/*.dll "$TARGET_PREFIX/lib/wine/i386-windows/" 2>/dev/null || echo "复制完成或无额外 DLL"
+              fi
+          fi
+          
+          # 复制 i386 的 .so 文件到 lib/wine 目录
+          if [ -d "$I386_LIB_DIR" ]; then
+              mkdir -p "$TARGET_PREFIX/lib/wine/i386"
+              cp -v "$I386_LIB_DIR"/*.so "$TARGET_PREFIX/lib/wine/i386/" 2>/dev/null || echo "无额外 .so 文件或已存在"
+          else
+              echo "警告: 未找到 dlls/i386 目录，尝试其他位置..."
+              found_i386_so=$(find "$BUILD_DIR" -type d -name "i386" -path "*/dlls/i386" 2>/dev/null | head -1)
+              if [ -n "$found_i386_so" ]; then
+                  mkdir -p "$TARGET_PREFIX/lib/wine/i386"
+                  cp -v "$found_i386_so"/*.so "$TARGET_PREFIX/lib/wine/i386/" 2>/dev/null || echo "复制完成或无额外 .so"
+              fi
+          fi
+          
+          # 确保 wineserver 能够找到 DLL
+          if [ -f "$TARGET_PREFIX/bin/wineserver" ]; then
+              echo "设置 wineserver 权限..."
+              chmod +x "$TARGET_PREFIX/bin/wineserver"
+          fi
+          
+          # 验证关键 DLL 是否存在
+          echo "=== 验证关键 WOW64 DLL ==="
+          for dll in kernel32.dll user32.dll ntdll.dll; do
+              if [ -f "$TARGET_PREFIX/lib/wine/i386-windows/$dll" ]; then
+                  echo "✓ $dll 存在"
+              else
+                  echo "✗ $dll 缺失 - 这可能导致 WOW64 失败"
+              fi
+          done
+
+          echo "=== 验证 syswow64 相关目录 ==="
+          ls -la "$TARGET_PREFIX/lib/wine/" 2>/dev/null || echo "lib/wine 目录不存在"
+          ls -la "$TARGET_PREFIX/lib/wine/i386-windows/" 2>/dev/null || echo "i386-windows 目录不存在"
+          ls -la "$TARGET_PREFIX/lib/wine/i386/" 2>/dev/null || echo "i386 目录不存在"
+          ls -la "$TARGET_PREFIX/lib/wine/arm64ec-windows/" 2>/dev/null || echo "arm64ec-windows 目录不存在"
 
           echo "=== 验证 bin 目录关键文件 ==="
           ls -la "$BIN_DIR"
@@ -512,6 +579,7 @@ jobs:
             ✓ 中文环境支持
             ✓ 应用了关键补丁提升兼容性
             ✓ 包含完整的运行时文件：wine.inf、wineboot、wineserver 等所有必要程序
+            ✓ 修复了 syswow64 目录为空的问题
 
             ## 安装说明
             解压后，将 `${{ env.BUILD_NAME }}` 文件夹放置在 Termux 的合适位置（建议 `/data/data/com.termux/files/usr/glibc`），并设置环境变量。
